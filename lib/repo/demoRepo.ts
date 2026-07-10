@@ -1,4 +1,4 @@
-import type { Repo, MovementFilter, AdjustStockInput } from "./Repo";
+import type { Repo, MovementFilter, AdjustStockInput, MealPlanFilter } from "./Repo";
 import type {
   Product,
   Recipe,
@@ -14,6 +14,7 @@ import type {
   PrepareDishResult,
   DatabaseSnapshot,
   User,
+  PlannedMeal,
 } from "../domain/types";
 import { buildSeed } from "../domain/seed";
 import {
@@ -53,7 +54,10 @@ export class DemoRepo implements Repo {
       const raw = window.localStorage.getItem(DB_KEY);
       if (raw) {
         try {
-          return JSON.parse(raw) as DatabaseSnapshot;
+          const parsed = JSON.parse(raw) as DatabaseSnapshot;
+          // Backfill campos nuevos para snapshots de versiones anteriores.
+          if (!Array.isArray(parsed.mealPlans)) parsed.mealPlans = [];
+          return parsed;
         } catch {
           // fall through to seed
         }
@@ -376,6 +380,91 @@ export class DemoRepo implements Repo {
     if (filter?.from) list = list.filter((m) => m.createdAt >= filter.from!);
     if (filter?.to) list = list.filter((m) => m.createdAt <= filter.to!);
     return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  // ---- Meal planning ----
+  async listMealPlans(filter?: MealPlanFilter): Promise<PlannedMeal[]> {
+    let list = clone(this.db.mealPlans ?? []);
+    if (filter?.charterId) list = list.filter((m) => m.charterId === filter.charterId);
+    if (filter?.from) list = list.filter((m) => m.date >= filter.from!);
+    if (filter?.to) list = list.filter((m) => m.date <= filter.to!);
+    return list.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  async upsertMealPlan(plan: PlannedMeal): Promise<PlannedMeal> {
+    if (!this.db.mealPlans) this.db.mealPlans = [];
+    const idx = this.db.mealPlans.findIndex((m) => m.id === plan.id);
+    const stamped: PlannedMeal = {
+      ...plan,
+      id: plan.id || uid("plan-"),
+      createdBy: plan.createdBy || this.currentUserName(),
+      createdAt: plan.createdAt || new Date().toISOString(),
+    };
+    if (idx >= 0) this.db.mealPlans[idx] = stamped;
+    else this.db.mealPlans.push(stamped);
+    this.commit();
+    return clone(stamped);
+  }
+
+  async deleteMealPlan(id: string): Promise<void> {
+    this.db.mealPlans = (this.db.mealPlans ?? []).filter((m) => m.id !== id);
+    this.commit();
+  }
+
+  async markMealPrepared(planId: string): Promise<PrepareDishResult[]> {
+    const plan = (this.db.mealPlans ?? []).find((m) => m.id === planId);
+    if (!plan) return [];
+
+    // Pre-chequeo de stock agregado de todos los platos de la comida.
+    if (!this.db.settings.allowNegativeStock) {
+      const needed = new Map<string, number>();
+      for (const dish of plan.dishes) {
+        const recipe = this.db.recipes.find((r) => r.id === dish.recipeId);
+        if (!recipe) continue;
+        for (const item of recipe.items) {
+          needed.set(
+            item.productId,
+            (needed.get(item.productId) ?? 0) + item.quantityPerServing * dish.servings
+          );
+        }
+      }
+      const shortages: PrepareDishResult["shortages"] = [];
+      for (const [productId, qty] of Array.from(needed.entries())) {
+        const p = this.product(productId);
+        const available = p?.currentQuantity ?? 0;
+        if (available < qty) {
+          shortages!.push({
+            productId,
+            productName: p?.name ?? "(insumo)",
+            needed: qty,
+            available,
+            unit: p?.unit ?? "unidad",
+          });
+        }
+      }
+      if (shortages!.length > 0) {
+        return [{ ok: false, shortages }];
+      }
+    }
+
+    const results: PrepareDishResult[] = [];
+    const preparedIds: string[] = [];
+    for (const dish of plan.dishes) {
+      const res = await this.prepareDish({
+        recipeId: dish.recipeId,
+        servings: dish.servings,
+        charterId: plan.charterId,
+      });
+      results.push(res);
+      if (res.preparedDish) preparedIds.push(res.preparedDish.id);
+    }
+    for (const bev of plan.beverages) {
+      await this.consumeBeverage(bev.productId, bev.quantity, plan.charterId);
+    }
+    plan.preparedDishIds = preparedIds;
+    plan.status = "preparado";
+    this.commit();
+    return results;
   }
 
   // ---- Charters ----

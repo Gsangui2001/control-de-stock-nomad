@@ -106,11 +106,14 @@ color marítimo. Íconos y manifest están en `public/icons/` y `public/manifest
 4. **Stock** — buscar, filtrar por categoría, ver bajos, ajustar, historial.
 5. **Compras** — carga multi-ítem; recalcula **costo promedio ponderado**.
 6. **Platos / Recetas** — editor con ingredientes por porción y costo automático.
-7. **Charters** — asociar consumos; marcar charter activo.
-8. **Reportes** — stock por categoría, consumo 7 días, por charter, alertas + **CSV**.
-9. **Configuración** — moneda, permitir stock negativo, aviso de vencimiento, tema.
+7. **Planificación** — calendario Día/Semana/Mes de comidas por charter + lista de compras.
+8. **Charters** — asociar consumos; marcar charter activo.
+9. **Reportes** — stock por categoría, consumo 7 días, por charter, alertas + **CSV**.
+10. **Configuración** — moneda, permitir stock negativo, aviso de vencimiento, tema.
 
 Navegación mobile: barra inferior (Inicio · Preparar · Bebidas · Stock · Más).
+El **home del cocinero** es una vista simplificada (2 acciones grandes + “para reponer”);
+el admin ve el dashboard completo.
 
 ---
 
@@ -128,6 +131,27 @@ Ver `lib/domain/stock.ts` (funciones puras y testeables).
 
 ---
 
+## 📅 Planificación de comidas (calendario)
+
+En **Planificación** se arma el plan de comidas del charter por **Día / Semana / Mes**.
+Cada día tiene 5 ranuras (**desayuno, almuerzo, merienda, cena, snack**) y cada ranura
+puede tener **varios platos + bebidas**, con sus porciones (autocompletadas según los
+**comensales del charter**, editables).
+
+- **Planificar NO descuenta stock.** El descuento ocurre recién al tocar **“Marcar
+  preparado”** en la ranura, que reutiliza la misma lógica de preparar plato /
+  consumir bebida (así reportes, alertas y “platos de hoy” siguen andando).
+- **Lista de compras sugerida** (botón 🛒): calcula los ingredientes necesarios de las
+  comidas **planificadas** (no preparadas), los compara con el stock, detecta faltantes y
+  arma la lista con cantidad a comprar y costo estimado (admin). Exportable a **CSV**.
+- Roles: **todos** ven el calendario y pueden marcar preparado; **crear/editar** el plan
+  es de admin.
+
+Lógica pura en `lib/domain/planning.ts` (`computePlanNeeds`, `computeShortages`,
+`buildShoppingList`).
+
+---
+
 ## 🗃️ Base de datos (tablas)
 
 | Tabla | Para qué |
@@ -137,9 +161,12 @@ Ver `lib/domain/stock.ts` (funciones puras y testeables).
 | `recipes` + `recipe_items` | Platos estandarizados y sus ingredientes por porción |
 | `purchases` + `purchase_items` | Compras y su detalle (precio total/unitario) |
 | `prepared_dishes` | Platos preparados (receta, porciones, charter, costo) |
+| `meal_plans` + `meal_plan_items` | **Planificación**: comidas por día/ranura/charter y sus platos+bebidas |
 | `stock_movements` | **Auditoría**: todo cambio de stock con tipo, usuario y fecha |
 | `charters` | Charters para asociar consumos (código, fechas, personas, estado) |
 | `settings` | Moneda, permitir stock negativo, días de aviso de vencimiento |
+
+> Migraciones: `0001_init.sql` (base) y `0002_meal_planning.sql` (planificación, aditiva).
 
 Tipos de movimiento: `compra`, `preparacion`, `consumo_bebida`, `ajuste`, `merma`,
 `devolucion`, `correccion`, `transferencia`.

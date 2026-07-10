@@ -12,7 +12,14 @@ import type {
   PrepareDishResult,
   MovementType,
   User,
+  PlannedMeal,
 } from "../domain/types";
+
+export interface MealPlanFilter {
+  charterId?: string;
+  from?: string; // "YYYY-MM-DD"
+  to?: string;
+}
 
 export interface MovementFilter {
   productId?: string;
@@ -71,6 +78,13 @@ export interface Repo {
 
   // Movements
   listMovements(filter?: MovementFilter): Promise<StockMovement[]>;
+
+  // Meal planning
+  listMealPlans(filter?: MealPlanFilter): Promise<PlannedMeal[]>;
+  upsertMealPlan(plan: PlannedMeal): Promise<PlannedMeal>;
+  deleteMealPlan(id: string): Promise<void>;
+  /** Marca una comida como preparada: descuenta stock (platos + bebidas). */
+  markMealPrepared(planId: string): Promise<PrepareDishResult[]>;
 
   // Charters
   listCharters(): Promise<Charter[]>;

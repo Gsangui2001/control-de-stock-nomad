@@ -1,4 +1,4 @@
-import type { Repo, MovementFilter, AdjustStockInput } from "./Repo";
+import type { Repo, MovementFilter, AdjustStockInput, MealPlanFilter } from "./Repo";
 import type {
   Product,
   Recipe,
@@ -13,6 +13,7 @@ import type {
   PrepareDishResult,
   User,
   RecipeItem,
+  PlannedMeal,
 } from "../domain/types";
 import {
   weightedAverageCost,
@@ -396,6 +397,128 @@ export class SupabaseRepo implements Repo {
     if (filter?.to) q = q.lte("created_at", filter.to);
     const { data } = await q;
     return (data ?? []).map(toMovement);
+  }
+
+  // ---- Meal planning ----
+  async listMealPlans(filter?: MealPlanFilter): Promise<PlannedMeal[]> {
+    let q = this.sb.from("meal_plans").select("*, meal_plan_items(*)").order("date");
+    if (filter?.charterId) q = q.eq("charter_id", filter.charterId);
+    if (filter?.from) q = q.gte("date", filter.from);
+    if (filter?.to) q = q.lte("date", filter.to);
+    const { data } = await q;
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      charterId: r.charter_id ?? undefined,
+      date: r.date,
+      slot: r.slot,
+      status: r.status,
+      notes: r.notes ?? undefined,
+      preparedDishIds: r.prepared_dish_ids ?? undefined,
+      createdBy: r.created_by ?? "—",
+      createdAt: r.created_at,
+      dishes: (r.meal_plan_items ?? [])
+        .filter((i: any) => i.kind === "plato")
+        .map((i: any) => ({ recipeId: i.recipe_id, servings: Number(i.servings) })),
+      beverages: (r.meal_plan_items ?? [])
+        .filter((i: any) => i.kind === "bebida")
+        .map((i: any) => ({ productId: i.product_id, quantity: Number(i.quantity) })),
+    }));
+  }
+
+  async upsertMealPlan(plan: PlannedMeal): Promise<PlannedMeal> {
+    const { data, error } = await this.sb
+      .from("meal_plans")
+      .upsert({
+        id: plan.id || undefined,
+        charter_id: plan.charterId ?? null,
+        date: plan.date,
+        slot: plan.slot,
+        status: plan.status,
+        notes: plan.notes ?? null,
+        created_by: plan.createdBy || (await this.me()),
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    await this.sb.from("meal_plan_items").delete().eq("meal_plan_id", data.id);
+    const items = [
+      ...plan.dishes.map((d) => ({
+        meal_plan_id: data.id,
+        kind: "plato",
+        recipe_id: d.recipeId,
+        servings: d.servings,
+      })),
+      ...plan.beverages.map((b) => ({
+        meal_plan_id: data.id,
+        kind: "bebida",
+        product_id: b.productId,
+        quantity: b.quantity,
+      })),
+    ];
+    if (items.length) await this.sb.from("meal_plan_items").insert(items);
+    return (await this.listMealPlans()).find((m) => m.id === data.id)!;
+  }
+
+  async deleteMealPlan(id: string): Promise<void> {
+    await this.sb.from("meal_plans").delete().eq("id", id);
+  }
+
+  async markMealPrepared(planId: string): Promise<PrepareDishResult[]> {
+    const plans = await this.listMealPlans();
+    const plan = plans.find((m) => m.id === planId);
+    if (!plan) return [];
+    const products = await this.listProducts();
+    const recipes = await this.listRecipes();
+    const settings = await this.getSettings();
+
+    if (!settings.allowNegativeStock) {
+      const needed = new Map<string, number>();
+      for (const dish of plan.dishes) {
+        const recipe = recipes.find((r) => r.id === dish.recipeId);
+        if (!recipe) continue;
+        for (const item of recipe.items) {
+          needed.set(
+            item.productId,
+            (needed.get(item.productId) ?? 0) + item.quantityPerServing * dish.servings
+          );
+        }
+      }
+      const shortages: PrepareDishResult["shortages"] = [];
+      for (const [productId, qty] of Array.from(needed.entries())) {
+        const p = products.find((x) => x.id === productId);
+        const available = p?.currentQuantity ?? 0;
+        if (available < qty) {
+          shortages!.push({
+            productId,
+            productName: p?.name ?? "(insumo)",
+            needed: qty,
+            available,
+            unit: p?.unit ?? "unidad",
+          });
+        }
+      }
+      if (shortages!.length > 0) return [{ ok: false, shortages }];
+    }
+
+    const results: PrepareDishResult[] = [];
+    const preparedIds: string[] = [];
+    for (const dish of plan.dishes) {
+      const res = await this.prepareDish({
+        recipeId: dish.recipeId,
+        servings: dish.servings,
+        charterId: plan.charterId,
+      });
+      results.push(res);
+      if (res.preparedDish) preparedIds.push(res.preparedDish.id);
+    }
+    for (const bev of plan.beverages) {
+      await this.consumeBeverage(bev.productId, bev.quantity, plan.charterId);
+    }
+    await this.sb
+      .from("meal_plans")
+      .update({ status: "preparado", prepared_dish_ids: preparedIds })
+      .eq("id", planId);
+    return results;
   }
 
   async listCharters(): Promise<Charter[]> {

@@ -10,8 +10,9 @@ import type {
   Alert,
   PreparedDish,
   Purchase,
+  PlannedMeal,
 } from "./domain/types";
-import type { MovementFilter } from "./repo/Repo";
+import type { MovementFilter, MealPlanFilter } from "./repo/Repo";
 
 /** Generic async loader that refetches when the global revision changes. */
 export function useAsync<T>(
@@ -79,4 +80,10 @@ export function usePreparedDishes() {
 export function usePurchases() {
   const { repo } = useRepoContext();
   return useAsync<Purchase[]>(() => repo.listPurchases(), [], []);
+}
+
+export function useMealPlans(filter?: MealPlanFilter) {
+  const { repo } = useRepoContext();
+  const key = JSON.stringify(filter ?? {});
+  return useAsync<PlannedMeal[]>(() => repo.listMealPlans(filter), [key], []);
 }

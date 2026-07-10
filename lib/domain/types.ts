@@ -187,6 +187,34 @@ export interface Alert {
   charterId?: string;
 }
 
+// --- planificación de comidas ---
+
+export type MealSlot = "desayuno" | "almuerzo" | "merienda" | "cena" | "snack";
+
+export interface PlannedDish {
+  recipeId: string;
+  servings: number;
+}
+
+export interface PlannedBeverage {
+  productId: string;
+  quantity: number;
+}
+
+export interface PlannedMeal {
+  id: string;
+  charterId?: string;
+  date: string; // "YYYY-MM-DD"
+  slot: MealSlot;
+  dishes: PlannedDish[];
+  beverages: PlannedBeverage[];
+  status: "planificado" | "preparado";
+  preparedDishIds?: string[];
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 // --- input payloads ---
 
 export interface PrepareDishInput {
@@ -208,6 +236,7 @@ export interface DatabaseSnapshot {
   movements: StockMovement[];
   preparedDishes: PreparedDish[];
   charters: Charter[];
+  mealPlans: PlannedMeal[];
   settings: Settings;
   activeCharterId?: string;
 }

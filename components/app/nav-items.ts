@@ -8,6 +8,7 @@ import {
   Ship,
   BarChart3,
   Settings,
+  CalendarDays,
   type LucideIcon,
 } from "lucide-react";
 
@@ -25,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/preparar", label: "Preparar", icon: ChefHat, primary: true },
   { href: "/bebidas", label: "Bebidas", icon: Wine, primary: true },
   { href: "/stock", label: "Stock", icon: Package, primary: true },
+  { href: "/planificacion", label: "Planificación", icon: CalendarDays },
   { href: "/charters", label: "Charters", icon: Ship },
   { href: "/compras", label: "Compras", icon: ShoppingCart, adminOnly: true },
   { href: "/platos", label: "Platos / Recetas", icon: BookOpen, adminOnly: true },

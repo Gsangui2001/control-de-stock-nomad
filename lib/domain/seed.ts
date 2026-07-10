@@ -5,6 +5,7 @@ import type {
   Charter,
   StockMovement,
   PreparedDish,
+  PlannedMeal,
 } from "./types";
 import { weightedAverageCost } from "./stock";
 
@@ -293,6 +294,46 @@ export function buildSeed(): DatabaseSnapshot {
     createdAt: iso(-3),
   });
 
+  // Comidas planificadas demo para el charter activo (no descuentan stock).
+  const mealPlans: PlannedMeal[] = [
+    {
+      id: "plan-1",
+      charterId: "charter-001",
+      date: dateOnly(0),
+      slot: "almuerzo",
+      dishes: [{ recipeId: "rec-pescado-papas", servings: 8 }],
+      beverages: [
+        { productId: "prod-agua", quantity: 8 },
+        { productId: "prod-vino-blanco", quantity: 2 },
+      ],
+      status: "planificado",
+      createdBy: "Admin demo",
+      createdAt: iso(-1),
+    },
+    {
+      id: "plan-2",
+      charterId: "charter-001",
+      date: dateOnly(0),
+      slot: "cena",
+      dishes: [{ recipeId: "rec-pasta-veg", servings: 8 }],
+      beverages: [{ productId: "prod-cerveza", quantity: 6 }],
+      status: "planificado",
+      createdBy: "Admin demo",
+      createdAt: iso(-1),
+    },
+    {
+      id: "plan-3",
+      charterId: "charter-001",
+      date: dateOnly(1),
+      slot: "desayuno",
+      dishes: [{ recipeId: "rec-desayuno", servings: 8 }],
+      beverages: [{ productId: "prod-jugo", quantity: 8 }],
+      status: "planificado",
+      createdBy: "Admin demo",
+      createdAt: iso(-1),
+    },
+  ];
+
   return {
     products,
     recipes,
@@ -300,6 +341,7 @@ export function buildSeed(): DatabaseSnapshot {
     movements,
     preparedDishes,
     charters,
+    mealPlans,
     settings: {
       currency: "USD",
       allowNegativeStock: false,
