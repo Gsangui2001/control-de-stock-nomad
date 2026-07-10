@@ -6,6 +6,8 @@ import { useState } from "react";
 import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav-items";
+import { useRepoContext } from "@/lib/providers/RepoProvider";
+import { canManage } from "@/lib/permissions";
 import {
   Sheet,
   SheetContent,
@@ -16,9 +18,12 @@ import {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const { user } = useRepoContext();
   const [open, setOpen] = useState(false);
-  const primary = NAV_ITEMS.filter((i) => i.primary);
-  const secondary = NAV_ITEMS.filter((i) => !i.primary);
+  const manage = canManage(user?.role);
+  const visible = NAV_ITEMS.filter((i) => (i.adminOnly ? manage : true));
+  const primary = visible.filter((i) => i.primary);
+  const secondary = visible.filter((i) => !i.primary);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);

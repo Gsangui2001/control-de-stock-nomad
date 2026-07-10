@@ -35,7 +35,7 @@ export function QuantityStepper({
         disabled={value <= min}
         aria-label="Restar"
       >
-        <Minus className={size === "lg" ? "h-6 w-6" : "h-4 w-4"} />
+        <Minus className={size === "lg" ? "!h-7 !w-7" : "h-4 w-4"} />
       </Button>
       <div
         className={cn(
@@ -53,7 +53,7 @@ export function QuantityStepper({
         disabled={value >= max}
         aria-label="Sumar"
       >
-        <Plus className={size === "lg" ? "h-6 w-6" : "h-4 w-4"} />
+        <Plus className={size === "lg" ? "!h-7 !w-7" : "h-4 w-4"} />
       </Button>
     </div>
   );

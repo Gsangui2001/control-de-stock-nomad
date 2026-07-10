@@ -7,7 +7,7 @@ import { useProducts, useRecipes } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { possibleServings, recipeServingCost } from "@/lib/domain/stock";
 import type { Recipe } from "@/lib/domain/types";
-import { canOperate } from "@/lib/permissions";
+import { canOperate, canManage } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
 import {
   PageContainer,
@@ -29,6 +29,7 @@ export default function PrepararPage() {
 
   const activeRecipes = recipes.filter((r) => r.active);
   const canPrep = canOperate(user?.role);
+  const showCosts = canManage(user?.role);
 
   return (
     <PageContainer>
@@ -65,11 +66,11 @@ export default function PrepararPage() {
             return (
               <Card key={r.id} className="p-4 flex flex-col gap-3">
                 <div className="flex items-start gap-3">
-                  <div className="h-14 w-14 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl">
+                  <div className="h-16 w-16 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl">
                     {r.icon ?? "🍽️"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold leading-tight">{r.name}</div>
+                    <div className="font-semibold text-lg leading-tight">{r.name}</div>
                     <div className="text-xs text-muted-foreground truncate">
                       {mainItems.map((i) => productName(i.productId)).join(", ")}
                     </div>
@@ -77,21 +78,26 @@ export default function PrepararPage() {
                 </div>
 
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {formatMoney(cost, settings.currency)}/porción
-                  </span>
+                  {showCosts ? (
+                    <span className="text-muted-foreground">
+                      {formatMoney(cost, settings.currency)}/porción
+                    </span>
+                  ) : (
+                    <span />
+                  )}
                   <Badge variant={max > 0 ? "success" : "destructive"}>
                     {max > 0 ? `${max} porc. disponibles` : "Sin stock"}
                   </Badge>
                 </div>
 
                 <Button
-                  size="lg"
+                  size="xl"
                   variant="success"
+                  className="w-full"
                   disabled={!canPrep}
                   onClick={() => setSelected(r)}
                 >
-                  <Utensils className="h-5 w-5" />
+                  <Utensils className="h-6 w-6" />
                   Preparar
                 </Button>
               </Card>

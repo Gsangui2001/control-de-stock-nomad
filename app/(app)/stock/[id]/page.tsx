@@ -9,6 +9,7 @@ import { useMovements } from "@/lib/hooks";
 import type { Product } from "@/lib/domain/types";
 import { stockStatus, productValue } from "@/lib/domain/stock";
 import { CATEGORY_LABEL, LOCATION_LABEL, MOVEMENT_LABEL } from "@/lib/domain/units";
+import { canManage } from "@/lib/permissions";
 import { formatMoney, formatQty } from "@/lib/utils";
 import { PageContainer, PageTitle, EmptyState, ListSkeleton } from "@/components/app/common";
 import { StockStatusBadge } from "@/components/app/StockStatusBadge";
@@ -19,7 +20,8 @@ import { Badge } from "@/components/ui/badge";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
-  const { repo, settings, revision } = useRepoContext();
+  const { repo, settings, revision, user } = useRepoContext();
+  const manage = canManage(user?.role);
   const [product, setProduct] = useState<Product | undefined>();
   const [loading, setLoading] = useState(true);
   const [adjust, setAdjust] = useState<Product | null>(null);
@@ -69,15 +71,19 @@ export default function ProductDetailPage() {
                 {formatQty(product.currentQuantity)}{" "}
                 <span className="text-base font-normal text-muted-foreground">{product.unit}</span>
               </div>
-              <div className="text-sm text-muted-foreground mt-1">
-                {formatMoney(productValue(product), settings.currency)} en stock
-              </div>
+              {manage && (
+                <div className="text-sm text-muted-foreground mt-1">
+                  {formatMoney(productValue(product), settings.currency)} en stock
+                </div>
+              )}
             </div>
             <StockStatusBadge status={status} />
           </div>
 
           <div className="grid grid-cols-2 gap-y-2 gap-x-3 text-sm pt-2 border-t">
-            <Field label="Costo unitario" value={formatMoney(product.averageUnitCost, settings.currency)} />
+            {manage && (
+              <Field label="Costo unitario" value={formatMoney(product.averageUnitCost, settings.currency)} />
+            )}
             <Field label="Ubicación" value={LOCATION_LABEL[product.location]} />
             <Field label="Stock mínimo" value={`${formatQty(product.minimumQuantity)} ${product.unit}`} />
             <Field label="Stock crítico" value={`${formatQty(product.criticalQuantity)} ${product.unit}`} />

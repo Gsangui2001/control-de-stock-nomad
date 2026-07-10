@@ -10,7 +10,8 @@ import {
   possibleServings,
   recipeServingCost,
 } from "@/lib/domain/stock";
-import { formatMoney, formatQty } from "@/lib/utils";
+import { canManage } from "@/lib/permissions";
+import { cn, formatMoney, formatQty } from "@/lib/utils";
 import { QuantityStepper } from "@/components/app/QuantityStepper";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,9 +33,11 @@ export function PrepareDishSheet({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const { repo, refresh, activeCharter, settings } = useRepoContext();
+  const { repo, refresh, activeCharter, settings, user } = useRepoContext();
   const [servings, setServings] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const showCosts = canManage(user?.role);
+  const QUICK_SERVINGS = [2, 4, 6, 8, 10];
 
   const maxServings = useMemo(
     () => (recipe ? possibleServings(recipe, products) : 0),
@@ -63,7 +66,9 @@ export function PrepareDishSheet({
     if (res.ok) {
       refresh();
       toast.success(`${servings} porción(es) de ${recipe.name} preparadas`, {
-        description: `Ingredientes descontados · ${formatMoney(totalCost, settings.currency)}`,
+        description: showCosts
+          ? `Ingredientes descontados · ${formatMoney(totalCost, settings.currency)}`
+          : "Ingredientes descontados del stock",
       });
       onOpenChange(false);
       setServings(1);
@@ -100,9 +105,26 @@ export function PrepareDishSheet({
         </SheetHeader>
 
         <div className="space-y-5">
-          <div className="flex flex-col items-center gap-2 py-2">
+          <div className="flex flex-col items-center gap-3 py-2">
             <span className="text-sm text-muted-foreground">¿Cuántas porciones?</span>
             <QuantityStepper value={servings} onChange={setServings} min={1} />
+            <div className="flex flex-wrap justify-center gap-2">
+              {QUICK_SERVINGS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setServings(n)}
+                  className={cn(
+                    "h-11 w-14 rounded-xl border text-lg font-semibold transition-colors active:scale-[0.97]",
+                    servings === n
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-accent/10"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
             <span className="text-xs text-muted-foreground">
               Máximo con stock actual: <strong>{maxServings}</strong>
             </span>
@@ -134,10 +156,12 @@ export function PrepareDishSheet({
             ))}
           </div>
 
-          <div className="flex items-center justify-between px-1">
-            <span className="text-sm text-muted-foreground">Costo estimado</span>
-            <span className="text-lg font-bold">{formatMoney(totalCost, settings.currency)}</span>
-          </div>
+          {showCosts && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-sm text-muted-foreground">Costo estimado</span>
+              <span className="text-lg font-bold">{formatMoney(totalCost, settings.currency)}</span>
+            </div>
+          )}
 
           {blocked && (
             <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">

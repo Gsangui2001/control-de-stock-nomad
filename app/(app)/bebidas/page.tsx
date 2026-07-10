@@ -101,29 +101,29 @@ export default function BebidasPage() {
                 <StockStatusBadge status={stockStatus(b)} />
               </div>
 
-              <div className="flex items-center justify-center gap-4 mb-3">
+              <div className="flex items-center justify-between gap-3 mb-3">
                 <Button
-                  size="icon-lg"
                   variant="outline"
+                  className="h-16 w-16 rounded-2xl shrink-0"
                   disabled={!canOp}
                   onClick={() => quickConsume(b, 1)}
                   aria-label="Consumir uno"
                 >
-                  <Minus className="h-6 w-6" />
+                  <Minus className="!h-8 !w-8" />
                 </Button>
                 <div className="text-center">
-                  <div className="text-4xl font-bold tabular-nums leading-none">
+                  <div className="text-5xl font-bold tabular-nums leading-none">
                     {formatQty(b.currentQuantity)}
                   </div>
                 </div>
                 <Button
-                  size="icon-lg"
                   variant="outline"
+                  className="h-16 w-16 rounded-2xl shrink-0"
                   disabled={!canOp}
                   onClick={() => quickRestock(b, 1)}
                   aria-label="Reponer uno"
                 >
-                  <Plus className="h-6 w-6" />
+                  <Plus className="!h-8 !w-8" />
                 </Button>
               </div>
 

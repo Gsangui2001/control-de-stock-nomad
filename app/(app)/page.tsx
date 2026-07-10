@@ -17,23 +17,34 @@ import {
 import { useProducts, useAlerts, usePreparedDishes, useMovements, usePurchases } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { totalStockValue, stockStatus, isToday } from "@/lib/domain/stock";
+import { canManage } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
 import { PageContainer, DemoBanner } from "@/components/app/common";
 import { StatCard } from "@/components/app/StatCard";
 import { AlertList } from "@/components/app/AlertList";
-import { Card } from "@/components/ui/card";
+import { CookHome } from "@/components/app/CookHome";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 const QUICK = [
-  { href: "/preparar", label: "Preparar plato", icon: Utensils, variant: "success" as const },
-  { href: "/bebidas", label: "Cargar bebida", icon: Wine, variant: "default" as const },
-  { href: "/compras", label: "Cargar compra", icon: ShoppingCart, variant: "secondary" as const },
-  { href: "/stock", label: "Ajustar stock", icon: SlidersHorizontal, variant: "outline" as const },
+  { href: "/preparar", label: "Preparar", icon: Utensils, variant: "success" as const },
+  { href: "/bebidas", label: "Bebida", icon: Wine, variant: "default" as const },
+  { href: "/compras", label: "Compra", icon: ShoppingCart, variant: "secondary" as const },
+  { href: "/stock", label: "Ajustar", icon: SlidersHorizontal, variant: "outline" as const },
 ];
 
 export default function DashboardPage() {
+  const { user, settings, activeCharter } = useRepoContext();
+
+  // Cocinero / solo-lectura ven un home minimalista y accionable.
+  if (!canManage(user?.role)) {
+    return <CookHome />;
+  }
+  return <AdminDashboard />;
+}
+
+function AdminDashboard() {
   const { user, settings, activeCharter } = useRepoContext();
   const { data: products } = useProducts();
   const { data: alerts } = useAlerts();
@@ -85,9 +96,14 @@ export default function DashboardPage() {
         {QUICK.map((q) => {
           const Icon = q.icon;
           return (
-            <Button key={q.href} asChild size="lg" variant={q.variant} className="justify-start">
+            <Button
+              key={q.href}
+              asChild
+              variant={q.variant}
+              className="h-14 justify-start gap-2 text-base"
+            >
               <Link href={q.href}>
-                <Icon className="h-5 w-5" />
+                <Icon className="h-5 w-5 shrink-0" />
                 {q.label}
               </Link>
             </Button>

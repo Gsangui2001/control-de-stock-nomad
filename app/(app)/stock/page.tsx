@@ -61,7 +61,11 @@ export default function StockPage() {
       <DemoBanner />
       <PageTitle
         title="Stock"
-        subtitle={`${products.length} productos · ${formatMoney(totalValue, settings.currency)}`}
+        subtitle={
+          manage
+            ? `${products.length} productos · ${formatMoney(totalValue, settings.currency)}`
+            : `${products.length} productos`
+        }
         action={
           manage ? (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -140,8 +144,12 @@ export default function StockPage() {
                       <span>{CATEGORY_LABEL[p.category]}</span>
                       <span>·</span>
                       <span>{LOCATION_LABEL[p.location]}</span>
-                      <span>·</span>
-                      <span>{formatMoney(productValue(p), settings.currency)}</span>
+                      {manage && (
+                        <>
+                          <span>·</span>
+                          <span>{formatMoney(productValue(p), settings.currency)}</span>
+                        </>
+                      )}
                     </div>
                   </Link>
                   <div className="text-right shrink-0">

@@ -25,9 +25,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/preparar", label: "Preparar", icon: ChefHat, primary: true },
   { href: "/bebidas", label: "Bebidas", icon: Wine, primary: true },
   { href: "/stock", label: "Stock", icon: Package, primary: true },
-  { href: "/compras", label: "Compras", icon: ShoppingCart },
-  { href: "/platos", label: "Platos / Recetas", icon: BookOpen },
   { href: "/charters", label: "Charters", icon: Ship },
-  { href: "/reportes", label: "Reportes", icon: BarChart3 },
-  { href: "/configuracion", label: "Configuración", icon: Settings },
+  { href: "/compras", label: "Compras", icon: ShoppingCart, adminOnly: true },
+  { href: "/platos", label: "Platos / Recetas", icon: BookOpen, adminOnly: true },
+  { href: "/reportes", label: "Reportes", icon: BarChart3, adminOnly: true },
+  { href: "/configuracion", label: "Configuración", icon: Settings, adminOnly: true },
 ];
