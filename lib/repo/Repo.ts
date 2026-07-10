@@ -85,6 +85,10 @@ export interface Repo {
   deleteMealPlan(id: string): Promise<void>;
   /** Marca una comida como preparada: descuenta stock (platos + bebidas). */
   markMealPrepared(planId: string): Promise<PrepareDishResult[]>;
+  /** Marca una comida ya preparada como servida. No toca stock. */
+  markMealServed(planId: string): Promise<void>;
+  /** Cancela una comida planificada (nunca se descontó stock). */
+  cancelMealPlan(planId: string): Promise<void>;
 
   // Charters
   listCharters(): Promise<Charter[]>;
@@ -103,6 +107,12 @@ export interface Repo {
   // Auth / current user
   getCurrentUser(): Promise<User | null>;
   setCurrentUser(user: User | null): Promise<void>;
+  /** Login con email/contraseña (solo modo Supabase). */
+  signIn(email: string, password: string): Promise<{ error?: string }>;
+  /** Registro (solo modo Supabase). */
+  signUp(email: string, password: string, name: string): Promise<{ error?: string }>;
+  /** Cierra la sesión. */
+  signOut(): Promise<void>;
 
   // Demo utilities
   resetDemo?(): Promise<void>;

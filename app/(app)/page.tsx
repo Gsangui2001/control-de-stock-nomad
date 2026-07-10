@@ -13,10 +13,21 @@ import {
   SlidersHorizontal,
   TrendingDown,
   Package,
+  ClipboardList,
+  Receipt,
 } from "lucide-react";
-import { useProducts, useAlerts, usePreparedDishes, useMovements, usePurchases } from "@/lib/hooks";
+import {
+  useProducts,
+  useAlerts,
+  usePreparedDishes,
+  useMovements,
+  usePurchases,
+  useRecipes,
+  useMealPlans,
+} from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { totalStockValue, stockStatus, isToday } from "@/lib/domain/stock";
+import { computePlanNeeds, computeShortages } from "@/lib/domain/planning";
 import { canManage } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
 import { PageContainer, DemoBanner } from "@/components/app/common";
@@ -51,6 +62,10 @@ function AdminDashboard() {
   const { data: prepared } = usePreparedDishes();
   const { data: movements } = useMovements();
   const { data: purchases } = usePurchases();
+  const { data: recipes } = useRecipes();
+  const { data: mealPlans } = useMealPlans(
+    activeCharter ? { charterId: activeCharter.id } : undefined
+  );
 
   const totalValue = useMemo(() => totalStockValue(products), [products]);
   const criticalIng = products.filter((p) => p.category !== "bebidas" && stockStatus(p) !== "normal").length;
@@ -71,6 +86,20 @@ function AdminDashboard() {
     .reduce((s, m) => s + Math.abs(m.quantity), 0);
 
   const lastPurchase = purchases[0];
+
+  const suggestedPurchases = useMemo(() => {
+    const planned = mealPlans.filter((m) => m.status === "planificado");
+    const needs = computePlanNeeds(planned, recipes, products);
+    return computeShortages(needs, products).length;
+  }, [mealPlans, recipes, products]);
+
+  const charterConsumption = useMemo(() => {
+    if (!activeCharter) return 0;
+    const charterMovs = movements.filter((m) => m.charterId === activeCharter.id);
+    return charterMovs
+      .filter((m) => m.movementType === "preparacion" || m.movementType === "consumo_bebida")
+      .reduce((s, m) => s + m.costAmount, 0);
+  }, [movements, activeCharter]);
 
   return (
     <PageContainer>
@@ -142,6 +171,21 @@ function AdminDashboard() {
           sub={lastPurchase ? format(new Date(lastPurchase.date), "dd MMM", { locale: es }) : "sin compras"}
           icon={ShoppingCart}
           href="/compras"
+        />
+        <StatCard
+          label="Compras sugeridas"
+          value={suggestedPurchases}
+          sub="según lo planificado"
+          icon={ClipboardList}
+          href="/planificacion"
+          tone={suggestedPurchases > 0 ? "warning" : "success"}
+        />
+        <StatCard
+          label="Consumo del charter"
+          value={activeCharter ? formatMoney(charterConsumption, settings.currency) : "—"}
+          sub={activeCharter ? activeCharter.code : "sin charter activo"}
+          icon={Receipt}
+          href="/reportes"
         />
       </div>
 

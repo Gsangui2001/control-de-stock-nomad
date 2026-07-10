@@ -521,6 +521,22 @@ export class SupabaseRepo implements Repo {
     return results;
   }
 
+  async markMealServed(planId: string): Promise<void> {
+    await this.sb
+      .from("meal_plans")
+      .update({ status: "servida" })
+      .eq("id", planId)
+      .eq("status", "preparado");
+  }
+
+  async cancelMealPlan(planId: string): Promise<void> {
+    await this.sb
+      .from("meal_plans")
+      .update({ status: "cancelada" })
+      .eq("id", planId)
+      .eq("status", "planificado");
+  }
+
   async listCharters(): Promise<Charter[]> {
     const { data } = await this.sb.from("charters").select("*").order("start_date", { ascending: false });
     return (data ?? []).map(toCharter);
@@ -601,5 +617,23 @@ export class SupabaseRepo implements Repo {
   }
   async setCurrentUser(): Promise<void> {
     // With Supabase, the user comes from the auth session — no-op here.
+  }
+
+  async signIn(email: string, password: string): Promise<{ error?: string }> {
+    const { error } = await this.sb.auth.signInWithPassword({ email, password });
+    return error ? { error: error.message } : {};
+  }
+
+  async signUp(email: string, password: string, name: string): Promise<{ error?: string }> {
+    const { error } = await this.sb.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+    return error ? { error: error.message } : {};
+  }
+
+  async signOut(): Promise<void> {
+    await this.sb.auth.signOut();
   }
 }

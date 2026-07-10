@@ -85,23 +85,41 @@ Es un proyecto **Next.js estándar**: Vercel lo detecta solo, sin configuración
 
 ## 🔌 Conectar Supabase (datos reales, multi-dispositivo)
 
-1. Creá un proyecto en [supabase.com](https://supabase.com).
-2. **SQL Editor** → pegá y ejecutá `supabase/migrations/0001_init.sql`.
-   Crea las tablas, RLS por rol, las RPCs `register_purchase` / `prepare_dish`,
-   el trigger `handle_new_user` y unos datos demo.
-3. Copiá `.env.example` a `.env.local` y completá:
+Al detectar las variables de entorno, la app deja el modo demo y usa Supabase:
+la pantalla de login pasa a ser **email + contraseña** (Entrar / Crear cuenta).
+
+1. **Creá un proyecto** en [supabase.com](https://supabase.com).
+2. **SQL Editor → New query** → pegá y ejecutá **`supabase/migrations/0001_init.sql`**
+   (tablas, RLS por rol, RPCs `register_purchase`/`prepare_dish`, trigger
+   `handle_new_user`, y unos datos de ejemplo). Después ejecutá también
+   **`supabase/migrations/0002_meal_planning.sql`** (planificación).
+   > Para arrancar **con la base vacía** (sin datos de ejemplo), borrá el bloque
+   > final `insert into products …` de `0001_init.sql` antes de correrlo.
+3. **API keys:** *Project Settings → API*. Copiá `.env.example` a `.env.local`:
    ```
    NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
    ```
-4. Reiniciá `npm run dev`. Al detectar las variables, la app usa Supabase
-   automáticamente (adiós “Modo demo”).
-5. **Usuarios y roles:** registrá usuarios en Supabase Auth. El trigger crea su fila
-   en `profiles` con rol `lectura`. Cambiá el rol a `admin` o `cocinero` editando
-   `profiles.role` en la tabla.
+   En Vercel, cargá esas dos variables en *Project → Settings → Environment Variables*
+   y volvé a desplegar.
+4. **Auth (arranque simple):** *Authentication → Providers → Email* → dejá **Email**
+   habilitado. Para probar sin casilla de correo, desactivá **“Confirm email”**
+   (*Authentication → Sign In / Providers*), así al crear la cuenta entrás directo.
+5. **Reiniciá** `npm run dev` (o redeploy en Vercel). Entrá a `/login`, **Crear cuenta**
+   con tu email y contraseña.
+6. **Hacete admin:** el trigger crea tu fila en `profiles` con rol `lectura`. En
+   *SQL Editor* corré (una vez, con tu email):
+   ```sql
+   update profiles set role = 'admin' where email = 'vos@ejemplo.com';
+   ```
+   Volvé a entrar y ya tenés todos los permisos. A los demás usuarios les asignás
+   `cocinero` o `lectura` del mismo modo.
 
 > La app funciona igual con o sin Supabase: la lógica de negocio vive en
-> `lib/domain/stock.ts` y la usan tanto el repo demo como el de Supabase.
+> `lib/domain/` (`stock.ts`, `planning.ts`) y la comparten el repo demo y el de Supabase.
+> **Nota:** el repo de Supabase está implementado y tipado, pero probá el alta de
+> usuario y un par de cargas después de conectar tu proyecto (el modo demo es el
+> que viene verificado extremo a extremo).
 
 ---
 

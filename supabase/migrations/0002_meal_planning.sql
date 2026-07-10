@@ -9,7 +9,7 @@ create table if not exists meal_plans (
   charter_id uuid references charters(id) on delete set null,
   date date not null,
   slot text not null,                 -- desayuno | almuerzo | merienda | cena | snack
-  status text not null default 'planificado', -- planificado | preparado
+  status text not null default 'planificado', -- planificado | preparado | servida | cancelada
   prepared_dish_ids uuid[] default '{}',
   notes text,
   created_by text,

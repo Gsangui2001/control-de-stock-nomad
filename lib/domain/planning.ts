@@ -15,6 +15,7 @@ export const MEAL_SLOTS: { key: MealSlot; label: string; icon: string }[] = [
   { key: "merienda", label: "Merienda", icon: "🧁" },
   { key: "cena", label: "Cena", icon: "🌙" },
   { key: "snack", label: "Snack", icon: "🍿" },
+  { key: "extras", label: "Extras", icon: "🧺" },
 ];
 
 export function mealSlotLabel(slot: MealSlot): string {

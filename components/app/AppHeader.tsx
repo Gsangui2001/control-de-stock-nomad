@@ -10,14 +10,15 @@ import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/permissions";
 
 export function AppHeader() {
-  const { user, setUser } = useRepoContext();
+  const { user, repo, refresh } = useRepoContext();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   async function logout() {
-    await setUser(null);
+    await repo.signOut();
+    refresh();
     router.replace("/login");
   }
 
