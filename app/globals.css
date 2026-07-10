@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Maritime premium light theme */
+    --background: 205 60% 98%;
+    --foreground: 210 45% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 45% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 45% 14%;
+
+    /* Ocean blue */
+    --primary: 208 79% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Sand */
+    --secondary: 40 45% 92%;
+    --secondary-foreground: 30 30% 25%;
+
+    --muted: 205 30% 94%;
+    --muted-foreground: 210 16% 42%;
+
+    /* Turquoise */
+    --accent: 182 62% 45%;
+    --accent-foreground: 190 90% 12%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 205 25% 88%;
+    --input: 205 25% 88%;
+    --ring: 208 79% 34%;
+
+    --ocean: 208 79% 34%;
+    --ocean-foreground: 0 0% 100%;
+    --turquoise: 182 62% 45%;
+    --turquoise-foreground: 190 90% 12%;
+    --sand: 40 45% 88%;
+    --sand-foreground: 30 30% 25%;
+    --success: 152 55% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 34 92% 50%;
+    --warning-foreground: 30 40% 12%;
+
+    --radius: 1rem;
+  }
+
+  .dark {
+    --background: 210 45% 9%;
+    --foreground: 205 30% 94%;
+
+    --card: 210 40% 13%;
+    --card-foreground: 205 30% 94%;
+
+    --popover: 210 40% 13%;
+    --popover-foreground: 205 30% 94%;
+
+    --primary: 200 80% 55%;
+    --primary-foreground: 210 45% 9%;
+
+    --secondary: 210 30% 20%;
+    --secondary-foreground: 205 30% 90%;
+
+    --muted: 210 30% 18%;
+    --muted-foreground: 205 16% 62%;
+
+    --accent: 182 55% 48%;
+    --accent-foreground: 190 90% 10%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 30% 22%;
+    --input: 210 30% 22%;
+    --ring: 200 80% 55%;
+
+    --ocean: 200 80% 55%;
+    --ocean-foreground: 210 45% 9%;
+    --turquoise: 182 55% 48%;
+    --turquoise-foreground: 190 90% 10%;
+    --sand: 40 20% 30%;
+    --sand-foreground: 40 30% 88%;
+    --success: 152 50% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 34 88% 55%;
+    --warning-foreground: 30 40% 12%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* Larger tap targets on touch devices */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
