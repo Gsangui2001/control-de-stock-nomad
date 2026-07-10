@@ -108,11 +108,8 @@ export default function PlanificacionPage() {
         open={shopOpen}
         onOpenChange={setShopOpen}
         plans={plans}
-        scopeLabel={
-          activeCharter
-            ? `Charter ${activeCharter.code} · comidas planificadas`
-            : "Comidas planificadas"
-        }
+        date={date}
+        charterLabel={activeCharter ? `Charter ${activeCharter.code}` : "Todo el plan"}
       />
     </PageContainer>
   );

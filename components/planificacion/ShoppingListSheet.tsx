@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { format, startOfWeek, endOfWeek } from "date-fns";
+import { es } from "date-fns/locale";
 import { Download, ShoppingCart, CheckCircle2 } from "lucide-react";
 import type { PlannedMeal } from "@/lib/domain/types";
 import { useProducts, useRecipes } from "@/lib/hooks";
@@ -17,6 +19,7 @@ import { formatMoney, formatQty } from "@/lib/utils";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Sheet,
   SheetContent,
@@ -25,27 +28,51 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 
+type Scope = "dia" | "semana" | "charter";
+
 export function ShoppingListSheet({
   open,
   onOpenChange,
   plans,
-  scopeLabel,
+  date,
+  charterLabel,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   plans: PlannedMeal[];
-  scopeLabel: string;
+  date: string;
+  charterLabel: string;
 }) {
   const { data: products } = useProducts();
   const { data: recipes } = useRecipes();
   const { user, settings } = useRepoContext();
   const showCosts = canManage(user?.role);
+  const [scope, setScope] = useState<Scope>("charter");
+
+  const ref = useMemo(() => new Date(date + "T12:00:00"), [date]);
+
+  const scopedPlans = useMemo(() => {
+    if (scope === "dia") return plans.filter((p) => p.date === date);
+    if (scope === "semana") {
+      const from = format(startOfWeek(ref, { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const to = format(endOfWeek(ref, { weekStartsOn: 1 }), "yyyy-MM-dd");
+      return plans.filter((p) => p.date >= from && p.date <= to);
+    }
+    return plans;
+  }, [plans, scope, date, ref]);
+
+  const scopeSubtitle =
+    scope === "dia"
+      ? `${format(ref, "EEEE d 'de' MMM", { locale: es })} · faltantes`
+      : scope === "semana"
+      ? `Semana del ${format(startOfWeek(ref, { weekStartsOn: 1 }), "d MMM", { locale: es })} · faltantes`
+      : `${charterLabel} · faltantes`;
 
   const items = useMemo(() => {
-    const needs = computePlanNeeds(plans, recipes, products);
+    const needs = computePlanNeeds(scopedPlans, recipes, products);
     const shortages = computeShortages(needs, products);
     return buildShoppingList(shortages, products);
-  }, [plans, recipes, products]);
+  }, [scopedPlans, recipes, products]);
 
   const total = shoppingListTotal(items);
 
@@ -82,8 +109,28 @@ export function ShoppingListSheet({
           <SheetTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" /> Lista de compras sugerida
           </SheetTitle>
-          <SheetDescription>{scopeLabel}</SheetDescription>
+          <SheetDescription className="capitalize">{scopeSubtitle}</SheetDescription>
         </SheetHeader>
+
+        {/* Selector de alcance */}
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1 mb-3">
+          {([
+            ["dia", "Día"],
+            ["semana", "Semana"],
+            ["charter", "Charter"],
+          ] as [Scope, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setScope(key)}
+              className={cn(
+                "rounded-lg py-1.5 text-sm font-medium transition-colors",
+                scope === key ? "bg-background shadow-sm" : "text-muted-foreground"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {items.length === 0 ? (
           <Card className="p-6 flex flex-col items-center text-center gap-2 border-dashed">

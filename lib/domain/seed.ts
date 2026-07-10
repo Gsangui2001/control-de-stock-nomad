@@ -332,6 +332,30 @@ export function buildSeed(): DatabaseSnapshot {
       createdBy: "Admin demo",
       createdAt: iso(-1),
     },
+    // Desayunos extra: al sumar los 3 del charter, el total supera el stock de
+    // algunos insumos (huevos/pan/jugo) → la lista "Charter" muestra faltantes reales.
+    {
+      id: "plan-4",
+      charterId: "charter-001",
+      date: dateOnly(0),
+      slot: "desayuno",
+      dishes: [{ recipeId: "rec-desayuno", servings: 8 }],
+      beverages: [{ productId: "prod-jugo", quantity: 8 }],
+      status: "planificado",
+      createdBy: "Admin demo",
+      createdAt: iso(-1),
+    },
+    {
+      id: "plan-5",
+      charterId: "charter-001",
+      date: dateOnly(2),
+      slot: "desayuno",
+      dishes: [{ recipeId: "rec-desayuno", servings: 8 }],
+      beverages: [{ productId: "prod-jugo", quantity: 8 }],
+      status: "planificado",
+      createdBy: "Admin demo",
+      createdAt: iso(-1),
+    },
   ];
 
   return {
