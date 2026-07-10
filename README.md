@@ -62,6 +62,27 @@ node scripts/gen-icons.mjs   # regenerar íconos PWA
 
 ---
 
+## 🚀 Deploy en Vercel (URL pública + PWA en el celular)
+
+Es un proyecto **Next.js estándar**: Vercel lo detecta solo, sin configuración.
+
+1. Entrá a [vercel.com](https://vercel.com) → **Add New… → Project** → importá
+   `Gsangui2001/control-de-stock-nomad`.
+2. **Branch**: elegí `claude/nomad-stock-control-b6kq6h` (o `main` si ya mergeaste).
+3. **Framework Preset**: *Next.js* (autodetectado). **Build**: `next build` ·
+   **Output**: automático. No cambies nada.
+4. **Environment Variables**: dejalas **vacías** para probar en **modo demo**. Si querés
+   datos reales, agregá `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   (ver sección de Supabase).
+5. **Deploy**. Te queda una URL tipo `https://nomad-stock-xxx.vercel.app`.
+6. Abrí esa URL en el celular → **instalá la PWA**: Android (Chrome ⋮ → “Agregar a la
+   pantalla principal”) · iPhone (Safari → Compartir → “Agregar a inicio”).
+
+> Cada push a la branch conectada re-despliega solo. El service worker de la PWA se
+> genera en el build de producción (está desactivado en `dev`).
+
+---
+
 ## 🔌 Conectar Supabase (datos reales, multi-dispositivo)
 
 1. Creá un proyecto en [supabase.com](https://supabase.com).
