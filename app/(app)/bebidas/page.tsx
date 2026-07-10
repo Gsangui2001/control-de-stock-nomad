@@ -92,45 +92,46 @@ export default function BebidasPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {beverages.map((b) => (
-            <Card key={b.id} className="p-4">
-              <div className="flex items-start justify-between mb-3">
+            <Card key={b.id} className="p-5 animate-fade-up">
+              <div className="flex items-start justify-between mb-4">
                 <div className="min-w-0">
-                  <div className="font-semibold truncate">{b.name}</div>
-                  <div className="text-xs text-muted-foreground">{b.unit}</div>
+                  <div className="font-bold text-lg truncate">{b.name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{b.unit}</div>
                 </div>
                 <StockStatusBadge status={stockStatus(b)} />
               </div>
 
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <Button
-                  variant="outline"
-                  className="h-16 w-16 rounded-2xl shrink-0"
+              {/* Control de una mano: −  N  + */}
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <button
+                  type="button"
+                  className="h-16 w-16 shrink-0 rounded-2xl bg-muted text-foreground flex items-center justify-center transition-all duration-150 hover:bg-destructive/10 hover:text-destructive active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                   disabled={!canOp}
                   onClick={() => quickConsume(b, 1)}
                   aria-label="Consumir uno"
                 >
-                  <Minus className="!h-8 !w-8" />
-                </Button>
-                <div className="text-center">
-                  <div className="text-5xl font-bold tabular-nums leading-none">
-                    {formatQty(b.currentQuantity)}
-                  </div>
+                  <Minus className="h-8 w-8" />
+                </button>
+                <div
+                  key={b.currentQuantity}
+                  className="text-6xl font-extrabold tabular-nums leading-none animate-pop"
+                >
+                  {formatQty(b.currentQuantity)}
                 </div>
-                <Button
-                  variant="outline"
-                  className="h-16 w-16 rounded-2xl shrink-0"
+                <button
+                  type="button"
+                  className="h-16 w-16 shrink-0 rounded-2xl bg-muted text-foreground flex items-center justify-center transition-all duration-150 hover:bg-success/10 hover:text-success active:scale-90 disabled:opacity-40 disabled:pointer-events-none"
                   disabled={!canOp}
                   onClick={() => quickRestock(b, 1)}
                   aria-label="Reponer uno"
                 >
-                  <Plus className="!h-8 !w-8" />
-                </Button>
+                  <Plus className="h-8 w-8" />
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="secondary"
-                  size="sm"
                   disabled={!canOp}
                   onClick={() => {
                     setMulti(b);
@@ -141,7 +142,6 @@ export default function BebidasPage() {
                 </Button>
                 <Button
                   variant="ghost"
-                  size="sm"
                   disabled={!canOp}
                   onClick={() => {
                     setStockDialog(b);

@@ -83,7 +83,7 @@ export default function PlanificacionPage() {
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <div className="flex flex-col items-center">
-            <span className="font-semibold capitalize text-center">{headerLabel}</span>
+            <span className="font-semibold text-center first-letter:uppercase">{headerLabel}</span>
             <button className="text-xs text-primary" onClick={() => setDate(todayISO())}>
               Ir a hoy
             </button>

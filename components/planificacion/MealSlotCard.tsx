@@ -93,24 +93,29 @@ export function MealSlotCard({
     <Card
       className={
         isPrepared
-          ? "border-l-4 border-l-success bg-success/5 border-success/30"
+          ? "border-l-4 border-l-success"
           : isServed
-          ? "border-l-4 border-l-primary bg-primary/5 border-primary/30"
+          ? "border-l-4 border-l-accent"
           : isCancelled
-          ? "opacity-50 border-l-4 border-l-muted"
-          : "border-l-4 border-l-muted/30"
+          ? "opacity-50 border-l-4 border-l-border"
+          : isPlanned && count > 0
+          ? "border-l-4 border-l-ocean"
+          : ""
       }
     >
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="text-3xl shrink-0">{mealSlotIcon(slot)}</span>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl">
+              {mealSlotIcon(slot)}
+            </span>
             <div className="min-w-0">
               <span className="font-bold text-lg">{mealSlotLabel(slot)}</span>
               <div className="flex items-center gap-2 mt-0.5">
-                {isPrepared && <Badge variant="success" className="text-xs">Preparado</Badge>}
-                {isServed && <Badge variant="accent" className="text-xs">Servida</Badge>}
-                {isCancelled && <Badge variant="outline" className="text-xs">Cancelada</Badge>}
+                {isPlanned && count > 0 && <Badge variant="info">Planificado</Badge>}
+                {isPrepared && <Badge variant="success">Preparado</Badge>}
+                {isServed && <Badge variant="accent">Servida</Badge>}
+                {isCancelled && <Badge variant="outline">Cancelada</Badge>}
               </div>
             </div>
           </div>
@@ -132,10 +137,7 @@ export function MealSlotCard({
             {manage ? "Tocá + para planificar esta comida" : "Sin planificar"}
           </p>
         ) : (
-          <div className="space-y-2">
-            <div className="bg-muted/40 -mx-4 -mb-2 px-4 py-2 rounded-t-lg">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ítems</div>
-            </div>
+          <div className="space-y-1">
             {meal!.dishes.map((d, i) => (
               <div key={`d${i}`} className="flex items-center justify-between text-sm py-2 px-0">
                 <span className="flex items-center gap-2.5 min-w-0 flex-1">

@@ -18,7 +18,6 @@ import {
 } from "@/components/app/common";
 import { PrepareDishSheet } from "@/components/preparar/PrepareDishSheet";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export default function PrepararPage() {
@@ -56,7 +55,7 @@ export default function PrepararPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {activeRecipes.map((r) => {
             const max = possibleServings(r, products);
             const cost = recipeServingCost(r, products);
@@ -64,42 +63,46 @@ export default function PrepararPage() {
             const productName = (id: string) =>
               products.find((p) => p.id === id)?.name ?? "?";
             return (
-              <Card key={r.id} className="p-4 flex flex-col gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="h-16 w-16 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-4xl">
+              <Card key={r.id} className="overflow-hidden animate-fade-up">
+                <div className="flex items-start gap-4 p-5 pb-3">
+                  <div className="h-20 w-20 shrink-0 rounded-2xl bg-gradient-to-br from-secondary to-secondary/60 flex items-center justify-center text-[44px] shadow-inner">
                     {r.icon ?? "🍽️"}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-lg leading-tight">{r.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {mainItems.map((i) => productName(i.productId)).join(", ")}
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className="font-bold text-lg leading-tight">{r.name}</div>
+                    <div className="text-sm text-muted-foreground truncate mt-1">
+                      {mainItems.map((i) => productName(i.productId)).join(" · ")}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold">
+                      <span
+                        className={
+                          "h-2 w-2 rounded-full " + (max > 0 ? "bg-success" : "bg-destructive")
+                        }
+                      />
+                      <span className={max > 0 ? "text-success" : "text-destructive"}>
+                        {max > 0 ? `${max} porciones disponibles` : "Sin stock"}
+                      </span>
+                      {showCosts && (
+                        <span className="font-normal text-muted-foreground">
+                          · {formatMoney(cost, settings.currency)}/porc.
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  {showCosts ? (
-                    <span className="text-muted-foreground">
-                      {formatMoney(cost, settings.currency)}/porción
-                    </span>
-                  ) : (
-                    <span />
-                  )}
-                  <Badge variant={max > 0 ? "success" : "destructive"}>
-                    {max > 0 ? `${max} porc. disponibles` : "Sin stock"}
-                  </Badge>
+                <div className="px-5 pb-5 pt-2">
+                  <Button
+                    size="xl"
+                    variant="success"
+                    className="w-full"
+                    disabled={!canPrep}
+                    onClick={() => setSelected(r)}
+                  >
+                    <Utensils className="!h-6 !w-6" />
+                    Preparar
+                  </Button>
                 </div>
-
-                <Button
-                  size="xl"
-                  variant="success"
-                  className="w-full"
-                  disabled={!canPrep}
-                  onClick={() => setSelected(r)}
-                >
-                  <Utensils className="h-6 w-6" />
-                  Preparar
-                </Button>
               </Card>
             );
           })}

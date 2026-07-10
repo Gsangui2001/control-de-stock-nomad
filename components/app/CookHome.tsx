@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Utensils, Wine, Ship, PackageCheck, ChefHat, CalendarDays } from "lucide-react";
 import { useProducts, usePreparedDishes, useMealPlans } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
@@ -15,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 const STATUS_BADGE = {
-  planificado: { label: "Planificado", variant: "secondary" as const },
+  planificado: { label: "Planificado", variant: "info" as const },
   preparado: { label: "Preparado", variant: "success" as const },
   servida: { label: "Servida", variant: "accent" as const },
   cancelada: { label: "Cancelada", variant: "outline" as const },
@@ -50,53 +51,68 @@ export function CookHome() {
     <PageContainer>
       <DemoBanner />
 
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Hola{user ? `, ${user.name.split(" ")[0]}` : ""} 👋
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {activeCharter ? (
-            <span className="inline-flex items-center gap-1">
-              <Ship className="h-3.5 w-3.5" /> Charter <strong>{activeCharter.code}</strong>
-            </span>
-          ) : (
-            "Sin charter activo"
-          )}
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[26px] font-bold tracking-tight">
+            Hola{user ? `, ${user.name.split(" ")[0]}` : ""} 👋
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5 first-letter:uppercase">
+            {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+          </p>
+        </div>
+        <span className="mt-1.5 inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+          <Ship className="h-3.5 w-3.5" />
+          {activeCharter ? activeCharter.code : "Sin charter"}
+        </span>
       </div>
 
-      {/* Dos acciones grandes */}
+      {/* Dos acciones grandes — el corazón del día del cocinero */}
       <div className="grid grid-cols-1 gap-3">
-        <Button asChild size="lg" variant="success" className="h-24 text-lg justify-start gap-4 font-semibold shadow-sm hover:shadow-md transition-shadow">
+        <Button
+          asChild
+          variant="success"
+          className="h-24 rounded-3xl text-lg justify-start gap-4 px-6 font-semibold shadow-lifted"
+        >
           <Link href="/preparar">
-            <Utensils className="h-7 w-7" />
-            <div className="text-left">
-              <div>Preparar plato</div>
-              <div className="text-xs font-normal opacity-80">Seleccionar receta y porciones</div>
-            </div>
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+              <Utensils className="!h-7 !w-7" />
+            </span>
+            <span className="text-left">
+              <span className="block">Preparar plato</span>
+              <span className="block text-xs font-normal opacity-85">Elegí receta y porciones</span>
+            </span>
           </Link>
         </Button>
-        <Button asChild size="lg" className="h-24 text-lg justify-start gap-4 font-semibold shadow-sm hover:shadow-md transition-shadow">
+        <Button
+          asChild
+          className="h-24 rounded-3xl text-lg justify-start gap-4 px-6 font-semibold shadow-lifted"
+        >
           <Link href="/bebidas">
-            <Wine className="h-7 w-7" />
-            <div className="text-left">
-              <div>Cargar bebida</div>
-              <div className="text-xs font-normal opacity-80">Registrar consumo</div>
-            </div>
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/12">
+              <Wine className="!h-7 !w-7" />
+            </span>
+            <span className="text-left">
+              <span className="block">Cargar bebida</span>
+              <span className="block text-xs font-normal opacity-85">Registrar consumo</span>
+            </span>
           </Link>
         </Button>
       </div>
 
       {/* Platos de hoy */}
-      <Card className="bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+      <Card>
         <CardContent className="p-4 flex items-center gap-4">
-          <div className="h-14 w-14 rounded-xl bg-success/20 text-success flex items-center justify-center flex-shrink-0">
-            <ChefHat className="h-7 w-7" />
+          <div className="h-12 w-12 rounded-xl bg-success/10 text-success flex items-center justify-center shrink-0">
+            <ChefHat className="h-6 w-6" />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-medium text-muted-foreground">Porciones preparadas</div>
-            <div className="text-3xl font-bold leading-none mt-1">{servingsToday}</div>
-            <div className="text-xs text-muted-foreground mt-1">{preparedToday.length} preparación{preparedToday.length !== 1 ? "es" : ""}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Porciones preparadas hoy
+            </div>
+            <div className="text-3xl font-bold leading-none mt-1 tabular-nums">{servingsToday}</div>
+          </div>
+          <div className="text-xs text-muted-foreground text-right">
+            {preparedToday.length} preparación{preparedToday.length !== 1 ? "es" : ""}
           </div>
         </CardContent>
       </Card>
@@ -108,15 +124,17 @@ export function CookHome() {
             <CalendarDays className="h-5 w-5 text-primary" />
             Comidas de hoy
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {mealsToday.map((m) => {
               const badge = STATUS_BADGE[m.status];
               return (
-                <Link key={m.id} href="/planificacion">
-                  <Card className="p-3 border-l-4 transition-all hover:shadow-sm" style={{borderLeftColor: "hsl(var(--primary))"}}>
+                <Link key={m.id} href="/planificacion" className="block">
+                  <Card className="p-4 transition-all hover:shadow-lifted active:scale-[0.99]">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <span className="text-2xl shrink-0">{mealSlotIcon(m.slot)}</span>
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl">
+                          {mealSlotIcon(m.slot)}
+                        </span>
                         <div className="min-w-0">
                           <span className="font-semibold block">{mealSlotLabel(m.slot)}</span>
                           <span className="text-xs text-muted-foreground">
@@ -141,32 +159,28 @@ export function CookHome() {
           Para reponer
         </h2>
         {toReplenish.length === 0 ? (
-          <Card className="p-4 text-sm text-center bg-gradient-to-r from-success/10 to-success/5 border-success/20">
-            <div className="text-lg font-semibold text-success mb-1">Todo bien 🎉</div>
+          <Card className="p-6 text-sm text-center">
+            <div className="text-lg font-semibold mb-1">Todo bien 🎉</div>
             <div className="text-muted-foreground">Stock suficiente en todos los productos</div>
           </Card>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {toReplenish.map((p) => {
               const status = stockStatus(p);
-              const isLow = status === "bajo";
-              const isCritical = status === "critico";
               return (
                 <Card
                   key={p.id}
-                  className={`p-3 border-l-4 transition-all ${
-                    isCritical
-                      ? "border-l-destructive bg-destructive/5"
-                      : "border-l-warning bg-warning/5"
+                  className={`p-4 border-l-4 ${
+                    status === "critico" ? "border-l-destructive" : "border-l-warning"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <span className="font-medium truncate">{p.name}</span>
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span className="font-semibold truncate">{p.name}</span>
                       <StockStatusBadge status={status} />
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="text-lg font-bold tabular-nums">{formatQty(p.currentQuantity)}</span>{" "}
+                      <span className="text-xl font-bold tabular-nums">{formatQty(p.currentQuantity)}</span>{" "}
                       <span className="text-xs text-muted-foreground">{p.unit}</span>
                     </div>
                   </div>

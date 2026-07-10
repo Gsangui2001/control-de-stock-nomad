@@ -23,23 +23,24 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm shadow-sm">
-      <div className="mx-auto max-w-2xl flex items-center justify-between px-4 h-16">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center shadow-md">
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 backdrop-blur-md">
+      <div className="mx-auto max-w-2xl flex items-center justify-between gap-2 px-4 h-16">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-soft">
             <Anchor className="h-5 w-5" />
           </div>
-          <div className="leading-tight">
-            <div className="text-base font-bold">Nomad Stock</div>
+          {/* En pantallas chicas manda el selector de charter; la marca vive en el ícono */}
+          <div className="hidden sm:block min-w-0 leading-tight">
+            <div className="text-sm font-bold whitespace-nowrap">Nomad Stock</div>
             {user && (
-              <div className="text-xs text-muted-foreground font-medium">
+              <div className="text-[11px] text-muted-foreground font-medium truncate">
                 {user.name} · {ROLE_LABEL[user.role]}
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <CharterSwitcher />
           <Button
             variant="ghost"

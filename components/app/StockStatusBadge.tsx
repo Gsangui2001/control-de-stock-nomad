@@ -9,5 +9,10 @@ const MAP: Record<StockStatus, { label: string; variant: "success" | "warning" |
 
 export function StockStatusBadge({ status }: { status: StockStatus }) {
   const { label, variant } = MAP[status];
-  return <Badge variant={variant}>{label}</Badge>;
+  return (
+    <Badge variant={variant}>
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
+      {label}
+    </Badge>
+  );
 }

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function PageContainer({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("mx-auto max-w-2xl px-4 py-4 space-y-4", className)}>{children}</div>
+    <div className={cn("mx-auto max-w-2xl px-4 py-5 space-y-5", className)}>{children}</div>
   );
 }
 
@@ -30,15 +30,15 @@ export function PageTitle({
         {back && (
           <Link
             href={back}
-            className="mt-0.5 h-8 w-8 shrink-0 rounded-lg border flex items-center justify-center hover:bg-accent/10"
+            className="mt-1 h-10 w-10 shrink-0 rounded-xl border flex items-center justify-center hover:bg-accent/10 transition-colors"
             aria-label="Volver"
           >
             <ChevronLeft className="h-5 w-5" />
           </Link>
         )}
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight truncate">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          <h1 className="text-2xl font-bold tracking-tight truncate">{title}</h1>
+          {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {action}
@@ -58,11 +58,15 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <Card className="flex flex-col items-center justify-center text-center p-8 gap-2 border-dashed">
-      {icon && <div className="text-muted-foreground mb-1">{icon}</div>}
-      <div className="font-semibold">{title}</div>
+    <Card className="flex flex-col items-center justify-center text-center p-10 gap-2 border-dashed shadow-none">
+      {icon && (
+        <div className="h-14 w-14 rounded-2xl bg-muted flex items-center justify-center text-muted-foreground mb-1">
+          {icon}
+        </div>
+      )}
+      <div className="font-semibold text-base">{title}</div>
       {description && <p className="text-sm text-muted-foreground max-w-xs">{description}</p>}
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-3">{action}</div>}
     </Card>
   );
 }
