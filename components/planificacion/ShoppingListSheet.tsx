@@ -13,7 +13,8 @@ import {
   buildShoppingList,
   shoppingListTotal,
 } from "@/lib/domain/planning";
-import { CATEGORY_LABEL } from "@/lib/domain/units";
+import { CATEGORY_LABEL, CATEGORIES } from "@/lib/domain/units";
+import type { CategoryKey } from "@/lib/domain/types";
 import { canManage } from "@/lib/permissions";
 import { formatMoney, formatQty } from "@/lib/utils";
 import { toCSV, downloadCSV } from "@/lib/csv";
@@ -48,6 +49,7 @@ export function ShoppingListSheet({
   const { user, settings } = useRepoContext();
   const showCosts = canManage(user?.role);
   const [scope, setScope] = useState<Scope>("charter");
+  const [catFilter, setCatFilter] = useState<CategoryKey | "all">("all");
 
   const ref = useMemo(() => new Date(date + "T12:00:00"), [date]);
 
@@ -74,22 +76,33 @@ export function ShoppingListSheet({
     return buildShoppingList(shortages, products);
   }, [scopedPlans, recipes, products]);
 
-  const total = shoppingListTotal(items);
+  // Categorías presentes en la lista (para no mostrar chips vacíos)
+  const presentCategories = useMemo(
+    () => CATEGORIES.filter((c) => items.some((i) => i.category === c.key)),
+    [items]
+  );
+
+  const visibleItems = useMemo(
+    () => (catFilter === "all" ? items : items.filter((i) => i.category === catFilter)),
+    [items, catFilter]
+  );
+
+  const total = shoppingListTotal(visibleItems);
 
   // Agrupar por categoría
   const grouped = useMemo(() => {
-    const map = new Map<string, typeof items>();
-    for (const it of items) {
+    const map = new Map<string, typeof visibleItems>();
+    for (const it of visibleItems) {
       const arr = map.get(it.category) ?? [];
       arr.push(it);
       map.set(it.category, arr);
     }
     return Array.from(map.entries());
-  }, [items]);
+  }, [visibleItems]);
 
   function exportCSV() {
     const csv = toCSV(
-      items.map((i) => ({
+      visibleItems.map((i) => ({
         producto: i.productName,
         categoria: CATEGORY_LABEL[i.category],
         necesario: i.needed,
@@ -131,6 +144,36 @@ export function ShoppingListSheet({
             </button>
           ))}
         </div>
+
+        {presentCategories.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 mb-2">
+            <button
+              onClick={() => setCatFilter("all")}
+              className={cn(
+                "whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                catFilter === "all"
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-accent/10"
+              )}
+            >
+              Todas
+            </button>
+            {presentCategories.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setCatFilter(c.key)}
+                className={cn(
+                  "whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  catFilter === c.key
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-accent/10"
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {items.length === 0 ? (
           <Card className="p-6 flex flex-col items-center text-center gap-2 border-dashed">

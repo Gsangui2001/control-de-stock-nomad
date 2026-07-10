@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Check, Utensils, Wine, Pencil } from "lucide-react";
+import { Plus, Check, Utensils, Wine, Pencil, CheckCheck, Ban } from "lucide-react";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { useProducts, useRecipes } from "@/lib/hooks";
 import type { MealSlot, PlannedMeal } from "@/lib/domain/types";
@@ -12,6 +12,17 @@ import { formatQty } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function MealSlotCard({
   date,
@@ -34,7 +45,12 @@ export function MealSlotCard({
   const recipeName = (id: string) => recipes.find((r) => r.id === id)?.name ?? "?";
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "?";
 
-  const isPrepared = meal?.status === "preparado";
+  const status = meal?.status;
+  const isPlanned = status === "planificado";
+  const isPrepared = status === "preparado";
+  const isServed = status === "servida";
+  const isCancelled = status === "cancelada";
+  const editable = !meal || isPlanned;
   const count = meal ? mealItemCount(meal) : 0;
 
   async function markPrepared() {
@@ -52,27 +68,54 @@ export function MealSlotCard({
       return;
     }
     refresh();
-    toast.success(`${mealSlotLabel(slot)} preparado`, {
-      description: "Stock descontado",
-    });
+    toast.success(`${mealSlotLabel(slot)} preparado`, { description: "Stock descontado" });
+  }
+
+  async function markServed() {
+    if (!meal) return;
+    setBusy(true);
+    await repo.markMealServed(meal.id);
+    setBusy(false);
+    refresh();
+    toast.success(`${mealSlotLabel(slot)} servido`);
+  }
+
+  async function cancel() {
+    if (!meal) return;
+    setBusy(true);
+    await repo.cancelMealPlan(meal.id);
+    setBusy(false);
+    refresh();
+    toast.success(`${mealSlotLabel(slot)} cancelado`);
   }
 
   return (
-    <Card className={isPrepared ? "border-success/50 bg-success/5" : ""}>
+    <Card
+      className={
+        isPrepared
+          ? "border-success/50 bg-success/5"
+          : isServed
+          ? "border-primary/40 bg-primary/5"
+          : isCancelled
+          ? "opacity-60"
+          : ""
+      }
+    >
       <CardContent className="p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{mealSlotIcon(slot)}</span>
             <span className="font-semibold">{mealSlotLabel(slot)}</span>
             {isPrepared && <Badge variant="success">Preparado</Badge>}
+            {isServed && <Badge variant="accent">Servida</Badge>}
+            {isCancelled && <Badge variant="outline">Cancelada</Badge>}
           </div>
-          {manage && (
+          {manage && editable && (
             <Button
               size="icon"
               variant="ghost"
               aria-label="Editar comida"
               onClick={() => onEdit(slot, meal)}
-              disabled={isPrepared}
             >
               {count > 0 ? <Pencil className="h-4 w-4" /> : <Plus className="h-5 w-5" />}
             </Button>
@@ -104,7 +147,7 @@ export function MealSlotCard({
               </div>
             ))}
 
-            {!isPrepared && operate && (
+            {isPlanned && operate && (
               <Button
                 size="lg"
                 variant="success"
@@ -114,6 +157,40 @@ export function MealSlotCard({
               >
                 <Check className="h-5 w-5" /> Marcar preparado
               </Button>
+            )}
+
+            {isPrepared && operate && (
+              <Button
+                size="lg"
+                className="w-full mt-2"
+                disabled={busy}
+                onClick={markServed}
+              >
+                <CheckCheck className="h-5 w-5" /> Marcar servido
+              </Button>
+            )}
+
+            {isPlanned && manage && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="ghost" className="w-full text-destructive" disabled={busy}>
+                    <Ban className="h-4 w-4" /> Cancelar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>¿Cancelar {mealSlotLabel(slot).toLowerCase()}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      No se descuenta stock (todavía no se preparó). Podés volver a planificarla
+                      creando una nueva.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Volver</AlertDialogCancel>
+                    <AlertDialogAction onClick={cancel}>Cancelar comida</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         )}

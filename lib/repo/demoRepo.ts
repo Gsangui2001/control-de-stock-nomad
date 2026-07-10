@@ -467,6 +467,20 @@ export class DemoRepo implements Repo {
     return results;
   }
 
+  async markMealServed(planId: string): Promise<void> {
+    const plan = (this.db.mealPlans ?? []).find((m) => m.id === planId);
+    if (!plan || plan.status !== "preparado") return;
+    plan.status = "servida";
+    this.commit();
+  }
+
+  async cancelMealPlan(planId: string): Promise<void> {
+    const plan = (this.db.mealPlans ?? []).find((m) => m.id === planId);
+    if (!plan || plan.status !== "planificado") return;
+    plan.status = "cancelada";
+    this.commit();
+  }
+
   // ---- Charters ----
   async listCharters(): Promise<Charter[]> {
     return clone(this.db.charters);
@@ -536,6 +550,18 @@ export class DemoRepo implements Repo {
     if (!hasStorage()) return;
     if (user) window.localStorage.setItem(USER_KEY, JSON.stringify(user));
     else window.localStorage.removeItem(USER_KEY);
+  }
+
+  async signIn(): Promise<{ error?: string }> {
+    return { error: "En modo demo entrá con el selector de rol." };
+  }
+
+  async signUp(): Promise<{ error?: string }> {
+    return { error: "En modo demo entrá con el selector de rol." };
+  }
+
+  async signOut(): Promise<void> {
+    await this.setCurrentUser(null);
   }
 
   // ---- Demo utilities ----

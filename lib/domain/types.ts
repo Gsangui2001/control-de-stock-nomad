@@ -189,7 +189,7 @@ export interface Alert {
 
 // --- planificación de comidas ---
 
-export type MealSlot = "desayuno" | "almuerzo" | "merienda" | "cena" | "snack";
+export type MealSlot = "desayuno" | "almuerzo" | "merienda" | "cena" | "snack" | "extras";
 
 export interface PlannedDish {
   recipeId: string;
@@ -201,6 +201,8 @@ export interface PlannedBeverage {
   quantity: number;
 }
 
+export type MealPlanStatus = "planificado" | "preparado" | "servida" | "cancelada";
+
 export interface PlannedMeal {
   id: string;
   charterId?: string;
@@ -208,7 +210,7 @@ export interface PlannedMeal {
   slot: MealSlot;
   dishes: PlannedDish[];
   beverages: PlannedBeverage[];
-  status: "planificado" | "preparado";
+  status: MealPlanStatus;
   preparedDishIds?: string[];
   notes?: string;
   createdBy: string;
