@@ -23,28 +23,29 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
-      <div className="mx-auto max-w-2xl flex items-center justify-between px-4 h-14">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-primary text-primary-foreground flex items-center justify-center">
-            <Anchor className="h-4 w-4" />
+    <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm shadow-sm">
+      <div className="mx-auto max-w-2xl flex items-center justify-between px-4 h-16">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 text-primary-foreground flex items-center justify-center shadow-md">
+            <Anchor className="h-5 w-5" />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-bold">Nomad Stock</div>
+            <div className="text-base font-bold">Nomad Stock</div>
             {user && (
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground font-medium">
                 {user.name} · {ROLE_LABEL[user.role]}
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <CharterSwitcher />
           <Button
             variant="ghost"
             size="icon"
             aria-label="Cambiar tema"
+            className="hover:bg-muted/50"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           >
             {mounted && theme === "dark" ? (
@@ -53,7 +54,7 @@ export function AppHeader() {
               <Moon className="h-5 w-5" />
             )}
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Salir" onClick={logout}>
+          <Button variant="ghost" size="icon" aria-label="Salir" className="hover:bg-destructive/10 hover:text-destructive" onClick={logout}>
             <LogOut className="h-5 w-5" />
           </Button>
         </div>
