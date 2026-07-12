@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, Package, SlidersHorizontal, AlertTriangle } from "lucide-react";
+import { Search, Package, SlidersHorizontal, AlertTriangle, Pencil } from "lucide-react";
 import { useProducts } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { stockStatus, productValue } from "@/lib/domain/stock";
-import { CATEGORIES, CATEGORY_LABEL, LOCATION_LABEL } from "@/lib/domain/units";
+import { CATEGORIES, LOCATION_LABEL } from "@/lib/domain/units";
 import type { Product, CategoryKey } from "@/lib/domain/types";
 import { canManage } from "@/lib/permissions";
 import { formatMoney, formatQty } from "@/lib/utils";
@@ -17,6 +17,7 @@ import {
   ListSkeleton,
   DemoBanner,
 } from "@/components/app/common";
+import { Fab } from "@/components/app/Fab";
 import { StockStatusBadge } from "@/components/app/StockStatusBadge";
 import { AdjustStockDialog } from "@/components/stock/AdjustStockDialog";
 import { ProductForm } from "@/components/stock/ProductForm";
@@ -29,8 +30,19 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+
+const CATEGORY_EMOJI: Record<CategoryKey, string> = {
+  carnes: "🥩",
+  pescados: "🐟",
+  verduras: "🥕",
+  frutas: "🍎",
+  secos: "🌾",
+  lacteos: "🥛",
+  condimentos: "🧂",
+  bebidas: "🍷",
+  limpieza: "🧴",
+};
 
 export default function StockPage() {
   const { data: products, loading } = useProducts();
@@ -66,24 +78,20 @@ export default function StockPage() {
             ? `${products.length} productos · ${formatMoney(totalValue, settings.currency)}`
             : `${products.length} productos`
         }
-        action={
-          manage ? (
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button size="icon" aria-label="Nuevo producto">
-                  <Plus className="h-5 w-5" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Nuevo producto</DialogTitle>
-                </DialogHeader>
-                <ProductForm onDone={() => setCreateOpen(false)} />
-              </DialogContent>
-            </Dialog>
-          ) : undefined
-        }
       />
+      {manage && (
+        <>
+          <Fab label="Producto" onClick={() => setCreateOpen(true)} />
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nuevo producto</DialogTitle>
+              </DialogHeader>
+              <ProductForm onDone={() => setCreateOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -129,42 +137,51 @@ export default function StockPage() {
           description="No hay productos que coincidan con el filtro."
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {filtered.map((p) => {
             const status = stockStatus(p);
             return (
-              <Card key={p.id} className="p-3">
+              <Card key={p.id} className="p-3.5 hover:shadow-lifted transition-all">
                 <div className="flex items-center gap-3">
-                  <Link href={`/stock/${p.id}`} className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold truncate">{p.name}</span>
-                      <StockStatusBadge status={status} />
+                  <Link href={`/stock/${p.id}`} className="flex flex-1 items-center gap-3 min-w-0">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl">
+                      {CATEGORY_EMOJI[p.category]}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate">{p.name}</div>
+                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                        <StockStatusBadge status={status} />
+                        <span className="text-xs text-muted-foreground truncate">
+                          {LOCATION_LABEL[p.location]}
+                          {manage && ` · ${formatMoney(productValue(p), settings.currency)}`}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
-                      <span>{CATEGORY_LABEL[p.category]}</span>
-                      <span>·</span>
-                      <span>{LOCATION_LABEL[p.location]}</span>
-                      {manage && (
-                        <>
-                          <span>·</span>
-                          <span>{formatMoney(productValue(p), settings.currency)}</span>
-                        </>
-                      )}
+                    <div className="text-right shrink-0">
+                      <div className="text-xl font-bold tabular-nums leading-none">
+                        {formatQty(p.currentQuantity)}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">{p.unit}</div>
                     </div>
                   </Link>
-                  <div className="text-right shrink-0">
-                    <div className="text-lg font-bold tabular-nums leading-none">
-                      {formatQty(p.currentQuantity)}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">{p.unit}</div>
-                  </div>
-                  <div className="flex flex-col gap-1 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => setAdjust(p)}>
-                      Ajustar
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      aria-label={`Ajustar ${p.name}`}
+                      onClick={() => setAdjust(p)}
+                    >
+                      <SlidersHorizontal className="h-5 w-5" />
                     </Button>
                     {manage && (
-                      <Button size="sm" variant="ghost" onClick={() => setEditing(p)}>
-                        Editar
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9"
+                        aria-label={`Editar ${p.name}`}
+                        onClick={() => setEditing(p)}
+                      >
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     )}
                   </div>

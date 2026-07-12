@@ -29,7 +29,7 @@ export function BottomNav() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 border-t bg-background/95 backdrop-blur safe-bottom">
+    <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/70 bg-background/90 backdrop-blur-md safe-bottom">
       <div className="mx-auto max-w-2xl grid grid-cols-5">
         {primary.map((item) => {
           const active = isActive(item.href);
@@ -39,20 +39,29 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium transition-colors",
+                "flex min-h-[60px] flex-col items-center justify-center gap-1 pt-2 pb-1.5 text-[11px] font-medium transition-colors",
                 active ? "text-primary" : "text-muted-foreground"
               )}
             >
-              <Icon className={cn("h-6 w-6", active && "fill-primary/10")} />
-              {item.label}
+              <span
+                className={cn(
+                  "flex h-8 items-center justify-center rounded-full px-4 transition-all duration-200",
+                  active ? "bg-primary/10" : "bg-transparent"
+                )}
+              >
+                <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />
+              </span>
+              <span className={cn(active && "font-semibold")}>{item.label}</span>
             </Link>
           );
         })}
 
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger asChild>
-            <button className="flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground">
-              <Menu className="h-6 w-6" />
+            <button className="flex min-h-[60px] flex-col items-center justify-center gap-1 pt-2 pb-1.5 text-[11px] font-medium text-muted-foreground">
+              <span className="flex h-8 items-center justify-center rounded-full px-4">
+                <Menu className="h-[22px] w-[22px]" />
+              </span>
               Más
             </button>
           </SheetTrigger>

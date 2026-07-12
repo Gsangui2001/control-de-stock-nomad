@@ -4,91 +4,94 @@
 
 @layer base {
   :root {
-    /* Maritime premium light theme */
-    --background: 205 60% 98%;
-    --foreground: 210 45% 14%;
+    /* Nomad premium light theme — warm paper background, deep ocean navy */
+    --background: 60 17% 98%; /* #FAFAF8 */
+    --foreground: 205 55% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 45% 14%;
+    --card-foreground: 205 55% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 45% 14%;
+    --popover-foreground: 205 55% 15%;
 
-    /* Ocean blue */
-    --primary: 208 79% 34%;
+    /* Ocean navy #12344D */
+    --primary: 205 62% 19%;
     --primary-foreground: 0 0% 100%;
 
-    /* Sand */
-    --secondary: 40 45% 92%;
-    --secondary-foreground: 30 30% 25%;
+    /* Sand #F5E9D8 */
+    --secondary: 35 59% 90%;
+    --secondary-foreground: 30 35% 28%;
 
-    --muted: 205 30% 94%;
-    --muted-foreground: 210 16% 42%;
+    --muted: 45 12% 94%;
+    --muted-foreground: 210 12% 43%;
 
-    /* Turquoise */
-    --accent: 182 62% 45%;
-    --accent-foreground: 190 90% 12%;
+    /* Turquoise #2EC5B6 */
+    --accent: 174 62% 48%;
+    --accent-foreground: 174 80% 14%;
 
-    --destructive: 0 72% 48%;
+    /* Critical red #EF4444 */
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 205 25% 88%;
-    --input: 205 25% 88%;
-    --ring: 208 79% 34%;
+    --border: 45 12% 89%;
+    --input: 45 12% 86%;
+    --ring: 205 62% 19%;
 
-    --ocean: 208 79% 34%;
+    --ocean: 205 62% 19%;
     --ocean-foreground: 0 0% 100%;
-    --turquoise: 182 62% 45%;
-    --turquoise-foreground: 190 90% 12%;
-    --sand: 40 45% 88%;
-    --sand-foreground: 30 30% 25%;
-    --success: 152 55% 40%;
+    --turquoise: 174 62% 48%;
+    --turquoise-foreground: 174 80% 14%;
+    --sand: 35 59% 90%;
+    --sand-foreground: 30 35% 28%;
+    /* Success green #22C55E */
+    --success: 142 71% 40%;
     --success-foreground: 0 0% 100%;
-    --warning: 34 92% 50%;
-    --warning-foreground: 30 40% 12%;
+    /* Warning amber #F59E0B */
+    --warning: 38 92% 50%;
+    --warning-foreground: 28 80% 26%;
 
     --radius: 1rem;
   }
 
   .dark {
-    --background: 210 45% 9%;
-    --foreground: 205 30% 94%;
+    --background: 206 45% 8%;
+    --foreground: 45 15% 93%;
 
-    --card: 210 40% 13%;
-    --card-foreground: 205 30% 94%;
+    --card: 206 40% 12%;
+    --card-foreground: 45 15% 93%;
 
-    --popover: 210 40% 13%;
-    --popover-foreground: 205 30% 94%;
+    --popover: 206 40% 12%;
+    --popover-foreground: 45 15% 93%;
 
-    --primary: 200 80% 55%;
-    --primary-foreground: 210 45% 9%;
+    --primary: 203 70% 58%;
+    --primary-foreground: 206 45% 8%;
 
-    --secondary: 210 30% 20%;
-    --secondary-foreground: 205 30% 90%;
+    --secondary: 206 28% 19%;
+    --secondary-foreground: 45 15% 90%;
 
-    --muted: 210 30% 18%;
-    --muted-foreground: 205 16% 62%;
+    --accent: 174 55% 48%;
+    --accent-foreground: 174 85% 10%;
 
-    --accent: 182 55% 48%;
-    --accent-foreground: 190 90% 10%;
+    --muted: 206 28% 16%;
+    --muted-foreground: 206 14% 63%;
 
-    --destructive: 0 62% 50%;
+    --destructive: 0 72% 56%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 30% 22%;
-    --input: 210 30% 22%;
-    --ring: 200 80% 55%;
+    --border: 206 28% 20%;
+    --input: 206 28% 22%;
+    --ring: 203 70% 58%;
 
-    --ocean: 200 80% 55%;
-    --ocean-foreground: 210 45% 9%;
-    --turquoise: 182 55% 48%;
-    --turquoise-foreground: 190 90% 10%;
-    --sand: 40 20% 30%;
-    --sand-foreground: 40 30% 88%;
-    --success: 152 50% 45%;
-    --success-foreground: 0 0% 100%;
-    --warning: 34 88% 55%;
-    --warning-foreground: 30 40% 12%;
+    --ocean: 203 70% 58%;
+    --ocean-foreground: 206 45% 8%;
+    --turquoise: 174 55% 48%;
+    --turquoise-foreground: 174 85% 10%;
+    --sand: 38 22% 28%;
+    --sand-foreground: 38 30% 88%;
+    --success: 142 60% 47%;
+    --success-foreground: 150 60% 8%;
+    --warning: 38 90% 55%;
+    --warning-foreground: 32 90% 12%;
   }
 }
 
@@ -97,10 +100,9 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     -webkit-tap-highlight-color: transparent;
   }
-  /* Larger tap targets on touch devices */
   html {
     -webkit-text-size-adjust: 100%;
   }

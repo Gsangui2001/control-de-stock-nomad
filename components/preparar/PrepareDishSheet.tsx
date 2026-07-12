@@ -104,45 +104,45 @@ export function PrepareDishSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-5">
-          <div className="flex flex-col items-center gap-3 py-2">
-            <span className="text-sm text-muted-foreground">¿Cuántas porciones?</span>
-            <QuantityStepper value={servings} onChange={setServings} min={1} />
-            <div className="flex flex-wrap justify-center gap-2">
+        <div className="space-y-6">
+          <div className="flex flex-col items-center gap-4 py-2">
+            <span className="text-sm font-medium text-muted-foreground">¿Cuántas porciones?</span>
+            <div className="flex flex-wrap justify-center gap-2.5">
               {QUICK_SERVINGS.map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => setServings(n)}
                   className={cn(
-                    "h-11 w-14 rounded-xl border text-lg font-semibold transition-colors active:scale-[0.97]",
+                    "h-14 w-16 rounded-2xl border text-xl font-bold tabular-nums transition-all duration-150 active:scale-95",
                     servings === n
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-accent/10"
+                      ? "border-primary bg-primary text-primary-foreground shadow-soft scale-105"
+                      : "bg-background hover:border-primary/40"
                   )}
                 >
                   {n}
                 </button>
               ))}
             </div>
+            <QuantityStepper value={servings} onChange={setServings} min={1} />
             <span className="text-xs text-muted-foreground">
               Máximo con stock actual: <strong>{maxServings}</strong>
             </span>
           </div>
 
-          <div className="rounded-2xl border divide-y">
-            <div className="px-4 py-2 text-xs font-semibold text-muted-foreground bg-muted/40 rounded-t-2xl">
+          <div className="rounded-2xl border overflow-hidden divide-y">
+            <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/50">
               Se van a descontar
             </div>
             {deductions.map((d) => (
-              <div key={d.productId} className="flex items-center justify-between px-4 py-2.5">
-                <div className="flex items-center gap-2 min-w-0">
+              <div key={d.productId} className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2.5 min-w-0">
                   {d.short ? (
                     <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
                   ) : (
                     <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
                   )}
-                  <span className="truncate">{d.productName}</span>
+                  <span className="truncate font-medium">{d.productName}</span>
                 </div>
                 <div className="text-right shrink-0">
                   <div className={"font-semibold tabular-nums " + (d.short ? "text-destructive" : "")}>
@@ -175,12 +175,13 @@ export function PrepareDishSheet({
 
           <Button
             size="xl"
-            className="w-full"
+            className="w-full shadow-lifted"
             variant={blocked ? "outline" : "success"}
             disabled={submitting || blocked}
             onClick={confirm}
           >
-            {blocked ? "Sin stock suficiente" : `Confirmar preparación`}
+            {!blocked && <CheckCircle2 className="!h-6 !w-6" />}
+            {blocked ? "Sin stock suficiente" : "Confirmar preparación"}
           </Button>
         </div>
       </SheetContent>

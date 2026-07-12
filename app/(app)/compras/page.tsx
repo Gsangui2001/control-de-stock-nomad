@@ -16,6 +16,7 @@ import {
   EmptyState,
   DemoBanner,
 } from "@/components/app/common";
+import { Fab } from "@/components/app/Fab";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,17 +98,16 @@ export default function ComprasPage() {
   return (
     <PageContainer>
       <DemoBanner />
-      <PageTitle
-        title="Compras"
-        subtitle={`${purchases.length} compras cargadas`}
-        action={
-          manage ? (
-            <Button size="icon" aria-label="Nueva compra" onClick={() => { setOpen(true); if (rows.length === 0) addRow(); }}>
-              <Plus className="h-5 w-5" />
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageTitle title="Compras" subtitle={`${purchases.length} compras cargadas`} />
+      {manage && (
+        <Fab
+          label="Compra"
+          onClick={() => {
+            setOpen(true);
+            if (rows.length === 0) addRow();
+          }}
+        />
+      )}
 
       {!manage && (
         <p className="text-sm text-muted-foreground">Solo un admin puede cargar compras.</p>
