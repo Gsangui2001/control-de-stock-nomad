@@ -89,9 +89,18 @@ export default function PlatosPage() {
               <Card key={r.id} className="p-3">
                 <div className="flex items-center gap-3">
                   <Link href={`/platos/${r.id}`} className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="h-12 w-12 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">
-                      {r.icon ?? "🍽️"}
-                    </div>
+                    {r.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.imageUrl}
+                        alt={r.name}
+                        className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="h-12 w-12 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">
+                        {r.icon ?? "🍽️"}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold truncate">{r.name}</span>

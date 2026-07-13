@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Save } from "lucide-react";
+import { Plus, Trash2, Save, Camera, X, Loader2 } from "lucide-react";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { useProducts } from "@/lib/hooks";
 import type { Recipe, RecipeItem } from "@/lib/domain/types";
 import { recipeServingCost } from "@/lib/domain/stock";
 import { canManage } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
+import { compressImageToDataUrl } from "@/lib/imageUtils";
 import { PageContainer, PageTitle, ListSkeleton, EmptyState } from "@/components/app/common";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,22 @@ export default function RecipeEditorPage() {
   const { data: products } = useProducts();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
+  const [processingPhoto, setProcessingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const manage = canManage(user?.role);
+
+  async function onPhotoPicked(file: File) {
+    setProcessingPhoto(true);
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setRecipe((r) => (r ? { ...r, imageUrl: dataUrl } : r));
+      toast.success("Foto cargada", { description: "Guardá el plato para confirmarla" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo cargar la foto");
+    } finally {
+      setProcessingPhoto(false);
+    }
+  }
 
   useEffect(() => {
     repo.getRecipe(params.id).then((r) => {
@@ -125,6 +141,68 @@ export default function RecipeEditorPage() {
 
       <Card>
         <CardContent className="p-4 space-y-3">
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) onPhotoPicked(file);
+            }}
+          />
+          <div className="space-y-1.5">
+            <Label>Foto del plato</Label>
+            {recipe.imageUrl ? (
+              <div className="relative overflow-hidden rounded-2xl border">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={recipe.imageUrl}
+                  alt={recipe.name}
+                  className="h-44 w-full object-cover"
+                />
+                {!readOnly && (
+                  <div className="absolute bottom-2 right-2 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="shadow-soft"
+                      disabled={processingPhoto}
+                      onClick={() => photoInputRef.current?.click()}
+                    >
+                      <Camera className="h-4 w-4" /> Cambiar
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="h-9 w-9 shadow-soft"
+                      aria-label="Quitar foto"
+                      disabled={processingPhoto}
+                      onClick={() => set({ imageUrl: undefined })}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={readOnly || processingPhoto}
+                onClick={() => photoInputRef.current?.click()}
+                className="flex h-28 w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+              >
+                {processingPhoto ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : (
+                  <Camera className="h-6 w-6" />
+                )}
+                {processingPhoto ? "Procesando..." : "Agregar foto del plato"}
+              </button>
+            )}
+          </div>
+
           <div className="flex gap-3">
             <div className="space-y-1.5">
               <Label>Ícono</Label>

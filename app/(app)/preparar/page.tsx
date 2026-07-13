@@ -65,9 +65,18 @@ export default function PrepararPage() {
             return (
               <Card key={r.id} className="overflow-hidden animate-fade-up">
                 <div className="flex items-start gap-4 p-5 pb-3">
-                  <div className="h-20 w-20 shrink-0 rounded-2xl bg-gradient-to-br from-secondary to-secondary/60 flex items-center justify-center text-[44px] shadow-inner">
-                    {r.icon ?? "🍽️"}
-                  </div>
+                  {r.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={r.imageUrl}
+                      alt={r.name}
+                      className="h-20 w-20 shrink-0 rounded-2xl object-cover shadow-soft"
+                    />
+                  ) : (
+                    <div className="h-20 w-20 shrink-0 rounded-2xl bg-gradient-to-br from-secondary to-secondary/60 flex items-center justify-center text-[44px] shadow-inner">
+                      {r.icon ?? "🍽️"}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1 pt-0.5">
                     <div className="font-bold text-lg leading-tight">{r.name}</div>
                     <div className="text-sm text-muted-foreground truncate mt-1">

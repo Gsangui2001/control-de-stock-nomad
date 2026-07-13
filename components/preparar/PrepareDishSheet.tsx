@@ -89,8 +89,17 @@ export function PrepareDishSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="bottom">
         <SheetHeader>
-          <SheetTitle className="flex items-center gap-2 text-xl">
-            <span className="text-2xl">{recipe.icon ?? "🍽️"}</span>
+          <SheetTitle className="flex items-center gap-2.5 text-xl">
+            {recipe.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={recipe.imageUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-xl object-cover"
+              />
+            ) : (
+              <span className="text-2xl">{recipe.icon ?? "🍽️"}</span>
+            )}
             {recipe.name}
           </SheetTitle>
           <SheetDescription>
