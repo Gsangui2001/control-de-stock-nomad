@@ -123,6 +123,31 @@ la pantalla de login pasa a ser **email + contraseña** (Entrar / Crear cuenta).
 
 ---
 
+## 🧾 Escanear ticket de compra (IA)
+
+En **Compras → Nueva compra** hay un botón **"Escanear ticket"**: sacás una foto
+de la factura y la app completa automáticamente los ítems (producto, cantidad,
+precio) para que solo los revises y confirmes — al guardar, se descuenta/suma
+al stock como cualquier compra manual.
+
+Requiere una API key de Anthropic (usa `claude-opus-4-8` con visión):
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Conseguila en [console.anthropic.com](https://console.anthropic.com) y cargala
+en `.env.local` (dev) o en *Vercel → Settings → Environment Variables* (prod).
+**Sin esta variable, el botón muestra un error pero el resto de la app sigue
+funcionando normal** — es opcional, no se necesita para el modo demo ni para
+cargar compras a mano.
+
+Los productos que la IA no puede identificar con confianza contra tu catálogo
+quedan marcados con un aviso ⚠️ en la fila — elegís vos el producto correcto
+antes de guardar. Nunca crea productos nuevos ni descuenta stock por sí sola.
+
+---
+
 ## 📲 Instalar como app (PWA)
 
 La PWA se genera en `npm run build` / `npm run start` (está desactivada en `dev`).

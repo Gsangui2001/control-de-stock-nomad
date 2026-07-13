@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { toast } from "sonner";
-import { Plus, Trash2, ShoppingCart, Receipt } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, Receipt, Camera, Loader2, TriangleAlert } from "lucide-react";
 import { useProducts, usePurchases } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { canManage } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
+import { bestProductMatch } from "@/lib/domain/matchProduct";
 import type { PurchaseItemInput } from "@/lib/domain/types";
 import {
   PageContainer,
@@ -40,6 +41,36 @@ interface Row {
   productId: string;
   quantity: number;
   totalPrice: number;
+  /** false = producto asignado automáticamente por IA sin confianza; pide revisión */
+  matched?: boolean;
+}
+
+interface ScannedItem {
+  description: string;
+  quantity: number;
+  unit: string | null;
+  totalPrice: number;
+}
+
+interface ScanReceiptResult {
+  supplier: string | null;
+  date: string | null;
+  items: ScannedItem[];
+  error?: string;
+}
+
+function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1] ?? "";
+      const mediaType = result.match(/^data:(.*?);base64/)?.[1] ?? file.type;
+      resolve({ base64, mediaType });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function ComprasPage() {
@@ -53,6 +84,8 @@ export default function ComprasPage() {
   const [supplier, setSupplier] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "";
   const productUnit = (id: string) => products.find((p) => p.id === id)?.unit ?? "";
@@ -69,6 +102,59 @@ export default function ComprasPage() {
   }
   function removeRow(i: number) {
     setRows(rows.filter((_, idx) => idx !== i));
+  }
+
+  async function scanReceipt(file: File) {
+    if (!products.length) {
+      toast.error("Primero creá productos en Stock");
+      return;
+    }
+    setScanning(true);
+    try {
+      const { base64, mediaType } = await fileToBase64(file);
+      const res = await fetch("/api/scan-receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64, mediaType }),
+      });
+      const data: ScanReceiptResult = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "No se pudo leer el ticket");
+        return;
+      }
+      if (data.items.length === 0) {
+        toast.error("No se detectaron productos en la foto");
+        return;
+      }
+
+      let matchedCount = 0;
+      const newRows: Row[] = data.items.map((it) => {
+        const { product, score } = bestProductMatch(it.description, products);
+        const matched = !!product && score >= 0.25;
+        if (matched) matchedCount++;
+        return {
+          productId: product?.id ?? products[0].id,
+          quantity: it.quantity > 0 ? it.quantity : 1,
+          totalPrice: it.totalPrice > 0 ? it.totalPrice : 0,
+          matched,
+        };
+      });
+      setRows(newRows);
+      if (data.supplier && !supplier) setSupplier(data.supplier);
+      if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) setDate(data.date);
+
+      toast.success(`${data.items.length} ítems leídos del ticket`, {
+        description:
+          matchedCount === data.items.length
+            ? "Revisá cantidades y precios antes de guardar"
+            : `${data.items.length - matchedCount} producto(s) sin identificar — elegí el correcto`,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("No se pudo leer el ticket. Probá con otra foto.");
+    } finally {
+      setScanning(false);
+    }
   }
 
   const total = rows.reduce((s, r) => s + (Number(r.totalPrice) || 0), 0);
@@ -155,6 +241,38 @@ export default function ComprasPage() {
             <SheetTitle>Nueva compra</SheetTitle>
           </SheetHeader>
           <div className="space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) scanReceipt(file);
+              }}
+            />
+            <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-4 text-center">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full bg-background"
+                disabled={scanning}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {scanning ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Camera className="h-5 w-5" />
+                )}
+                {scanning ? "Leyendo ticket..." : "Escanear ticket"}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Sacá una foto de la factura y completamos los ítems automáticamente
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="date">Fecha</Label>
@@ -176,9 +294,21 @@ export default function ComprasPage() {
               {rows.map((r, i) => {
                 const unitPrice = r.quantity > 0 ? (Number(r.totalPrice) || 0) / r.quantity : 0;
                 return (
-                  <Card key={i} className="p-2.5">
+                  <Card
+                    key={i}
+                    className={r.matched === false ? "p-2.5 border-warning/50 bg-warning/5" : "p-2.5"}
+                  >
+                    {r.matched === false && (
+                      <div className="flex items-center gap-1.5 text-xs text-warning-foreground mb-2">
+                        <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+                        No pudimos identificar este producto — elegí el correcto
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mb-2">
-                      <Select value={r.productId} onValueChange={(v) => updateRow(i, { productId: v })}>
+                      <Select
+                        value={r.productId}
+                        onValueChange={(v) => updateRow(i, { productId: v, matched: true })}
+                      >
                         <SelectTrigger className="flex-1"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {products.map((p) => (
