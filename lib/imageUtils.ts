@@ -1,6 +1,6 @@
-// Client-side image compression for recipe photos.
-// The result is a small JPEG data-URL stored directly in `recipe.imageUrl`
-// (localStorage in demo mode, the `recipes.image_url` text column in
+// Client-side image compression for receipt/invoice photos.
+// The result is a small JPEG data-URL stored directly in `expense.receiptImageUrl`
+// (localStorage in demo mode, the `boat_expenses.receipt_image_url` text column in
 // Supabase) — no storage bucket to configure, works identically in both modes.
 
 const MAX_DIMENSION = 640;

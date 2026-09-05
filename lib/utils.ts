@@ -5,18 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatMoney(amount: number, currency = "USD"): string {
+/** Siempre USD — no hay columna de moneda, ni acá ni en la base. */
+export function formatMoney(amount: number): string {
   const value = Number.isFinite(amount) ? amount : 0;
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
-    currency,
+    currency: "USD",
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-export function formatQty(qty: number): string {
-  const rounded = Math.round((qty + Number.EPSILON) * 100) / 100;
-  return rounded.toLocaleString("es-AR", { maximumFractionDigits: 2 });
 }
 
 export function uid(prefix = ""): string {

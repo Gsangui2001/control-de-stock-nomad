@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Anchor, Shield, ChefHat, Eye, Loader2 } from "lucide-react";
+import { Anchor, Shield, ClipboardList, Loader2 } from "lucide-react";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { ROLE_LABEL, ROLE_DESCRIPTION } from "@/lib/permissions";
 import type { Role } from "@/lib/domain/types";
@@ -14,8 +14,7 @@ import { uid } from "@/lib/utils";
 
 const ROLE_ICONS: Record<Role, typeof Shield> = {
   admin: Shield,
-  cocinero: ChefHat,
-  lectura: Eye,
+  gestor: ClipboardList,
 };
 
 export default function LoginPage() {
@@ -39,9 +38,9 @@ export default function LoginPage() {
           <div className="h-24 w-24 rounded-3xl bg-white/20 backdrop-blur-md flex items-center justify-center mb-5 shadow-2xl ring-1 ring-white/30">
             <Anchor className="h-12 w-12" />
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Nomad Stock</h1>
+          <h1 className="text-4xl font-bold tracking-tight">NOMADE</h1>
           <p className="text-primary-foreground/90 mt-2 font-medium">
-            Control de stock · Nomad Sailors
+            Gastos de flota · Nomad Sailors
           </p>
         </div>
 

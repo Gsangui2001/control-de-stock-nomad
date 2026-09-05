@@ -1,40 +1,10 @@
-import type {
-  Product,
-  Recipe,
-  Purchase,
-  PurchaseItemInput,
-  StockMovement,
-  PreparedDish,
-  Charter,
-  Settings,
-  Alert,
-  PrepareDishInput,
-  PrepareDishResult,
-  MovementType,
-  User,
-  PlannedMeal,
-} from "../domain/types";
+import type { Boat, Expense, ExpenseCategoryKey, ExpenseInput, User } from "../domain/types";
 
-export interface MealPlanFilter {
-  charterId?: string;
+export interface ExpenseFilter {
+  boatId?: string;
+  category?: ExpenseCategoryKey;
   from?: string; // "YYYY-MM-DD"
   to?: string;
-}
-
-export interface MovementFilter {
-  productId?: string;
-  charterId?: string;
-  type?: MovementType;
-  from?: string;
-  to?: string;
-}
-
-export interface AdjustStockInput {
-  productId: string;
-  /** signed delta applied to current quantity */
-  delta: number;
-  type: Extract<MovementType, "ajuste" | "merma" | "devolucion" | "correccion" | "transferencia">;
-  notes?: string;
 }
 
 /**
@@ -44,68 +14,19 @@ export interface AdjustStockInput {
 export interface Repo {
   readonly mode: "demo" | "supabase";
 
-  // Products
-  listProducts(): Promise<Product[]>;
-  getProduct(id: string): Promise<Product | undefined>;
-  upsertProduct(product: Product): Promise<Product>;
-  deleteProduct(id: string): Promise<void>;
-  adjustStock(input: AdjustStockInput): Promise<void>;
+  // Boats — de solo lectura: el catálogo real vive en el CRM.
+  listBoats(): Promise<Boat[]>;
 
-  // Purchases
-  listPurchases(): Promise<Purchase[]>;
-  registerPurchase(input: {
-    date: string;
-    supplier?: string;
-    notes?: string;
-    items: PurchaseItemInput[];
-  }): Promise<Purchase>;
-
-  // Recipes
-  listRecipes(): Promise<Recipe[]>;
-  getRecipe(id: string): Promise<Recipe | undefined>;
-  upsertRecipe(recipe: Recipe): Promise<Recipe>;
-  duplicateRecipe(id: string): Promise<Recipe>;
-  deleteRecipe(id: string): Promise<void>;
-
-  // Prepare dishes
-  prepareDish(input: PrepareDishInput): Promise<PrepareDishResult>;
-  listPreparedDishes(): Promise<PreparedDish[]>;
-
-  // Beverages (products in category "bebidas" — thin helpers)
-  consumeBeverage(productId: string, qty: number, charterId?: string): Promise<void>;
-  restockBeverage(productId: string, qty: number): Promise<void>;
-  setBeverageStock(productId: string, qty: number): Promise<void>;
-
-  // Movements
-  listMovements(filter?: MovementFilter): Promise<StockMovement[]>;
-
-  // Meal planning
-  listMealPlans(filter?: MealPlanFilter): Promise<PlannedMeal[]>;
-  upsertMealPlan(plan: PlannedMeal): Promise<PlannedMeal>;
-  deleteMealPlan(id: string): Promise<void>;
-  /** Marca una comida como preparada: descuenta stock (platos + bebidas). */
-  markMealPrepared(planId: string): Promise<PrepareDishResult[]>;
-  /** Marca una comida ya preparada como servida. No toca stock. */
-  markMealServed(planId: string): Promise<void>;
-  /** Cancela una comida planificada (nunca se descontó stock). */
-  cancelMealPlan(planId: string): Promise<void>;
-
-  // Charters
-  listCharters(): Promise<Charter[]>;
-  upsertCharter(charter: Charter): Promise<Charter>;
-  deleteCharter(id: string): Promise<void>;
-  getActiveCharter(): Promise<Charter | undefined>;
-  setActiveCharter(id: string | undefined): Promise<void>;
-
-  // Settings
-  getSettings(): Promise<Settings>;
-  updateSettings(settings: Partial<Settings>): Promise<Settings>;
-
-  // Alerts (derived)
-  computeAlerts(): Promise<Alert[]>;
+  // Expenses
+  listExpenses(filter?: ExpenseFilter): Promise<Expense[]>;
+  createExpense(input: ExpenseInput): Promise<Expense>;
+  updateExpense(id: string, input: Partial<ExpenseInput>): Promise<Expense>;
+  /** Solo un admin borra — un gestor corrige editando. */
+  deleteExpense(id: string): Promise<void>;
 
   // Auth / current user
   getCurrentUser(): Promise<User | null>;
+  /** Fija el usuario actual (solo modo demo). */
   setCurrentUser(user: User | null): Promise<void>;
   /** Login con email/contraseña (solo modo Supabase). */
   signIn(email: string, password: string): Promise<{ error?: string }>;

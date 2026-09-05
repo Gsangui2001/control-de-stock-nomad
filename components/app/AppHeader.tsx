@@ -5,7 +5,6 @@ import { Anchor, Moon, Sun, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
-import { CharterSwitcher } from "./CharterSwitcher";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/permissions";
 
@@ -31,7 +30,7 @@ export function AppHeader() {
           </div>
           {/* En pantallas chicas manda el selector de charter; la marca vive en el ícono */}
           <div className="hidden sm:block min-w-0 leading-tight">
-            <div className="text-sm font-bold whitespace-nowrap">Nomad Stock</div>
+            <div className="text-sm font-bold whitespace-nowrap">NOMADE</div>
             {user && (
               <div className="text-[11px] text-muted-foreground font-medium truncate">
                 {user.name} · {ROLE_LABEL[user.role]}
@@ -41,7 +40,6 @@ export function AppHeader() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <CharterSwitcher />
           <Button
             variant="ghost"
             size="icon"

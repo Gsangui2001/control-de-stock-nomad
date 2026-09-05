@@ -1,7 +1,7 @@
 {
-  "name": "Nomad Stock",
-  "short_name": "Nomad Stock",
-  "description": "Control de stock de comida y bebida para charters de Nomad Sailors.",
+  "name": "NOMADE",
+  "short_name": "NOMADE",
+  "description": "Administrador de gastos operativos de la flota de Nomad Sailors.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
