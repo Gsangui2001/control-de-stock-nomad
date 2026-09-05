@@ -1,23 +1,25 @@
-# 🧭 Nomad Stock
+# ⚓ NOMADE
 
-Control de stock de **comida y bebida** para los charters de **Nomad Sailors**.
-Pensada para usarse desde el **celular o tablet dentro del barco**: simple, rápida,
-visual y con botones grandes. Es una **PWA** (se instala en la pantalla de inicio,
-sin App Store ni Google Play).
+Administrador de **gastos operativos de la flota** de Nomad Sailors: mantenimiento y reparaciones,
+combustible, amarre/marina/permisos, y otros gastos operativos (tripulación, limpieza, insumos), con
+foto de factura adjunta. Pensada para usarse desde el **celular** — simple, rápida, botones grandes.
+Es una **PWA** (se instala en la pantalla de inicio, sin App Store ni Google Play).
 
-> KPI: que un cocinero registre lo que preparó **en segundos**, sin renegar.
+> KPI: que Boris cargue un gasto **en segundos**, con foto de la factura, sin renegar.
+
+Este repo es independiente del CRM de Nomad Sailors (`github.com/Gsangui2001/Nomad`), pero **usa la
+misma base de Supabase** — ver la sección de Supabase más abajo y `docs/111-nomade-gastos-de-flota.md`
+en ese otro repo.
 
 ---
 
 ## ✨ Qué resuelve
 
-- Saber **cuánto stock hay** y **cuánto vale**.
-- Saber **qué ingredientes lleva cada plato** y su **costo real por porción**.
-- **Descontar stock automáticamente** cuando el cocinero registra platos preparados.
-- **Registrar consumo de bebidas** con un toque.
-- **Cargar compras** y recalcular el **costo promedio ponderado**.
-- **Alertas** de stock bajo/crítico, vencimientos y recetas sin stock.
-- **Reportes** por período y por charter, con **export CSV**.
+- Cargar un gasto del barco (categoría, monto en USD, fecha, proveedor, descripción) en segundos.
+- Adjuntar la foto de la factura y, con IA, precargar monto/fecha/proveedor automáticamente — vos
+  confirmás antes de guardar.
+- Ver cuánto se gastó este mes y por categoría, sin abrir una planilla.
+- Exportar el detalle a CSV para el período que necesites.
 
 ---
 
@@ -27,9 +29,8 @@ sin App Store ni Google Play).
 |---|---|
 | Framework | **Next.js 14 (App Router)** + **TypeScript** |
 | UI | **Tailwind CSS** + **shadcn/ui** (Radix) + **Lucide** |
-| Formularios | **React Hook Form** + **Zod** |
-| Gráficos | **Recharts** · Fechas: **date-fns** · Tablas: **TanStack Table** |
-| Datos / Auth | **Supabase** (Postgres + Auth) — **opcional** |
+| Gráficos | **Recharts** · Fechas: **date-fns** |
+| Datos / Auth | **Supabase** (Postgres + Auth) — el mismo proyecto que el CRM |
 | PWA | `@ducanh2912/next-pwa` (manifest + service worker) |
 | Tema | `next-themes` (claro/oscuro) · Toasts: `sonner` |
 
@@ -43,10 +44,9 @@ npm run dev
 # abrí http://localhost:3000
 ```
 
-**No necesitás Supabase para probar.** Si faltan las variables de entorno, la app
-arranca en **Modo demo** con datos de ejemplo guardados en el `localStorage` del
-navegador (verás un cartel “Modo demo”). Al entrar elegís un rol
-(Admin / Cocinero / Solo lectura).
+**No necesitás Supabase para probar.** Si faltan las variables de entorno, la app arranca en
+**Modo demo** con datos de ejemplo guardados en el `localStorage` del navegador (verás un cartel
+"Modo demo"). Al entrar elegís un rol (Admin / Gestor).
 
 Para restaurar los datos de ejemplo: **Configuración → Restaurar datos demo**.
 
@@ -68,83 +68,61 @@ Es un proyecto **Next.js estándar**: Vercel lo detecta solo, sin configuración
 
 1. Entrá a [vercel.com](https://vercel.com) → **Add New… → Project** → importá
    `Gsangui2001/control-de-stock-nomad`.
-2. **Branch**: elegí `claude/nomad-stock-control-b6kq6h` (o `main` si ya mergeaste).
-3. **Framework Preset**: *Next.js* (autodetectado). **Build**: `next build` ·
-   **Output**: automático. No cambies nada.
-4. **Environment Variables**: dejalas **vacías** para probar en **modo demo**. Si querés
-   datos reales, agregá `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   (ver sección de Supabase).
-5. **Deploy**. Te queda una URL tipo `https://nomad-stock-xxx.vercel.app`.
-6. Abrí esa URL en el celular → **instalá la PWA**: Android (Chrome ⋮ → “Agregar a la
-   pantalla principal”) · iPhone (Safari → Compartir → “Agregar a inicio”).
-
-> Cada push a la branch conectada re-despliega solo. El service worker de la PWA se
-> genera en el build de producción (está desactivado en `dev`).
+2. **Framework Preset**: *Next.js* (autodetectado). No cambies nada.
+3. **Environment Variables**: dejalas **vacías** para probar en **modo demo**. Para datos reales,
+   ver la sección de Supabase más abajo.
+4. **Deploy**.
+5. Abrí esa URL en el celular → **instalá la PWA**: Android (Chrome ⋮ → "Agregar a la pantalla
+   principal") · iPhone (Safari → Compartir → "Agregar a inicio").
 
 ---
 
-## 🔌 Conectar Supabase (datos reales, multi-dispositivo)
+## 🔌 Supabase — la misma base que el CRM, no una propia
 
-Al detectar las variables de entorno, la app deja el modo demo y usa Supabase:
-la pantalla de login pasa a ser **email + contraseña** (Entrar / Crear cuenta).
+Ver **`supabase/README.md`** para el detalle completo. En resumen: esta app no crea su propio
+proyecto de Supabase — usa el mismo que el CRM de Nomad Sailors, en tablas nuevas y aisladas
+(`boat_expense_users`, `boat_expenses`) que no tocan nada del CRM. El esquema real es una migración
+del repo del CRM, no de este repo.
 
-1. **Creá un proyecto** en [supabase.com](https://supabase.com).
-2. **SQL Editor → New query** → pegá y ejecutá **`supabase/migrations/0001_init.sql`**
-   (tablas, RLS por rol, RPCs `register_purchase`/`prepare_dish`, trigger
-   `handle_new_user`, y unos datos de ejemplo). Después ejecutá también
-   **`supabase/migrations/0002_meal_planning.sql`** (planificación).
-   > Para arrancar **con la base vacía** (sin datos de ejemplo), borrá el bloque
-   > final `insert into products …` de `0001_init.sql` antes de correrlo.
-3. **API keys:** *Project Settings → API*. Copiá `.env.example` a `.env.local`:
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
-   ```
-   En Vercel, cargá esas dos variables en *Project → Settings → Environment Variables*
-   y volvé a desplegar.
-4. **Auth (arranque simple):** *Authentication → Providers → Email* → dejá **Email**
-   habilitado. Para probar sin casilla de correo, desactivá **“Confirm email”**
-   (*Authentication → Sign In / Providers*), así al crear la cuenta entrás directo.
-5. **Reiniciá** `npm run dev` (o redeploy en Vercel). Entrá a `/login`, **Crear cuenta**
-   con tu email y contraseña.
-6. **Hacete admin:** el trigger crea tu fila en `profiles` con rol `lectura`. En
-   *SQL Editor* corré (una vez, con tu email):
+1. Pedí `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` — son las mismas que ya usa el
+   CRM — y cargalas en `.env.local` (dev) o en *Vercel → Settings → Environment Variables* (prod).
+2. Confirmá con quien administra ese proyecto que la migración
+   `20260905130000_gastos_de_flota_nomade.sql` ya está aplicada.
+3. **Primer usuario:** entrá a `/login`, **Crear cuenta** con tu email y contraseña. Si el proyecto
+   tiene "Confirm email" activado, confirmá el correo antes de entrar. Al primer login te crea tu
+   fila en `boat_expense_users` con rol `gestor` por default.
+4. **Hacete admin:** en el *SQL Editor* del proyecto de Supabase corré (una vez, con tu email):
    ```sql
-   update profiles set role = 'admin' where email = 'vos@ejemplo.com';
+   update boat_expense_users set role = 'admin'
+   where id = (select id from auth.users where email = 'vos@ejemplo.com');
    ```
-   Volvé a entrar y ya tenés todos los permisos. A los demás usuarios les asignás
-   `cocinero` o `lectura` del mismo modo.
+   Volvé a entrar y ya tenés todos los permisos. A Boris se le asigna `gestor` del mismo modo (que
+   ya es el default).
 
-> La app funciona igual con o sin Supabase: la lógica de negocio vive en
-> `lib/domain/` (`stock.ts`, `planning.ts`) y la comparten el repo demo y el de Supabase.
-> **Nota:** el repo de Supabase está implementado y tipado, pero probá el alta de
-> usuario y un par de cargas después de conectar tu proyecto (el modo demo es el
-> que viene verificado extremo a extremo).
+> La app funciona igual con o sin Supabase: la lógica de negocio vive en `lib/domain/` y la
+> comparten el modo demo y el modo Supabase.
 
 ---
 
-## 🧾 Escanear ticket de compra (IA)
+## 🧾 Escanear factura (IA)
 
-En **Compras → Nueva compra** hay un botón **"Escanear ticket"**: sacás una foto
-de la factura y la app completa automáticamente los ítems (producto, cantidad,
-precio) para que solo los revises y confirmes — al guardar, se descuenta/suma
-al stock como cualquier compra manual.
+En **Gastos → Nuevo gasto** hay un botón **"Adjuntar foto de factura"**: sacás una foto y la app
+completa automáticamente proveedor, fecha, monto y una categoría sugerida — revisás y confirmás
+antes de guardar. La foto queda adjunta al gasto haya podido leerla o no.
 
-Requiere una API key de Anthropic (usa `claude-opus-4-8` con visión):
+Requiere una API key de Anthropic (usa un modelo Claude con visión):
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Conseguila en [console.anthropic.com](https://console.anthropic.com) y cargala
-en `.env.local` (dev) o en *Vercel → Settings → Environment Variables* (prod).
-**Sin esta variable, el botón muestra un error pero el resto de la app sigue
-funcionando normal** — es opcional, no se necesita para el modo demo ni para
-cargar compras a mano.
+Conseguila en [console.anthropic.com](https://console.anthropic.com) y cargala en `.env.local`
+(dev) o en *Vercel → Settings → Environment Variables* (prod). **Sin esta variable, el botón
+muestra un error pero la foto se adjunta igual** — es opcional, no se necesita para cargar un gasto
+a mano.
 
-Los productos que la IA no puede identificar con confianza contra tu catálogo
-quedan marcados con un aviso ⚠️ en la fila — elegís vos el producto correcto
-antes de guardar. Nunca crea productos nuevos ni descuenta stock por sí sola.
+La categoría sugerida **nunca se guarda sola**: queda preseleccionada con un aviso, y quien carga el
+gasto la confirma o la cambia antes de guardar.
 
 ---
 
@@ -152,67 +130,24 @@ antes de guardar. Nunca crea productos nuevos ni descuenta stock por sí sola.
 
 La PWA se genera en `npm run build` / `npm run start` (está desactivada en `dev`).
 
-- **Android (Chrome):** menú ⋮ → **“Agregar a la pantalla principal”**.
-- **iPhone (Safari):** botón **Compartir** → **“Agregar a inicio”**.
+- **Android (Chrome):** menú ⋮ → **"Agregar a la pantalla principal"**.
+- **iPhone (Safari):** botón **Compartir** → **"Agregar a inicio"**.
 
-Queda como una app a pantalla completa (`display: standalone`), con ícono de ancla y
-color marítimo. Íconos y manifest están en `public/icons/` y `public/manifest.json`.
+Queda como una app a pantalla completa (`display: standalone`), con ícono de ancla y color marítimo.
+Íconos y manifest están en `public/icons/` y `public/manifest.json`.
 
 ---
 
 ## 🗺️ Pantallas
 
-1. **Dashboard** — valor del stock, consumo del día, críticos, platos de hoy, última
-   compra, alertas, charter activo y **acciones rápidas**.
-2. **Preparar platos** *(la más importante)* — cards grandes; elegís plato → porciones
-   → ves qué se descuenta → **Confirmar**. Descuenta stock y registra el movimiento.
-3. **Bebidas** — cards con **+ / −**, consumo múltiple y carga de stock de heladera.
-4. **Stock** — buscar, filtrar por categoría, ver bajos, ajustar, historial.
-5. **Compras** — carga multi-ítem; recalcula **costo promedio ponderado**.
-6. **Platos / Recetas** — editor con ingredientes por porción y costo automático.
-7. **Planificación** — calendario Día/Semana/Mes de comidas por charter + lista de compras.
-8. **Charters** — asociar consumos; marcar charter activo.
-9. **Reportes** — stock por categoría, consumo 7 días, por charter, alertas + **CSV**.
-10. **Configuración** — moneda, permitir stock negativo, aviso de vencimiento, tema.
+1. **Inicio** — gasto del mes, desglose por categoría, últimos gastos cargados.
+2. **Gastos** *(la más importante)* — cargar un gasto (barco, categoría, monto, fecha, proveedor,
+   descripción, foto de factura) y ver el listado completo.
+3. **Reportes** — total y desglose por categoría en un rango de fechas, exportable a CSV.
+4. **Barcos** *(solo admin)* — catálogo de solo lectura: se carga y edita desde el CRM.
+5. **Configuración** *(solo admin)* — sesión activa, restaurar datos demo.
 
-Navegación mobile: barra inferior (Inicio · Preparar · Bebidas · Stock · Más).
-El **home del cocinero** es una vista simplificada (2 acciones grandes + “para reponer”);
-el admin ve el dashboard completo.
-
----
-
-## 🧮 Lógica clave
-
-- **Costo promedio ponderado** (al comprar):
-  `nuevo = (qActual·costoActual + qCompra·costoCompra) / (qActual + qCompra)`
-- **Estado de stock:** `crítico` si `cantidad ≤ crítico`; `bajo` si `≤ mínimo`; si no `normal`.
-- **Porciones posibles:** `min(stock_i / cantidadPorPorción_i)`.
-- **Preparar plato:** por cada ingrediente descuenta `cantidadPorPorción × porciones`,
-  crea un movimiento y calcula el costo total. Si falta stock y **no** está activado
-  “permitir stock negativo”, **bloquea** con una alerta clara.
-
-Ver `lib/domain/stock.ts` (funciones puras y testeables).
-
----
-
-## 📅 Planificación de comidas (calendario)
-
-En **Planificación** se arma el plan de comidas del charter por **Día / Semana / Mes**.
-Cada día tiene 5 ranuras (**desayuno, almuerzo, merienda, cena, snack**) y cada ranura
-puede tener **varios platos + bebidas**, con sus porciones (autocompletadas según los
-**comensales del charter**, editables).
-
-- **Planificar NO descuenta stock.** El descuento ocurre recién al tocar **“Marcar
-  preparado”** en la ranura, que reutiliza la misma lógica de preparar plato /
-  consumir bebida (así reportes, alertas y “platos de hoy” siguen andando).
-- **Lista de compras sugerida** (botón 🛒): calcula los ingredientes necesarios de las
-  comidas **planificadas** (no preparadas), los compara con el stock, detecta faltantes y
-  arma la lista con cantidad a comprar y costo estimado (admin). Exportable a **CSV**.
-- Roles: **todos** ven el calendario y pueden marcar preparado; **crear/editar** el plan
-  es de admin.
-
-Lógica pura en `lib/domain/planning.ts` (`computePlanNeeds`, `computeShortages`,
-`buildShoppingList`).
+Navegación mobile: barra inferior (Inicio · Gastos · Reportes · Más).
 
 ---
 
@@ -220,38 +155,13 @@ Lógica pura en `lib/domain/planning.ts` (`computePlanNeeds`, `computeShortages`
 
 | Tabla | Para qué |
 |---|---|
-| `profiles` | Usuarios y su **rol** (admin / cocinero / lectura) |
-| `products` | Insumos y bebidas: cantidad, costo promedio, mínimo/crítico, ubicación, vencimiento |
-| `recipes` + `recipe_items` | Platos estandarizados y sus ingredientes por porción |
-| `purchases` + `purchase_items` | Compras y su detalle (precio total/unitario) |
-| `prepared_dishes` | Platos preparados (receta, porciones, charter, costo) |
-| `meal_plans` + `meal_plan_items` | **Planificación**: comidas por día/ranura/charter y sus platos+bebidas |
-| `stock_movements` | **Auditoría**: todo cambio de stock con tipo, usuario y fecha |
-| `charters` | Charters para asociar consumos (código, fechas, personas, estado) |
-| `settings` | Moneda, permitir stock negativo, días de aviso de vencimiento |
+| `boat_expense_users` | Usuarios propios de NOMADE y su **rol** (admin / gestor) — no es `profiles` del CRM |
+| `boat_expenses` | Cada gasto: barco, categoría, monto USD, fecha, proveedor, descripción, foto de factura |
+| `boats` *(del CRM, solo lectura)* | El catálogo real de barcos — NOMADE solo lee el nombre |
 
-> Migraciones: `0001_init.sql` (base) y `0002_meal_planning.sql` (planificación, aditiva).
+Categorías fijas: `mantenimiento`, `combustible`, `amarre_marina_permisos`, `otros_operativos`.
 
-Tipos de movimiento: `compra`, `preparacion`, `consumo_bebida`, `ajuste`, `merma`,
-`devolucion`, `correccion`, `transferencia`.
-
----
-
-## 🧭 Flujos rápidos
-
-**Crear un producto** → Stock → botón **+** → nombre, categoría, unidad, cantidad,
-costo, mínimo/crítico, ubicación → *Crear producto*.
-
-**Crear una receta** → Platos → **+** → nombre e ícono → *Agregar* ingredientes
-(producto + cantidad por porción) → el costo/porción se calcula solo → *Guardar*.
-
-**Registrar platos preparados** → Preparar → tocar el plato → elegir porciones →
-*Confirmar preparación*. (Descuenta ingredientes y suma al costo consumido.)
-
-**Cargar una compra** → Compras → **+** → fecha/proveedor → *Ítem* por cada producto
-(cantidad + precio total) → *Cargar compra*. (Suma stock y recalcula costos.)
-
-**Consumo de bebida** → Bebidas → **−** para descontar de a uno, o *Consumo múltiple*.
+> El esquema real vive en el repo del CRM — ver `supabase/README.md`.
 
 ---
 
@@ -259,26 +169,26 @@ costo, mínimo/crítico, ubicación → *Crear producto*.
 
 | Rol | Puede |
 |---|---|
-| **Admin** | Todo: compras, insumos, recetas, costos, reportes, ajustes, usuarios |
-| **Cocinero / Operario** | Preparar platos, registrar bebidas, ver stock y alertas |
-| **Solo lectura** | Ver stock y reportes; no modifica datos |
+| **Admin** | Todo: cargar/editar/borrar gastos, ver reportes, ver el catálogo de barcos |
+| **Gestor** | Cargar y editar gastos de cualquier barco. No borra ni administra barcos |
 
 En **modo demo**, cada uno elige su rol al entrar. Con **Supabase**, el rol sale de
-`profiles.role`.
+`boat_expense_users.role`.
 
 ---
 
 ## 📁 Estructura
 
 ```
-app/(app)/…        Pantallas (dashboard, preparar, bebidas, stock, compras, platos, charters, reportes, config)
+app/(app)/…        Pantallas (dashboard, gastos, reportes, barcos, configuración)
 app/login          Selector de rol (demo) / login
+app/api/scan-invoice  Escaneo de factura por IA
 components/ui       Primitivos shadcn/ui
-components/app      Shell (bottom nav, header), cards, stepper, alertas
-lib/domain          Tipos, unidades, lógica pura (stock.ts), datos demo (seed.ts)
+components/app      Shell (bottom nav, header), cards
+lib/domain          Tipos, categorías, lógica pura (expenses.ts), datos demo (seed.ts)
 lib/repo            Repo (contrato), demoRepo (localStorage), supabaseRepo
 lib/providers       RepoProvider (contexto + refetch)
-supabase/migrations Esquema SQL (tablas, RLS, RPCs)
+supabase/README.md  Apunta al esquema real, que vive en el repo del CRM
 public/icons        Íconos PWA
 ```
 

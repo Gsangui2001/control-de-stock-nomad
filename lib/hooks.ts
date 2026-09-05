@@ -2,17 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRepoContext } from "./providers/RepoProvider";
-import type {
-  Product,
-  Recipe,
-  StockMovement,
-  Charter,
-  Alert,
-  PreparedDish,
-  Purchase,
-  PlannedMeal,
-} from "./domain/types";
-import type { MovementFilter, MealPlanFilter } from "./repo/Repo";
+import type { Boat, Expense } from "./domain/types";
+import type { ExpenseFilter } from "./repo/Repo";
 
 /** Generic async loader that refetches when the global revision changes. */
 export function useAsync<T>(
@@ -46,44 +37,13 @@ export function useAsync<T>(
   return { data, loading, reload };
 }
 
-export function useProducts() {
+export function useBoats() {
   const { repo } = useRepoContext();
-  return useAsync<Product[]>(() => repo.listProducts(), [], []);
+  return useAsync<Boat[]>(() => repo.listBoats(), [], []);
 }
 
-export function useRecipes() {
-  const { repo } = useRepoContext();
-  return useAsync<Recipe[]>(() => repo.listRecipes(), [], []);
-}
-
-export function useMovements(filter?: MovementFilter) {
+export function useExpenses(filter?: ExpenseFilter) {
   const { repo } = useRepoContext();
   const key = JSON.stringify(filter ?? {});
-  return useAsync<StockMovement[]>(() => repo.listMovements(filter), [key], []);
-}
-
-export function useCharters() {
-  const { repo } = useRepoContext();
-  return useAsync<Charter[]>(() => repo.listCharters(), [], []);
-}
-
-export function useAlerts() {
-  const { repo } = useRepoContext();
-  return useAsync<Alert[]>(() => repo.computeAlerts(), [], []);
-}
-
-export function usePreparedDishes() {
-  const { repo } = useRepoContext();
-  return useAsync<PreparedDish[]>(() => repo.listPreparedDishes(), [], []);
-}
-
-export function usePurchases() {
-  const { repo } = useRepoContext();
-  return useAsync<Purchase[]>(() => repo.listPurchases(), [], []);
-}
-
-export function useMealPlans(filter?: MealPlanFilter) {
-  const { repo } = useRepoContext();
-  const key = JSON.stringify(filter ?? {});
-  return useAsync<PlannedMeal[]>(() => repo.listMealPlans(filter), [key], []);
+  return useAsync<Expense[]>(() => repo.listExpenses(filter), [key], []);
 }

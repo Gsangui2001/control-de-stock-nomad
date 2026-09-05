@@ -2,27 +2,20 @@ import type { Role } from "./domain/types";
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "Admin",
-  cocinero: "Cocinero / Operario",
-  lectura: "Solo lectura",
+  gestor: "Gestor",
 };
 
 export const ROLE_DESCRIPTION: Record<Role, string> = {
-  admin: "Ve y edita todo: compras, insumos, recetas, costos, reportes y usuarios.",
-  cocinero: "Prepara platos, registra bebidas y ve el stock. No edita costos ni recetas.",
-  lectura: "Solo consulta stock y reportes. No modifica datos.",
+  admin: "Ve y edita todo: gastos, barcos y reportes. Es el único que puede borrar un gasto.",
+  gestor: "Carga y edita gastos de cualquier barco. No borra ni administra el catálogo de barcos.",
 };
 
-/** Can this role mutate data at all? */
+/** ¿Puede cargar o editar un gasto? */
 export function canWrite(role: Role | undefined): boolean {
-  return role === "admin" || role === "cocinero";
+  return role === "admin" || role === "gestor";
 }
 
-/** Admin-only actions: edit products/recipes/costs, purchases, settings, users. */
+/** Acciones de admin: borrar un gasto, administrar barcos. */
 export function canManage(role: Role | undefined): boolean {
   return role === "admin";
-}
-
-/** Operator actions: prepare dishes, consume beverages. */
-export function canOperate(role: Role | undefined): boolean {
-  return role === "admin" || role === "cocinero";
 }

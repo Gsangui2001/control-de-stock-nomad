@@ -5,4 +5,4 @@ export const SUPABASE_ANON_KEY =
 export const isSupabaseConfigured =
   SUPABASE_URL.length > 0 && SUPABASE_ANON_KEY.length > 0;
 
-export const APP_NAME = "Nomad Stock";
+export const APP_NAME = "NOMADE";

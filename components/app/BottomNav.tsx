@@ -30,7 +30,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/70 bg-background/90 backdrop-blur-md safe-bottom">
-      <div className="mx-auto max-w-2xl grid grid-cols-5">
+      <div className="mx-auto max-w-2xl grid grid-cols-4">
         {primary.map((item) => {
           const active = isActive(item.href);
           const Icon = item.icon;

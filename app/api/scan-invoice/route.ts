@@ -15,46 +15,44 @@ function isSupportedMediaType(mt: string): mt is SupportedMediaType {
   return (SUPPORTED_MEDIA_TYPES as readonly string[]).includes(mt);
 }
 
-const RECEIPT_SCHEMA: Record<string, unknown> = {
+const CATEGORY_KEYS = [
+  "mantenimiento",
+  "combustible",
+  "amarre_marina_permisos",
+  "otros_operativos",
+] as const;
+
+const INVOICE_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
-    supplier: {
+    vendor: {
       type: ["string", "null"],
-      description: "Nombre del proveedor o comercio, si figura en el ticket",
+      description: "Nombre del proveedor o comercio, si figura en la factura",
     },
     date: {
       type: ["string", "null"],
-      description: "Fecha de la compra en formato YYYY-MM-DD, si figura en el ticket",
+      description: "Fecha de la factura en formato YYYY-MM-DD, si figura",
     },
-    items: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          description: {
-            type: "string",
-            description: "Nombre del producto tal como aparece en el ticket",
-          },
-          quantity: { type: "number", description: "Cantidad comprada" },
-          unit: {
-            type: ["string", "null"],
-            description: "Unidad si se puede inferir (kg, g, l, ml, unidad, etc.)",
-          },
-          totalPrice: {
-            type: "number",
-            description: "Precio total de la línea (cantidad × precio unitario)",
-          },
-        },
-        required: ["description", "quantity", "unit", "totalPrice"],
-        additionalProperties: false,
-      },
+    totalAmount: {
+      type: ["number", "null"],
+      description: "Monto total de la factura en dólares (USD), si se puede leer",
+    },
+    description: {
+      type: ["string", "null"],
+      description: "Descripción breve de qué es el gasto (ej. 'cambio de aceite', 'combustible')",
+    },
+    suggestedCategory: {
+      type: ["string", "null"],
+      enum: [...CATEGORY_KEYS, null],
+      description:
+        "Categoría más probable a partir del contenido de la factura. Null si no hay indicio claro.",
     },
   },
-  required: ["supplier", "date", "items"],
+  required: ["vendor", "date", "totalAmount", "description", "suggestedCategory"],
   additionalProperties: false,
 };
 
-// Foto de ticket en base64 (~10MB en bytes ≈ ~14M caracteres en base64)
+// Foto de factura en base64 (~10MB en bytes ≈ ~14M caracteres en base64)
 const MAX_BASE64_LENGTH = 14_000_000;
 
 export async function POST(req: NextRequest) {
@@ -75,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   const { imageBase64, mediaType } = body;
   if (!imageBase64 || !mediaType) {
-    return NextResponse.json({ error: "Falta la imagen del ticket." }, { status: 400 });
+    return NextResponse.json({ error: "Falta la imagen de la factura." }, { status: 400 });
   }
   if (!isSupportedMediaType(mediaType)) {
     return NextResponse.json({ error: "Formato de imagen no soportado." }, { status: 400 });
@@ -88,9 +86,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const response = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 4096,
-      output_config: { format: { type: "json_schema", schema: RECEIPT_SCHEMA } },
+      model: "claude-opus-5",
+      max_tokens: 1024,
+      output_config: { format: { type: "json_schema", schema: INVOICE_SCHEMA } },
       messages: [
         {
           role: "user",
@@ -101,7 +99,7 @@ export async function POST(req: NextRequest) {
             },
             {
               type: "text",
-              text: "Este es un ticket o factura de compra de insumos para un charter náutico. Extraé cada ítem comprado con su cantidad y el precio total de esa línea. Si un renglón tiene precio unitario y cantidad pero no precio total, calculalo vos. Ignorá totales, subtotales, impuestos, descuentos y método de pago como si fueran ítems — solo productos comprados. Si no podés leer algún dato con confianza, dejalo en null en vez de inventarlo.",
+              text: "Esta es una factura o recibo de un gasto operativo de un barco de charter (mantenimiento, combustible, amarre/marina/permisos, u otro gasto operativo). Extraé el proveedor, la fecha, el monto total en USD y una descripción breve de qué es el gasto. Sugerí a qué categoría pertenece, solo si hay un indicio claro en el texto — nunca la inventes. Si no podés leer algún dato con confianza, dejalo en null en vez de inventarlo.",
             },
           ],
         },
@@ -123,9 +121,9 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(textBlock.text);
     return NextResponse.json(parsed);
   } catch (err) {
-    console.error("scan-receipt error", err);
+    console.error("scan-invoice error", err);
     return NextResponse.json(
-      { error: "No se pudo leer el ticket. Probá con otra foto." },
+      { error: "No se pudo leer la factura. Probá con otra foto." },
       { status: 500 }
     );
   }

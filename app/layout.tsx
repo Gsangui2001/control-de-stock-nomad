@@ -5,15 +5,15 @@ import { RepoProvider } from "@/lib/providers/RepoProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "Nomad Stock",
+  title: "NOMADE",
   description:
-    "Control de stock de comida y bebida para charters de Nomad Sailors. Simple, rápido y mobile-first.",
-  applicationName: "Nomad Stock",
+    "Administrador de gastos operativos de la flota de Nomad Sailors: mantenimiento, combustible, amarre/marina/permisos y otros gastos. Simple, rápido y mobile-first.",
+  applicationName: "NOMADE",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Nomad Stock",
+    title: "NOMADE",
   },
   icons: {
     icon: "/icons/icon-192.png",
