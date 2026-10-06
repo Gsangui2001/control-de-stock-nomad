@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#102b3c" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23102b3c%27/%3E%3Ctext x=%2710%27 y=%2746%27 font-size=%2750%27 fill=%27%2382d8d3%27%3E≈%3C/text%3E%3C/svg%3E"
+    />
+    <title>A bordo · Control del barco</title>
+    <link rel="stylesheet" href="styles.css?v=cloud-1" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#panel"
+          ><span class="brand-mark">≈</span
+          ><span
+            ><strong>A bordo</strong><small>Control del barco</small></span
+          ></a
+        >
+        <div class="boat-name" id="boatLabel">Mi barco</div>
+        <nav aria-label="Secciones" id="navigation">
+          <button data-view="panel" class="active">
+            ◫ <span>Resumen</span>
+          </button>
+          <button data-view="stock">▦ <span>Inventario</span></button>
+          <button data-view="tasks">✓ <span>Tareas y rutinas</span></button>
+          <button data-view="log">≡ <span>Bitácora</span></button>
+          <button data-view="purchases">
+            ＋ <span>Compras y movimientos</span>
+          </button>
+          <button data-view="cameras">◉ <span>Cámaras</span></button>
+          <button data-view="crew">♙ <span>Tripulación</span></button>
+          <a class="expenses-link" href="/gastos">$ Gastos de flota ↗</a><button data-view="food">▤ <span>Gastronomía</span></button>
+          <button data-view="settings">⚙ <span>Barco y respaldo</span></button>
+        </nav>
+        <div class="sidebar-foot">
+          <span class="dot"></span> Datos guardados en la nube<small
+            >Exportá un respaldo para conservar una copia.</small
+          >
+        </div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayLabel"></p>
+            <h1 id="viewTitle">Resumen del barco</h1>
+          </div>
+          <button class="primary" id="quickLog">＋ Registrar trabajo</button>
+        </header>
+        <div id="notice"></div>
+        <section id="content"></section>
+        <footer>
+          Inventario, mantenimiento e historia del barco en un solo lugar.
+        </footer>
+      </main>
+    </div>
+    <dialog id="editor">
+      <form id="editorForm">
+        <div class="dialog-heading">
+          <h2 id="editorTitle"></h2>
+          <button
+            type="button"
+            class="icon-btn"
+            id="closeDialog"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <div id="editorFields"></div>
+        <p class="form-error" id="formError" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" class="secondary" id="cancelDialog">
+            Cancelar</button
+          ><button type="submit" class="primary" id="saveButton">
+            Guardar
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" role="status"></div>
+    <script src="boat-rules.js?v=cloud-1"></script>
+    <script src="app.js?v=cloud-1"></script>
+  </body>
+</html>

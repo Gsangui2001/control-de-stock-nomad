@@ -22,7 +22,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (ready && user) router.replace("/");
+    if (ready && user) router.replace("/resumen-gastos");
   }, [ready, user, router]);
 
   return (
@@ -63,7 +63,7 @@ function DemoLogin() {
 
   async function pick(role: Role) {
     await setUser({ id: uid("u-"), name: name.trim() || ROLE_LABEL[role], role });
-    router.replace("/");
+    router.replace("/resumen-gastos");
   }
 
   return (
@@ -134,7 +134,7 @@ function SupabaseLogin() {
           return;
         }
         refresh();
-        router.replace("/");
+        router.replace("/resumen-gastos");
       } else {
         const res = await repo.signUp(email.trim(), password, name.trim() || email.trim());
         if (res.error) {
@@ -145,7 +145,7 @@ function SupabaseLogin() {
         const u = await repo.getCurrentUser();
         if (u) {
           refresh();
-          router.replace("/");
+          router.replace("/resumen-gastos");
         } else {
           setInfo("Cuenta creada. Revisá tu email para confirmarla y después entrá.");
           setTab("login");

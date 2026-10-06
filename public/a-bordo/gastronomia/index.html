@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control de Stock y Reservas</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+<div style="background:#dfeef2;padding:14px 24px;color:#244653;font:14px Segoe UI">Gastronomía · módulo original separado del inventario técnico. Datos guardados en este navegador. <a href="../index.html">Volver al barco</a></div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Navegacion principal">
+        <div class="brand">
+          <span class="brand-mark">CS</span>
+          <div>
+            <strong>Restaurante</strong>
+            <small>Stock y reservas</small>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Secciones">
+          <button class="nav-btn active" type="button" data-view="dashboard">Panel</button>
+          <button class="nav-btn" type="button" data-view="stock">Stock</button>
+          <button class="nav-btn" type="button" data-view="purchases">Compras</button>
+          <button class="nav-btn" type="button" data-view="orders">Pedidos</button>
+          <button class="nav-btn" type="button" data-view="movements">Movimientos</button>
+          <button class="nav-btn" type="button" data-view="reservations">Reservas</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Gestion diaria</p>
+            <h1 id="viewTitle">Panel operativo</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="ghost-btn" type="button" id="exportDataBtn">Exportar datos</button><button class="ghost-btn" type="button" id="importLegacyBtn">Importar respaldo</button><input id="importLegacyFile" type="file" accept=".json,application/json" hidden>
+            <button class="primary-btn" type="button" id="resetDemoBtn">Restaurar demo</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboardView" data-title="Panel operativo">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>Productos</span>
+              <strong id="metricProducts">0</strong>
+            </article>
+            <article class="metric">
+              <span>Bajo minimo</span>
+              <strong id="metricLowStock">0</strong>
+            </article>
+            <article class="metric">
+              <span>Valor estimado</span>
+              <strong id="metricValue">$0</strong>
+            </article>
+            <article class="metric">
+              <span>Reservas hoy</span>
+              <strong id="metricTodayReservations">0</strong>
+            </article>
+          </div>
+
+          <div class="split-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Alertas de stock</h2>
+                <span id="alertCount">0 alertas</span>
+              </div>
+              <div class="list-stack" id="lowStockList"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Proximas reservas</h2>
+                <span id="reservationCount">0 activas</span>
+              </div>
+              <div class="list-stack" id="upcomingReservations"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="stockView" data-title="Control de stock">
+          <div class="toolbar">
+            <input id="stockSearch" type="search" placeholder="Buscar producto, categoria o proveedor" />
+            <select id="categoryFilter" aria-label="Filtrar categoria">
+              <option value="">Todas las categorias</option>
+            </select>
+          </div>
+
+          <div class="content-grid">
+            <form class="form-panel" id="productForm">
+              <h2>Producto</h2>
+              <input type="hidden" id="productId" />
+              <label>Nombre<input id="productName" required placeholder="Ej: Tomate perita" /></label>
+              <label>Categoria<input id="productCategory" required placeholder="Verduras, bebidas, limpieza" /></label>
+              <div class="form-row">
+                <label>Unidad<input id="productUnit" required placeholder="kg, un, lt" /></label>
+                <label>Stock minimo<input id="productMin" required min="0" step="0.01" type="number" /></label>
+              </div>
+              <div class="form-row">
+                <label>Stock actual<input id="productCurrent" required min="0" step="0.01" type="number" /></label>
+                <label>Costo unitario<input id="productCost" required min="0" step="0.01" type="number" /></label>
+              </div>
+              <label>Proveedor<input id="productSupplier" placeholder="Nombre o contacto" /></label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Guardar producto</button>
+                <button class="ghost-btn" type="button" id="clearProductBtn">Limpiar</button>
+              </div>
+            </form>
+
+            <section class="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Categoria</th>
+                    <th>Stock</th>
+                    <th>Minimo</th>
+                    <th>Costo</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="stockTable"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="purchasesView" data-title="Tickets de compra">
+          <div class="content-grid">
+            <form class="form-panel" id="purchaseForm">
+              <h2>Nuevo ticket</h2>
+              <div class="form-row">
+                <label>Proveedor<input id="purchaseSupplier" required placeholder="Proveedor o comercio" /></label>
+                <label>Nro. ticket<input id="purchaseNumber" placeholder="Factura, remito o ticket" /></label>
+              </div>
+              <label>Fecha<input id="purchaseDate" required type="date" /></label>
+
+              <div class="line-editor">
+                <h3>Producto del ticket</h3>
+                <label>Producto
+                  <input id="ticketProductName" list="productSuggestions" placeholder="Ej: Harina 0000" />
+                  <datalist id="productSuggestions"></datalist>
+                </label>
+                <div class="form-row">
+                  <label>Categoria<input id="ticketCategory" placeholder="Almacen, bebidas, verduras" /></label>
+                  <label>Unidad<input id="ticketUnit" placeholder="kg, un, lt" /></label>
+                </div>
+                <div class="form-row">
+                  <label>Cantidad<input id="ticketQuantity" min="0.01" step="0.01" type="number" /></label>
+                  <label>Costo unitario<input id="ticketUnitCost" min="0" step="0.01" type="number" /></label>
+                </div>
+                <label>Stock minimo para producto nuevo<input id="ticketMinStock" min="0" step="0.01" type="number" placeholder="Opcional" /></label>
+                <button class="ghost-btn" type="button" id="addTicketLineBtn">Agregar renglon</button>
+              </div>
+
+              <section class="mini-table-panel">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Cantidad</th>
+                      <th>Costo</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="ticketLineTable"></tbody>
+                </table>
+              </section>
+
+              <div class="ticket-total">
+                <span>Total ticket</span>
+                <strong id="ticketTotal">$0</strong>
+              </div>
+
+              <button class="primary-btn" type="submit">Guardar ticket y cargar stock</button>
+            </form>
+
+            <section class="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>Ticket</th>
+                    <th>Productos</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="purchaseTable"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="ordersView" data-title="Pedidos y consumo">
+          <div class="content-grid">
+            <div class="stacked-panels">
+              <form class="form-panel" id="menuItemForm">
+                <h2>Plato o producto vendido</h2>
+                <label>Nombre<input id="menuItemName" required placeholder="Ej: Pizza muzzarella" /></label>
+                <label>Precio de venta<input id="menuItemPrice" min="0" step="0.01" type="number" placeholder="Opcional" /></label>
+
+                <div class="line-editor">
+                  <h3>Materia prima que consume</h3>
+                  <label>Insumo<select id="recipeProduct"></select></label>
+                  <label>Cantidad por unidad vendida<input id="recipeQuantity" min="0.01" step="0.01" type="number" /></label>
+                  <button class="ghost-btn" type="button" id="addRecipeLineBtn">Agregar insumo</button>
+                </div>
+
+                <section class="mini-table-panel">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Insumo</th>
+                        <th>Cantidad</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="recipeLineTable"></tbody>
+                  </table>
+                </section>
+
+                <button class="primary-btn" type="submit">Guardar plato</button>
+              </form>
+
+              <form class="form-panel" id="orderForm">
+                <h2>Cargar pedido</h2>
+                <label>Plato/producto<select id="orderMenuItem" required></select></label>
+                <div class="form-row">
+                  <label>Cantidad<input id="orderQuantity" required min="1" step="1" type="number" /></label>
+                  <label>Mesa o referencia<input id="orderReference" placeholder="Mesa 4, delivery, barra" /></label>
+                </div>
+                <button class="primary-btn" type="submit">Registrar pedido y descontar stock</button>
+              </form>
+            </div>
+
+            <section class="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Plato</th>
+                    <th>Precio</th>
+                    <th>Materia prima</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="menuItemTable"></tbody>
+              </table>
+
+              <div class="section-divider"></div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Pedido</th>
+                    <th>Cantidad</th>
+                    <th>Referencia</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="orderTable"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="movementsView" data-title="Movimientos de mercaderia">
+          <div class="content-grid">
+            <form class="form-panel" id="movementForm">
+              <h2>Nuevo movimiento</h2>
+              <label>Producto<select id="movementProduct" required></select></label>
+              <div class="form-row">
+                <label>Tipo
+                  <select id="movementType">
+                    <option value="entrada">Entrada</option>
+                    <option value="salida">Salida</option>
+                  </select>
+                </label>
+                <label>Cantidad<input id="movementQuantity" required min="0.01" step="0.01" type="number" /></label>
+              </div>
+              <label>Motivo<input id="movementReason" placeholder="Compra, consumo, ajuste, merma" /></label>
+              <button class="primary-btn" type="submit">Registrar movimiento</button>
+            </form>
+
+            <section class="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Producto</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Motivo</th>
+                  </tr>
+                </thead>
+                <tbody id="movementTable"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="reservationsView" data-title="Sistema de reservas">
+          <div class="content-grid">
+            <form class="form-panel" id="reservationForm">
+              <h2>Reserva</h2>
+              <input type="hidden" id="reservationId" />
+              <label>Cliente<input id="reservationName" required placeholder="Nombre y apellido" /></label>
+              <label>Telefono<input id="reservationPhone" required placeholder="WhatsApp o telefono" /></label>
+              <div class="form-row">
+                <label>Fecha<input id="reservationDate" required type="date" /></label>
+                <label>Hora<input id="reservationTime" required type="time" /></label>
+              </div>
+              <div class="form-row">
+                <label>Personas<input id="reservationGuests" required min="1" type="number" /></label>
+                <label>Mesa<input id="reservationTableNumber" min="1" type="number" placeholder="Opcional" /></label>
+              </div>
+              <label>Estado
+                <select id="reservationStatus">
+                  <option value="confirmada">Confirmada</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </label>
+              <label>Notas<textarea id="reservationNotes" rows="3" placeholder="Alergias, cumpleanos, preferencias"></textarea></label>
+              <div class="form-actions">
+                <button class="primary-btn" type="submit">Guardar reserva</button>
+                <button class="ghost-btn" type="button" id="clearReservationBtn">Limpiar</button>
+              </div>
+            </form>
+
+            <section class="table-panel">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Personas</th>
+                    <th>Mesa</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="reservationTable"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
