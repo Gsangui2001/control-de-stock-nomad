@@ -85,7 +85,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    }
    validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
    const logs=new Map<string,any>(before.state.logs.map((l:any)=>[l.id,l]));
-   for(const l of body.state.logs){const old=logs.get(l.id);l.recordedBy=old?.recordedBy??auth.user.name;l.recordedAt=old?.recordedAt??new Date().toISOString();}
+   for(const l of body.state.logs){const old=logs.get(l.id);l.recordedBy=old?.recordedBy??auth.user.name;l.recordedById=old?.recordedById??(old?undefined:auth.user.id);l.recordedAt=old?.recordedAt??new Date().toISOString();}
    return json(stateForRole(await rpc('state_put',{boat,state:body.state,revision:body.revision}),auth.user.admin,before.role));
   }
   if(op==='photos'&&method==='POST'){

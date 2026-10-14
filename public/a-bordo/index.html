@@ -10,6 +10,7 @@
     />
     <title>A bordo · Control del barco</title>
     <link rel="stylesheet" href="styles.css?v=barco-2" />
+    <link rel="stylesheet" href="daily.css?v=barco-5" />
   </head>
   <body>
     <div class="app-shell">
@@ -22,8 +23,9 @@
         >
         <div class="boat-name" id="boatLabel">Mi barco</div>
         <nav aria-label="Secciones" id="navigation">
+          <button data-view="day">← <span>Volver a mi día</span></button>
           <button data-view="panel" class="active">
-            ◫ <span>Resumen</span>
+            ◫ <span>Administrar</span>
           </button>
           <button data-view="manual" class="manual-nav">
             ☰ <span>Manual de instrucciones</span>
@@ -44,6 +46,7 @@
         </div>
       </aside>
       <main>
+        <header id="dayHeader" class="day-top" hidden></header>
         <header class="topbar">
           <div>
             <p class="eyebrow" id="todayLabel"></p>
@@ -84,6 +87,7 @@
     </dialog>
     <div id="toast" role="status"></div>
     <script src="boat-rules.js?v=barco-2"></script>
-    <script src="app.js?v=barco-4"></script>
+    <script src="daily.js?v=barco-5"></script>
+    <script src="app.js?v=barco-5"></script>
   </body>
 </html>

@@ -89,7 +89,7 @@ let state,
   boats = [],
   boatId = "",
   role = "",
-  view = "panel",
+  view = "day",
   editing = null,
   filter = { q: "", system: "", status: "", equipment: "" },
   users = [],
@@ -244,6 +244,7 @@ async function commit(next) {
 }
 async function loadBoat(id) {
   boatId = id;
+  dayPage = "home";
   const r = await api("state?boat=" + encodeURIComponent(id));
   state = r.state;
   revision = r.revision;
@@ -266,14 +267,15 @@ async function refreshActivity(showToast = false) {
   const seen = Number(localStorage.getItem(activityStorageKey()) || 0);
   unseenActivity = activity.filter((item) => Number(item.id) > seen);
   if (state && unseenActivity.length !== previous) {
-    render();
+    // Notifications must never replace a form while someone is writing.
+    $("#notice").innerHTML = activityNotice();
     if (showToast && unseenActivity.length > previous)
       toast("Hay nueva actividad registrada en el barco.");
   }
 }
 function activityNotice() {
   if (!session?.admin || !unseenActivity.length) return "";
-  return `<div class="notice"><div class="card-heading"><strong>🔔 ${unseenActivity.length} ${unseenActivity.length === 1 ? "cambio nuevo" : "cambios nuevos"}</strong>${action("markActivityRead", "Marcar como visto", "", "text-btn")}</div>${unseenActivity.slice(0, 5).map((item) => `<div><strong>${esc(item.actor)}</strong> actualizó datos del barco · ${new Date(item.created_at).toLocaleString("es-AR")}</div>`).join("")}</div>`;
+  return `<div class="notice"><div class="card-heading"><strong>🔔 ${unseenActivity.length} ${unseenActivity.length === 1 ? "cambio nuevo" : "cambios nuevos"}</strong><button type="button" class="text-btn" data-day="updates">Ver novedades</button></div>${unseenActivity.slice(0, 5).map((item) => `<div><strong>${esc(item.actor)}</strong> actualizó datos del barco · ${new Date(item.created_at).toLocaleString("es-AR")}</div>`).join("")}</div>`;
 }
 async function startup() {
   try {
@@ -307,6 +309,8 @@ async function startup() {
 }
 function authScreen(setup) {
   state = null;
+  document.body.classList.remove("daily-mode");
+  $("#dayHeader").hidden = true;
   $("#boatLabel").textContent = "Control del barco";
   $("#notice").textContent = "";
   $(".sidebar-foot").textContent = "Inventario y mantenimiento, con acceso por cuenta.";
@@ -338,9 +342,12 @@ function authScreen(setup) {
 }
 function render() {
   if (!state) return;
+  document.body.classList.toggle("daily-mode", view === "day");
+  $("#dayHeader").hidden = view !== "day";
+  if (view === "day") return renderDay();
   if (view === "cameras" && !privateAccess()) view = "panel";
   const titles = {
-    panel: "Resumen del barco",
+    panel: "Administrar el barco",
     manual: "Manual de instrucciones",
     stock: "Inventario técnico",
     tasks: "Tareas y rutinas",
@@ -442,13 +449,13 @@ function renderPanel() {
       (a.nextDate || "9999").localeCompare(b.nextDate || "9999"),
     );
   const due = pending.filter((t) => taskStatus(t) === "Vencido");
-  const logs = [...state.logs].sort((a, b) =>
+  const logs = state.logs.filter((l) => !l.reportKind).sort((a, b) =>
     b.date.localeCompare(a.date),
   );
   const shownTasks = panelTasksExpanded ? pending : pending.slice(0, 8);
   const shownLogs = panelLogsExpanded ? logs : logs.slice(0, 4);
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">≈</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${state.logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
+    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">≈</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
       low.length
         ? low
             .slice(0, 5)
@@ -506,6 +513,7 @@ function logCard(l) {
 }
 function renderLog() {
   const items = state.logs
+    .filter((l) => !l.reportKind)
     .filter(matches)
     .sort((a, b) => b.date.localeCompare(a.date));
   $("#content").innerHTML =
@@ -1429,7 +1437,10 @@ document.addEventListener("click", async (event) => {
 });
 $("#navigation").addEventListener("click", (e) => {
   const button = e.target.closest("[data-view]");
-  if (button && state) navigate(button.dataset.view);
+  if (button && state) {
+    if (button.dataset.view === "day") dayPage = "home";
+    navigate(button.dataset.view);
+  }
 });
 $("#quickLog").onclick = () => openEditor("log");
 $("#closeDialog").onclick = $("#cancelDialog").onclick = () =>

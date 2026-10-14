@@ -1,0 +1,64 @@
+/* The approved, mobile-first daily view. Administration keeps its existing layout. */
+[hidden] { display:none !important; }
+.daily-mode { background:#edf2f3; font-size:16px; }
+.daily-mode .app-shell { display:block; min-height:100dvh; max-width:560px; margin:0 auto; background:#f8faf9; box-shadow:0 12px 60px #123b4a0c; }
+.daily-mode .sidebar,.daily-mode .topbar,.daily-mode main>footer { display:none; }
+.daily-mode main { padding:0; margin:0; }
+.day-top { background:#102b3c; color:#d4e4eb; padding:18px 23px; display:flex; align-items:center; justify-content:space-between; gap:16px; font-size:13px; }
+.day-brand { display:flex; align-items:center; gap:9px; border:0; background:none; color:#fff; font-size:21px; font-weight:650; padding:0; }
+.day-brand span { color:#78cebf; font-size:35px; line-height:1; }
+.day-content { padding:25px 24px 14px; }
+.daily-mode #notice:not(:empty) { padding:14px 24px 0; }
+.daily-mode #notice .notice { margin:0; font-size:14px; }
+.day-content h1 { font-size:27px; font-weight:650; line-height:1.25; letter-spacing:-.7px; margin:0 0 11px; }
+.day-content h2 { font-size:17px; line-height:1.4; margin:0 0 8px; }
+.day-content p { line-height:1.55; }
+.day-eyebrow { font-size:10px; font-weight:700; letter-spacing:1.8px; color:#657c80; margin:0 0 10px; }
+.day-muted { color:#667b80; font-size:14px; margin:8px 0 17px; }
+.day-grid { display:grid; grid-template-columns:1fr 1fr; gap:11px; margin:23px 0 26px; }
+.day-tile { display:flex; flex-direction:column; align-items:flex-start; gap:16px; padding:19px 15px; border:1px solid #dce5e2; border-radius:15px; text-align:left; color:#21423e; background:#fff; min-height:140px; font-weight:650; line-height:1.3; }
+.day-tile svg { color:#288476; }
+.day-tile small { display:block; font-size:12px; font-weight:400; line-height:1.45; color:#68817b; margin-top:6px; }
+.day-tile.primary-tile { background:#dceee8; border-color:#bbdbcd; }
+.day-tile:hover { border-color:#438c7f; }
+.day-content .day-section { margin-top:24px; }
+.day-task { border:1px solid #dce5e2; background:#fff; border-radius:13px; margin:10px 0; overflow:hidden; }
+.day-task.late { border-left:3px solid #c44b47; }
+.day-task>button { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%; text-align:left; border:0; background:none; color:inherit; padding:15px; }
+.day-task strong { display:block; font-size:16px; margin-top:10px; line-height:1.35; }
+.day-task small { display:block; font-size:12px; color:#6b7e7b; margin-top:7px; }
+.day-task>button>span:last-child { font-size:27px; color:#7c938d; }
+.day-primary,.day-secondary { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; min-height:49px; padding:13px 15px; border-radius:11px; font-weight:600; font-size:15px; }
+.day-primary { color:white; background:#24796a; border:1px solid #24796a; }
+.day-secondary { color:#284b43; background:#fff; border:1px solid #d6e1dc; }
+.day-back,.day-text { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:0; background:none; color:#286f62; font-size:14px; padding:12px 0; min-height:44px; }
+.day-back { margin:0 0 17px; padding-top:0; }
+.day-text { text-align:left; }
+.day-note { background:#eaf2ee; border:1px solid #d6e5dc; border-radius:11px; padding:14px; font-size:14px; line-height:1.6; margin:17px 0; white-space:pre-wrap; }
+.day-content label { display:block; margin:21px 0; color:#29463e; font-size:14px; line-height:1.5; font-weight:600; }
+.day-content label small { display:block; font-weight:400; color:#70867d; font-size:12px; margin-top:7px; }
+.day-content input,.day-content select,.day-content textarea { width:100%; min-width:0; max-width:100%; border:1px solid #cbd9d2; background:#fff; color:#233f37; border-radius:9px; padding:12px; font-size:16px; margin-top:8px; }
+.day-content textarea { min-height:115px; resize:vertical; }
+.day-content .check { display:flex; gap:10px; align-items:center; font-weight:400; }
+.day-content .check input { width:20px; height:20px; margin:0; }
+.day-content input[type=file] { font-size:13px; padding:10px; }
+.day-content .consumption-line { display:flex; flex-wrap:wrap; padding:8px 0; gap:7px; }
+.day-content .consumption-line select { flex:1 1 100%; }
+.day-content .consumption-line input { flex:1; width:90px; }
+.day-disclosure { background:#fff; border:1px solid #dce5e2; border-radius:11px; padding:15px; margin:14px 0; }
+.day-disclosure summary { font-size:14px; font-weight:600; cursor:pointer; line-height:1.5; }
+.day-disclosure .manual-content { font-size:14px; line-height:1.7; padding-top:16px; overflow-wrap:anywhere; }
+.day-history { display:block; width:100%; text-align:left; background:none; color:inherit; border:0; border-bottom:1px solid #e4ece8; padding:14px 0; font-size:14px; }
+.day-history small { display:block; color:#70817a; margin-top:6px; }
+.day-inventory { padding:17px; background:#fff; border:1px solid #dce5e2; border-radius:13px; margin:13px 0; overflow-wrap:anywhere; }
+.day-card-heading { display:flex; justify-content:space-between; gap:15px; }
+.day-card-heading>strong { white-space:nowrap; font-size:17px; }
+.day-card-heading .day-muted { margin:5px 0; font-size:12px; }
+.day-actions { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-top:10px; }
+.day-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px; margin-top:26px; border-top:1px solid #dce5e2; padding-top:12px; }
+.day-footer button { font-size:13px; }
+.day-success { text-align:center; padding:35px 0; }
+.day-success>span { display:grid; place-items:center; margin:0 auto 22px; border-radius:50%; width:65px; height:65px; color:#24796a; background:#deeee6; font-size:30px; }
+.day-reference { max-height:240px; max-width:100%; object-fit:contain; border-radius:12px; }
+.daily-mode button:focus-visible,.daily-mode summary:focus-visible { outline:3px solid #368d7d; outline-offset:3px; }
+@media(max-width:420px) { .day-content{padding:21px 16px 12px} .day-top{padding:17px} .day-tile{padding:16px 12px;font-size:15px;min-height:137px} .day-content h1{font-size:25px} }
