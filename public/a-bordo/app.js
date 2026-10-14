@@ -244,7 +244,7 @@ async function commit(next) {
 }
 async function loadBoat(id) {
   boatId = id;
-  dayPage = "home";
+  dayPage = "home"; dayTaskRole = "all"; dayManualRole = null;
   const r = await api("state?boat=" + encodeURIComponent(id));
   state = r.state;
   revision = r.revision;
@@ -321,7 +321,7 @@ function authScreen(setup) {
     : "Entrar al barco";
   $("#todayLabel").textContent = "Inventario · mantenimiento · tripulación";
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>La historia de tu barco, al día.</h2><p>Repuestos localizados, trabajos con fotos y una tripulación coordinada.</p></div><span class="wave">≈</span></div><section class="card" style="max-width:480px"><h2>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h2><p class="subhead">${setup ? "Este primer acceso queda a tu nombre. Después podés sumar al capitán y a la tripulación." : "Usá la cuenta que te asignó el administrador."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}${field("Contraseña", "password", "", "password", `required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}"`)}<p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
+    `<div class="hero"><div><h2>La historia de tu barco, al día.</h2><p>Repuestos localizados, trabajos con fotos y una tripulación coordinada.</p></div><span class="wave">${dayIcon("anchor")}</span></div><section class="card" style="max-width:480px"><h2>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h2><p class="subhead">${setup ? "Este primer acceso queda a tu nombre. Después podés sumar al capitán y a la tripulación." : "Usá la cuenta que te asignó el administrador."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}${field("Contraseña", "password", "", "password", `required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}"`)}<p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
     const button = e.target.querySelector("button");
@@ -439,7 +439,7 @@ function matches(o) {
   );
 }
 function taskCard(t) {
-  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(t.assignee || "Sin responsable")} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${t.intervalDays || t.intervalHours ? `<p>Se repite ${t.intervalDays ? `cada ${t.intervalDays} días` : ""}${t.intervalDays && t.intervalHours ? " o " : ""}${t.intervalHours ? `cada ${t.intervalHours} horas` : ""}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
+  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${t.intervalDays || t.intervalHours ? `<p>Se repite ${t.intervalDays ? `cada ${t.intervalDays} días` : ""}${t.intervalDays && t.intervalHours ? " o " : ""}${t.intervalHours ? `cada ${t.intervalHours} horas` : ""}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
 }
 function renderPanel() {
   const low = state.products.filter((p) => p.current <= p.min);
@@ -455,7 +455,7 @@ function renderPanel() {
   const shownTasks = panelTasksExpanded ? pending : pending.slice(0, 8);
   const shownLogs = panelLogsExpanded ? logs : logs.slice(0, 4);
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">≈</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
+    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">${dayIcon("anchor")}</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
       low.length
         ? low
             .slice(0, 5)
@@ -472,7 +472,7 @@ function renderPanel() {
 function renderManual() {
   const manual = state.manual || {};
   $("#content").innerHTML =
-    `<section class="hero"><div><h2>Manual de instrucciones</h2><p>La referencia principal para que cada persona sepa qué tarea le corresponde y cómo realizarla.</p></div><span class="wave">☰</span></section><section class="card"><div class="card-heading"><h2>Instrucciones del barco</h2>${privateAccess() ? action("editManual", "Editar manual", "", "primary") : ""}</div><div class="manual-content">${esc(manual.content || "El manual todavía no tiene contenido. Gustavo, como administrador actual, puede completarlo desde este botón.")}</div>${manual.updatedAt ? `<p class="muted">Actualizado ${date(manual.updatedAt)} por ${esc(manual.updatedBy || "responsable autorizado")}</p>` : ""}</section>`;
+    `<section class="hero"><div><h2>Manual de instrucciones</h2><p>La referencia principal para que cada persona sepa qué tarea le corresponde y cómo realizarla.</p></div><span class="wave">☰</span></section><section class="card"><div class="card-heading"><h2>Instrucciones del barco</h2>${privateAccess() ? action("editManual", "Editar manual", "", "primary") : ""}</div>${dayManualBody()}${manual.updatedAt ? `<p class="muted">Actualizado ${date(manual.updatedAt)} por ${esc(manual.updatedBy || "responsable autorizado")}</p>` : ""}</section>`;
 }
 function renderStock() {
   const items = state.products.filter(matches);
@@ -600,7 +600,7 @@ function openEditor(type, obj = {}) {
   }
   if (type === "task") {
     title = obj.id ? "Editar tarea" : "Nueva tarea o rutina";
-    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Responsable asignado", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Frecuencia: cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Ej.: 7"')}${field("Frecuencia: cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}${area("Observaciones", "observation", obj.observation, 'class="full"')}<label class="full">Foto de referencia<input name="taskPhoto" type="file" accept="image/*"><small>Opcional. La foto queda en la tarea; al realizarla se pueden adjuntar hasta 3 fotos nuevas.</small></label></div><p class="hint">Si configurás una frecuencia, la tarea se reprograma al completarla. Si llega la fecha o las horas sin realizarse, aparece con bandera roja.</p>`;
+    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${select("Rol asignado", "assignedRole", dayRoles, obj.assignedRole || "", "Toda la tripulación")}${field("Persona asignada (opcional)", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Frecuencia: cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Ej.: 7"')}${field("Frecuencia: cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}${area("Observaciones", "observation", obj.observation, 'class="full"')}<label class="full">Foto de referencia<input name="taskPhoto" type="file" accept="image/*"><small>Opcional. La foto queda en la tarea; al realizarla se pueden adjuntar hasta 3 fotos nuevas.</small></label></div><p class="hint">Si configurás una frecuencia, la tarea se reprograma al completarla. Si llega la fecha o las horas sin realizarse, aparece con bandera roja.</p>`;
   }
   if (type === "log") {
     const t = obj.taskId ? state.tasks.find((t) => t.id === obj.taskId) : null;
@@ -652,6 +652,7 @@ function openEditor(type, obj = {}) {
       "role",
       [
         { id: "capitan", name: "Capitán · puede registrar operaciones" },
+        { id: "chef", name: "Chef · sus tareas y registros" },
         { id: "marinero", name: "Marinero · puede registrar operaciones" },
         { id: "lector", name: "Lector · solo consulta" },
         { id: "encargado", name: "Encargado · manual y cámaras" },
@@ -666,6 +667,7 @@ function openEditor(type, obj = {}) {
       users.filter((u) => !u.admin),
     )}${select("Barco", "boat", boats, boatId)}${select("Permiso", "role", [
       { id: "capitan", name: "Capitán" },
+      { id: "chef", name: "Chef" },
       { id: "marinero", name: "Marinero" },
       { id: "lector", name: "Solo lectura" },
       { id: "encargado", name: "Encargado · manual y cámaras" },
@@ -856,6 +858,7 @@ $("#editorForm").onsubmit = async (event) => {
         title: d.title,
         system: d.system,
         assignee: d.assignee,
+        assignedRole: d.assignedRole || "",
         equipmentId: d.equipmentId,
         nextDate,
         nextHours,

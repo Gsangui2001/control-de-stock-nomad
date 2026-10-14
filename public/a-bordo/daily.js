@@ -1,12 +1,25 @@
 "use strict";
 // The daily view uses the same authenticated API, inventory and task history.
 let dayPage = "home", daySelected = "", daySaving = false, dayResult = null;
+let dayTaskRole = "all", dayManualRole = null;
+const dayRoles = [{id:"capitan",name:"Capitán"},{id:"chef",name:"Chef"},{id:"marinero",name:"Marinero"}];
+const dayRoleName = value => dayRoles.find(r => r.id === value)?.name || ({administrador:"Administración",encargado:"Encargado",lector:"Solo lectura"}[value]) || "Toda la tripulación";
+const dayNormalize = value => String(value || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+function dayOwnTask(task) {
+  if (dayManager() || role === "lector") return true;
+  if (task.assignedRole && task.assignedRole !== role) return false;
+  return !task.assignee || [session.name,session.username,session.id,role].some(value => dayNormalize(value) === dayNormalize(task.assignee));
+}
+function dayRolePicker(kind, selected) {
+  return `<div class="day-role-picker" role="group" aria-label="${kind === "manualRole" ? "Secciones del manual" : "Filtrar tareas por rol"}">${[{id:"all",name:"Todos"},...dayRoles].map(r => `<button type="button" data-day="${kind}" data-id="${r.id}" aria-pressed="${selected === r.id}">${r.name}</button>`).join("")}</div>`;
+}
 const dayManager = () => Boolean(session?.admin || role === "encargado");
 const dayButton = (page, label, id = "", style = "day-secondary") =>
   `<button type="button" class="${style}" data-day="${page}" data-id="${esc(id)}">${label}</button>`;
 const dayBack = () => dayButton("home", "← Mi día", "", "day-back");
 const dayIcon = (name) => {
   const paths = {
+    anchor: '<circle cx="12" cy="4" r="2"/><path d="M12 6v15M8 10h8M3 13v2a9 6 0 0 0 18 0v-2M3 13l-2 3m2-3 3 2m15-2 2 3m-2-3-3 2"/>',
     tasks: '<path d="m4 6 2 2 3-4m-5 9 2 2 3-4m3-5h8m-8 8h8M4 20h16"/>',
     plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8m-4-4h8"/>',
     problem: '<path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3ZM12 7v5m0 3h.01"/>',
@@ -17,18 +30,17 @@ const dayIcon = (name) => {
   return `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.plus}</svg>`;
 };
 function dayTasks() {
-  const identity = [session.name, session.username, session.id, role].filter(Boolean).map(s => String(s).trim().toLocaleLowerCase());
-  return state.tasks.filter(t => !t.done && (dayManager() || !t.assignee || identity.includes(t.assignee.trim().toLocaleLowerCase())))
+  return state.tasks.filter(t => !t.done && dayOwnTask(t) && (!dayManager() || dayPage !== "tasks" || dayTaskRole === "all" || !t.assignedRole || t.assignedRole === dayTaskRole))
     .sort((a, b) => Number(taskStatus(b) === "Vencido") - Number(taskStatus(a) === "Vencido") || (a.nextDate || "9999").localeCompare(b.nextDate || "9999"));
 }
 function dayTaskRow(t) {
-  return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : " · Sin fecha definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
+  return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : " · Sin fecha definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
 }
 function dayHome() {
   const tasks = dayTasks(), overdue = tasks.filter(t => taskStatus(t) === "Vencido").length;
   const records = state.logs.filter(l => l.recordedById ? l.recordedById === session.id : (l.recordedBy || l.responsible) === session.name).slice().reverse().slice(0, 8);
   const tile = (page, icon, title, subtitle, primary = false) => `<button type="button" data-day="${page}" class="day-tile ${primary ? "primary-tile" : ""}">${dayIcon(icon)}<span>${title}<small>${subtitle}</small></span></button>`;
-  return `<p class="day-eyebrow">MI DÍA A BORDO</p><h1>Hola, ${esc(session.name.split(" ")[0])}.</h1><p class="day-muted">${tasks.length ? `${tasks.length} tareas pendientes. Vamos de a una.` : "No tenés tareas pendientes."}</p><div class="day-grid">${tile("tasks", "tasks", "Mis tareas", `${tasks.length} pendientes${overdue ? ` · ${overdue} vencidas` : ""}`, true)}${writable() ? tile("work", "plus", "Registrar trabajo", "Algo que ya hice") + tile("problem", "problem", "Avisar un problema", "Foto y comentario") : ""}${tile("stock", "stock", "Insumos", "Qué hay y dónde")}</div><h2 class="day-section">Primero lo pendiente</h2>${tasks.slice(0, 2).map(dayTaskRow).join("") || '<div class="day-note">No hay tareas pendientes para tu cuenta.</div>'}${tasks.length > 2 ? dayButton("tasks", `Ver las ${tasks.length} tareas`, "", "day-text") : ""}<div class="day-section">${dayButton("manual", dayIcon("book") + " Manual de instrucciones")}</div><details class="day-disclosure day-section"><summary>Mis últimos registros${records.length ? ` · ${records.length}` : ""}</summary>${records.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${l.reportKind ? "Aviso" : "Trabajo realizado"} · ${date(l.date)}</small></button>`).join("") || '<p class="day-muted">Tus trabajos y avisos aparecerán acá.</p>'}</details>`;
+  return `<p class="day-eyebrow">MI DÍA A BORDO</p><h1>Hola, ${esc(session.name.split(" ")[0])}.</h1><span class="day-role-label">${session.admin ? "Administración · todos los roles" : esc(dayRoleName(role))}</span><p class="day-muted">${tasks.length ? `${tasks.length} tareas pendientes. Vamos de a una.` : "No tenés tareas pendientes."}</p><div class="day-grid">${tile("tasks", "tasks", "Mis tareas", `${tasks.length} pendientes${overdue ? ` · ${overdue} vencidas` : ""}`, true)}${writable() ? tile("work", "plus", "Registrar trabajo", "Algo que ya hice") + tile("problem", "problem", "Avisar un problema", "Foto y comentario") : ""}${tile("stock", "stock", "Insumos", "Qué hay y dónde")}</div><h2 class="day-section">Primero lo pendiente</h2>${tasks.slice(0, 2).map(dayTaskRow).join("") || '<div class="day-note">No hay tareas pendientes para tu cuenta.</div>'}${tasks.length > 2 ? dayButton("tasks", `Ver las ${tasks.length} tareas`, "", "day-text") : ""}<div class="day-section">${dayButton("manual", dayIcon("book") + " Manual de instrucciones")}</div><details class="day-disclosure day-section"><summary>Mis últimos registros${records.length ? ` · ${records.length}` : ""}</summary>${records.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${l.reportKind ? "Aviso" : "Trabajo realizado"} · ${date(l.date)}</small></button>`).join("") || '<p class="day-muted">Tus trabajos y avisos aparecerán acá.</p>'}</details>`;
 }
 function dayPhotoFields() {
   return `<label class="day-photo-input">Agregar fotos<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. Podés usar la cámara o elegir de la galería.</small></label><div id="dayPhotoPreview" class="attachments" aria-live="polite"></div>`;
@@ -37,7 +49,7 @@ function dayWorkForm(kind) {
   const task = ["task", "blocked"].includes(kind) ? state.tasks.find(t => t.id === daySelected) : null;
   const product = kind === "missing" ? state.products.find(p => p.id === daySelected) : null;
   const report = ["problem", "blocked", "missing"].includes(kind);
-  if ((["task", "blocked"].includes(kind) && !task) || (kind === "missing" && !product)) return dayBack() + empty("Este registro ya no está disponible.");
+  if ((["task", "blocked"].includes(kind) && (!task || !dayOwnTask(task))) || (kind === "missing" && !product)) return dayBack() + empty("Este registro ya no está disponible.");
   const title = kind === "blocked" ? "No pude hacerla" : kind === "missing" ? "Pedir reposición" : report ? "¿Qué pasó?" : task ? task.title : "¿Qué trabajo hiciste?";
   return `${dayBack()}<p class="day-eyebrow">${report ? "AVISO DEL BARCO" : task ? "MI TAREA" : "NUEVO REGISTRO"}</p><h1>${esc(title)}</h1>${task ? `<p class="day-muted">${esc(task.system)}${task.intervalDays ? ` · Cada ${task.intervalDays} días` : ""}${task.intervalHours ? ` · Cada ${task.intervalHours} horas` : ""}</p>${kind === "blocked" ? `<p>${esc(task.title)}</p>` : `${task.description ? `<div class="day-note">${esc(task.description)}</div>` : ""}${task.observation ? `<p>${esc(task.observation)}</p>` : ""}${task.photo ? `<img class="day-reference" src="${esc(task.photo)}" alt="Referencia de la tarea">` : ""}`}` : ""}${product ? `<div class="day-note"><strong>${esc(product.name)}</strong><br>Disponible: ${product.current} ${esc(product.unit)} · ${esc(product.location)}</div>` : ""}<form id="dayForm" data-kind="${kind}">
     ${!task && !report ? field("Trabajo realizado", "title", "", "text", 'required maxlength="140" placeholder="Ej.: Lavado del dinghy"') + select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"]) : ""}
@@ -67,12 +79,22 @@ function dayManualSections(content) {
     }
     sections[sections.length - 1].push(line);
   }
-  return sections.filter(lines => lines.length).map(lines => lines.join("\n"));
+  const chapters = sections.filter(lines => /^\d+\. /.test(lines[0] || ""));
+  // The cover is not an instruction. Preserve unnumbered manuals as a fallback.
+  return (chapters.length ? chapters : sections.filter(lines => lines.length)).map(lines => lines.join("\n"));
+}
+function dayManualBody() {
+  const content = state.manual?.content || "El manual todavía no tiene contenido.";
+  const selected = dayManualRole || (dayRoles.some(r => r.id === role) ? role : "all");
+  const sections = dayManualSections(content).filter(section => {
+    const title = dayNormalize(section.split("\n")[0]);
+    const chapterRole = dayRoles.find(r => title.includes("responsabilidades del " + r.id));
+    return selected === "all" || !chapterRole || chapterRole.id === selected;
+  });
+  return `${dayRolePicker("manualRole", selected)}<p class="day-muted">${selected === "all" ? "Instrucciones comunes y responsabilidades de cada rol." : `Instrucciones comunes y responsabilidades de ${dayRoleName(selected)}. Podés consultar también los otros roles.`}</p>${sections.map((section, i) => { const lines = section.split("\n"); const title = lines.shift().toLocaleUpperCase("es"); return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
 }
 function dayManual() {
-  const content = state.manual?.content || "El manual todavía no tiene contenido.";
-  const sections = dayManualSections(content);
-  return `${dayBack()}<p class="day-eyebrow">PARA CONSULTAR</p><h1>Manual de instrucciones</h1><p class="day-muted">La referencia de trabajo a bordo.</p>${sections.map((section, i) => { const lines = section.split("\n"); const title = lines.shift(); return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
+  return `${dayBack()}<p class="day-eyebrow">PARA CONSULTAR</p><h1>Manual de instrucciones</h1>${dayManualBody()}`;
 }
 function dayUpdates() {
   const reports = state.logs.filter(l => l.reportKind && (dayManager() || (l.recordedById ? l.recordedById === session.id : (l.recordedBy || l.responsible) === session.name))).slice().reverse();
@@ -80,10 +102,10 @@ function dayUpdates() {
   return `${dayBack()}<h1>Avisos y novedades</h1><p class="day-muted">${session.admin ? "Las novedades de otras personas se comprueban cada minuto mientras la app está abierta." : "Consultá tus avisos y usá Actualizar para ver los cambios."}</p>${dayButton("updates", "Actualizar")}${session.admin && unseenActivity.length ? action("markActivityRead", "Marcar novedades como vistas", "", "text-btn") : ""}<h2 class="day-section">Avisos del barco</h2>${reports.map(l => `<article class="day-inventory">${badge(l.resolvedAt ? "Atendido" : l.urgent ? "Urgente" : "Pendiente", l.resolvedAt ? "ok" : l.urgent ? "bad" : "warn")}<h2>${esc(l.title)}</h2><p>${esc(l.notes)}</p><p class="day-muted">${esc(l.recordedBy || l.responsible)} · ${date(l.date)}</p>${action("showLog", "Ver detalle y fotos", l.id, "text-btn")}${dayManager() && !l.resolvedAt ? dayButton("resolve", "Marcar atendido", l.id, "day-text") : ""}</article>`).join("") || empty("No hay avisos registrados.")}${dayManager() ? `<h2 class="day-section">Últimos registros</h2>${recent.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${esc(l.recordedBy || l.responsible)} · ${date(l.date)} · ${l.reportKind ? "Aviso" : "Trabajo"}</small></button>`).join("") || empty("Todavía no hay registros.")}` : ""}`;
 }
 function renderDay() {
-  $("#dayHeader").innerHTML = `<button type="button" data-day="home" class="day-brand"><span>≈</span> A bordo</button><span>${esc(state.boat.name)}</span>`;
+  $("#dayHeader").innerHTML = `<button type="button" data-day="home" class="day-brand">${dayIcon("anchor")} A bordo</button><span>${esc(state.boat.name)}</span>`;
   $("#notice").innerHTML = activityNotice();
   const reports = state.logs.filter(l => l.reportKind && !l.resolvedAt && (dayManager() || (l.recordedBy || l.responsible) === session.name));
-  let body = dayPage === "home" ? dayHome() : dayPage === "tasks" ? `${dayBack()}<h1>Mis tareas</h1><p class="day-muted">${dayManager() ? "Ves todas las tareas del barco. " : "Tus tareas y las que todavía no tienen responsable. "}Las vencidas aparecen primero.</p>${dayTasks().map(dayTaskRow).join("") || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("home", "Volver a mi día", "", "day-primary")}` : dayWorkForm(dayPage);
+  let body = dayPage === "home" ? dayHome() : dayPage === "tasks" ? `${dayBack()}<h1>Mis tareas</h1><p class="day-muted">${dayManager() ? "Revisá todas las tareas o filtrá por rol. " : `Tareas de ${dayRoleName(role)} y las compartidas con toda la tripulación. `}Las vencidas aparecen primero.</p>${dayManager() ? dayRolePicker("taskRole", dayTaskRole) + '<p class="day-muted">Cada rol incluye también las tareas compartidas.</p>' : ""}${dayTasks().map(dayTaskRow).join("") || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("home", "Volver a mi día", "", "day-primary")}` : dayWorkForm(dayPage);
   $("#content").innerHTML = `<div class="day-content">${body}<div class="day-footer">${dayButton("updates", dayIcon("bell") + ` Avisos${reports.length ? ` · ${reports.length} ${reports.length === 1 ? "pendiente" : "pendientes"}` : ""}`, "", "day-text")}${dayManager() ? dayButton("manage", "Administrar", "", "day-text") : ""}${action("logout", "Salir", "", "text-btn")}</div></div>`;
   if (dayPage === "stock") { dayStockItems(); $("#dayStockSearch").oninput = e => dayStockItems(e.target.value); }
   if ($("#dayForm")) {
@@ -110,7 +132,7 @@ async function saveDayForm(event) {
     const next = structuredClone(state);
     const task = ["task", "blocked"].includes(kind) ? next.tasks.find(t => t.id === daySelected) : null;
     const product = kind === "missing" ? next.products.find(p => p.id === daySelected) : null;
-    if (["task", "blocked"].includes(kind) && (!task || task.done)) throw new Error("Esta tarea ya no está pendiente. Volvé a Mi día.");
+    if (["task", "blocked"].includes(kind) && (!task || task.done || !dayOwnTask(task))) throw new Error("Esta tarea ya no está pendiente o no está asignada a tu rol. Volvé a Mi día.");
     if (kind === "missing" && !product) throw new Error("Este insumo ya no está disponible.");
     if (isReport && !d.notes) throw new Error("Escribí brevemente qué pasó.");
     const title = task?.title || (product ? `Reponer: ${product.name}` : isReport ? `Problema: ${d.system}` : d.title);
@@ -152,6 +174,12 @@ document.addEventListener("click", async event => {
   if (!button || !state || daySaving) return;
   const page = button.dataset.day;
   try {
+    if (page === "manualRole" || page === "taskRole") {
+      if (!["all",...dayRoles.map(r => r.id)].includes(button.dataset.id)) return;
+      if (page === "manualRole") dayManualRole = button.dataset.id;
+      else if (dayManager()) dayTaskRole = button.dataset.id;
+      render(); return;
+    }
     if (page === "manage") { if (dayManager()) navigate("panel"); return; }
     if (page === "reloadDraft") {
       const latest = await api("state?boat=" + encodeURIComponent(boatId));

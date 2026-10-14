@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
+
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -10,7 +12,7 @@ const hash = (value:string) => createHash('sha256').update(value).digest('hex');
 const passwordHash = (password:string, salt=randomBytes(16).toString('hex')) => salt+':'+pbkdf2Sync(password,salt,310000,32,'sha256').toString('hex');
 const emptyState = (name:string) => ({schema:1,boat:{name,model:'',currency:'USD',equipment:[]},products:[],tasks:[],logs:[],movements:[],purchases:[],cameras:[],manual:{content:'',updatedAt:'',updatedBy:''}});
 const required = (value:unknown,max=140):string => { if(typeof value!=='string'||!value.trim()||value.length>max)throw new ApiError(400,'Completá los campos requeridos.');return value.trim(); };
-const roles=['capitan','marinero','lector','encargado'];
+const roles=['capitan','chef','marinero','lector','encargado'];
 function validateState(s:any,boat:string) {
  if(!s||s.schema!==1||!s.boat)throw new ApiError(400,'Formato de respaldo inválido.');
  required(s.boat.name);
@@ -24,11 +26,14 @@ function validateState(s:any,boat:string) {
  for(const p of s.products){required(p.name);if(typeof p.unit!=='string'||['current','min','cost'].some(k=>!number(p[k]))||(p.photo&&!photo(p.photo)))throw new ApiError(400,'Insumo inválido.');}
  for(const l of s.logs)if(typeof l.title!=='string'||typeof l.date!=='string'||!Array.isArray(l.lines)||!Array.isArray(l.photos)||l.photos.some((v:any)=>!photo(v)))throw new ApiError(400,'Trabajo inválido.');
  for(const p of s.purchases)if(!Array.isArray(p.lines)||typeof p.date!=='string')throw new ApiError(400,'Compra inválida.');
- for(const t of s.tasks)if(typeof t.title!=='string'||(t.photo&&!photo(t.photo)))throw new ApiError(400,'Tarea inválida.');
+ for(const t of s.tasks)if(typeof t.title!=='string'||(t.photo&&!photo(t.photo))||!['','capitan','chef','marinero'].includes(t.assignedRole??''))throw new ApiError(400,'Tarea inválida.');
 }
-function stateForRole(result:any, admin:boolean, role=result.role) {
+function stateForRole(result:any, user:any, role=result.role) {
  const visible=structuredClone(result);
- if(!admin&&role!=='encargado')visible.state.cameras=[];
+ if(!user.admin&&role!=='encargado'){
+  visible.state.cameras=[];
+  visible.state.tasks=visible.state.tasks.filter((t:any)=>canUseBoatTask(t,user,role));
+ }
  return visible;
 }
 async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
@@ -76,17 +81,27 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    return json(await rpc('user_create',{boat,id:randomBytes(16).toString('hex'),name,username,password:passwordHash(password),role:body.role}),201);
   }
   if(op==='access'&&method==='POST'){if(![...roles,'sin_acceso'].includes(body.role))throw new ApiError(400,'Rol inválido.');return json(await rpc('access',{boat,user:required(body.user),role:body.role}));}
-  if(op==='state'&&method==='GET')return json(stateForRole(await rpc('state_get',{boat}),auth.user.admin));
+  if(op==='state'&&method==='GET')return json(stateForRole(await rpc('state_get',{boat}),auth.user));
   if(op==='state'&&method==='PUT'){
    const before=await rpc('state_get',{boat});
+   if(!body.state||typeof body.state!=='object')throw new ApiError(400,'Estado inválido.');
    if(!auth.user.admin&&before.role!=='encargado'){
     body.state.cameras=before.state.cameras;
     body.state.manual=before.state.manual??{content:'',updatedAt:'',updatedBy:''};
    }
    validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
+   if(!auth.user.admin&&before.role!=='encargado'){
+    try{body.state.tasks=mergeCrewTasks(before.state.tasks,body.state.tasks,auth.user,before.role);}catch(error){throw new ApiError(403,(error as Error).message);}
+    for(const log of body.state.logs){
+     if(log.taskId&&!before.state.logs.some((l:any)=>l.id===log.id)){
+      const task=before.state.tasks.find((t:any)=>t.id===log.taskId);
+      if(!task||!canUseBoatTask(task,auth.user,before.role))throw new ApiError(403,'Esta tarea no está asignada a tu rol.');
+     }
+    }
+   }
    const logs=new Map<string,any>(before.state.logs.map((l:any)=>[l.id,l]));
    for(const l of body.state.logs){const old=logs.get(l.id);l.recordedBy=old?.recordedBy??auth.user.name;l.recordedById=old?.recordedById??(old?undefined:auth.user.id);l.recordedAt=old?.recordedAt??new Date().toISOString();}
-   return json(stateForRole(await rpc('state_put',{boat,state:body.state,revision:body.revision}),auth.user.admin,before.role));
+   return json(stateForRole(await rpc('state_put',{boat,state:body.state,revision:body.revision}),auth.user,before.role));
   }
   if(op==='photos'&&method==='POST'){
    const data=body.data;
