@@ -20,15 +20,34 @@ const date = (s) =>
       )
     : "Sin fecha";
 const systems = [
-  "Motores de propulsión",
+  "Motor babor",
+  "Motor estribor",
   "Generador",
   "Desalinizadora",
-  "Electricidad",
-  "Agua y bombas",
-  "Seguridad",
+  "Bomba agua sanitarias",
+  "Bomba agua grises",
+  "Bomba trituradora",
+  "Electricidad 12 V",
+  "Electricidad 110 V",
+  "Inox",
+  "Teca",
   "Cubierta",
-  "Limpieza",
-  "General",
+  "Bandas",
+  "Pulido",
+  "Red",
+  "Compartimiento motor estribor",
+  "Compartimiento motor babor",
+  "Compartimiento generador",
+  "Sentinas & grifos",
+  "Techos salón",
+  "Lavado cojines",
+  "Limpieza línea flotación",
+  "Limpieza casco",
+  "Dinghy motor fuera de borda",
+  "Dinghy casco",
+  "Limpieza & WD-40 cañas de pesca",
+  "Lavado con lavandina escalera de popa",
+  "Botiquín",
 ];
 const categories = [
   "Filtros",
@@ -39,8 +58,29 @@ const categories = [
   "Electricidad",
   "Herramientas",
   "Limpieza",
-  "Seguridad",
+  "Botiquín",
   "Otros",
+];
+const cleaningTasks = systems.slice(9, 25);
+const engineTasks = [
+  "Filtro de diésel primario",
+  "Filtro de diésel secundario",
+  "Correa",
+  "Filtro de aceite",
+  "Filtro de agua de mar",
+  "Nivel de aceite del motor",
+  "Nivel de aceite de la caja",
+  "Nivel de aceite del piloto automático",
+  "Reporte de pérdidas de aceite",
+  "Reporte de pérdida de diésel",
+  "Comprobar bombas de achique de sentina",
+  "Impeler",
+];
+const taskTemplates = [
+  ...cleaningTasks.map((name) => ({ title: name, system: name })),
+  ...["Motor babor", "Motor estribor"].flatMap((system) =>
+    engineTasks.map((title) => ({ title, system })),
+  ),
 ];
 const R = BoatRules;
 let state,
@@ -52,8 +92,26 @@ let state,
   view = "panel",
   editing = null,
   filter = { q: "", system: "", status: "", equipment: "" },
-  users = [];
+  users = [],
+  activity = [],
+  unseenActivity = [],
+  activityTimer,
+  panelTasksExpanded = false,
+  panelLogsExpanded = false;
 const writable = () => role !== "lector";
+const privateAccess = () => Boolean(session?.admin || role === "encargado");
+const systemOptions = (current = "") => {
+  const legacy = new Set();
+  for (const row of [
+    ...(state?.products || []),
+    ...(state?.tasks || []),
+    ...(state?.logs || []),
+    ...(state?.boat?.equipment || []),
+  ])
+    if (row.system && !systems.includes(row.system)) legacy.add(row.system);
+  if (current && !systems.includes(current)) legacy.add(current);
+  return [...systems, ...legacy];
+};
 const money = (n) =>
   new Intl.NumberFormat("es-AR", {
     style: "currency",
@@ -99,10 +157,14 @@ const statusBadge = (t) => {
   );
 };
 const stockBadge = (p) =>
-  p.current === 0
+  p.expiryDate && p.expiryDate <= today()
+    ? badge("⛔ Vencido", "bad")
+    : p.current === 0
     ? badge("Sin stock", "bad")
     : p.current <= p.min
       ? badge("Reponer", "warn")
+    : p.expiryDate && p.expiryDate <= addDays(today(), 30)
+      ? badge("Vence pronto", "warn")
       : badge("Disponible", "ok");
 function toast(message) {
   $("#toast").textContent = message;
@@ -141,23 +203,33 @@ async function api(path, method = "GET", body) {
   return data;
 }
 async function uploadPhotos(next) {
-  const upload = async value => {
-    if (!value?.startsWith('data:image/')) return value;
-    return (await api('photos', 'POST', {boat:boatId,data:value})).url;
+  const upload = async (value) => {
+    if (!value?.startsWith("data:image/")) return value;
+    return (await api("photos", "POST", { boat: boatId, data: value })).url;
   };
-  for (const p of next.products) if(p.photo) p.photo=await upload(p.photo);
-  for (const l of next.logs) for(let i=0;i<l.photos.length;i++) l.photos[i]=await upload(l.photos[i]);
+  for (const p of next.products) if (p.photo) p.photo = await upload(p.photo);
+  for (const t of next.tasks) if (t.photo) t.photo = await upload(t.photo);
+  for (const l of next.logs)
+    for (let i = 0; i < l.photos.length; i++) l.photos[i] = await upload(l.photos[i]);
 }
 async function portableBackup() {
-  const copy=structuredClone(state);
-  const load=async value=>{
-    if(!value?.startsWith('/api/boat/photos?'))return value;
-    const response=await fetch(value);if(!response.ok)throw new Error('No se pudo descargar una foto. Volvé a intentar.');
-    const blob=await response.blob();
-    return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob);});
+  const copy = structuredClone(state);
+  const load = async (value) => {
+    if (!value?.startsWith("/api/boat/photos?")) return value;
+    const response = await fetch(value);
+    if (!response.ok) throw new Error("No se pudo descargar una foto. Volvé a intentar.");
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
-  for(const p of copy.products)if(p.photo)p.photo=await load(p.photo);
-  for(const l of copy.logs)for(let i=0;i<l.photos.length;i++)l.photos[i]=await load(l.photos[i]);
+  for (const p of copy.products) if (p.photo) p.photo = await load(p.photo);
+  for (const t of copy.tasks) if (t.photo) t.photo = await load(t.photo);
+  for (const l of copy.logs)
+    for (let i = 0; i < l.photos.length; i++) l.photos[i] = await load(l.photos[i]);
   return copy;
 }
 async function commit(next) {
@@ -177,7 +249,31 @@ async function loadBoat(id) {
   revision = r.revision;
   role = r.role;
   filter = { q: "", system: "", status: "", equipment: "" };
+  panelTasksExpanded = false;
+  panelLogsExpanded = false;
+  await refreshActivity();
   render();
+}
+const activityStorageKey = () => `boat-activity-seen-${boatId}`;
+async function refreshActivity(showToast = false) {
+  if (!session?.admin || !boatId) {
+    activity = [];
+    unseenActivity = [];
+    return;
+  }
+  const previous = unseenActivity.length;
+  activity = await api("activity?boat=" + encodeURIComponent(boatId));
+  const seen = Number(localStorage.getItem(activityStorageKey()) || 0);
+  unseenActivity = activity.filter((item) => Number(item.id) > seen);
+  if (state && unseenActivity.length !== previous) {
+    render();
+    if (showToast && unseenActivity.length > previous)
+      toast("Hay nueva actividad registrada en el barco.");
+  }
+}
+function activityNotice() {
+  if (!session?.admin || !unseenActivity.length) return "";
+  return `<div class="notice"><div class="card-heading"><strong>🔔 ${unseenActivity.length} ${unseenActivity.length === 1 ? "cambio nuevo" : "cambios nuevos"}</strong>${action("markActivityRead", "Marcar como visto", "", "text-btn")}</div>${unseenActivity.slice(0, 5).map((item) => `<div><strong>${esc(item.actor)}</strong> actualizó datos del barco · ${new Date(item.created_at).toLocaleString("es-AR")}</div>`).join("")}</div>`;
 }
 async function startup() {
   try {
@@ -198,6 +294,12 @@ async function startup() {
       return;
     }
     await loadBoat(boats.some((b) => b.id === boatId) ? boatId : boats[0].id);
+    clearInterval(activityTimer);
+    if (session.admin)
+      activityTimer = setInterval(
+        () => refreshActivity(true).catch(() => {}),
+        60000,
+      );
   } catch (err) {
     $("#content").innerHTML =
       `<div class="notice">${esc(err.message)}</div>${localStorage.getItem("restaurant-stock-reservations-v1") ? `<div class="card"><h2>Datos gastronómicos anteriores encontrados</h2><p>Descargalos antes de pasar al servidor. Podés importarlos desde el módulo Gastronomía.</p>${action("exportLegacy", "Exportar gastronomía anterior", "", "primary")}</div>` : ""}<p>Revisá tu conexión y recargá la página para volver a intentar.</p>`;
@@ -236,8 +338,10 @@ function authScreen(setup) {
 }
 function render() {
   if (!state) return;
+  if (view === "cameras" && !privateAccess()) view = "panel";
   const titles = {
     panel: "Resumen del barco",
+    manual: "Manual de instrucciones",
     stock: "Inventario técnico",
     tasks: "Tareas y rutinas",
     log: "Bitácora de mantenimiento",
@@ -262,16 +366,19 @@ function render() {
     .querySelectorAll("[data-view]")
     .forEach((b) => {
       b.classList.toggle("active", b.dataset.view === view);
-      b.hidden = b.dataset.view === "crew" && !session.admin;
+      b.hidden =
+        (b.dataset.view === "crew" && !session.admin) ||
+        (b.hasAttribute("data-private") && !privateAccess());
     });
   $("#quickLog").hidden = !writable();
   $("#notice").innerHTML =
-    role === "lector"
+    (role === "lector"
       ? '<div class="notice">Acceso de lectura: podés consultar el barco y exportar un respaldo.</div>'
-      : "";
+      : "") + activityNotice();
   (
     ({
       panel: renderPanel,
+      manual: renderManual,
       stock: renderStock,
       tasks: renderTasks,
       log: renderLog,
@@ -294,7 +401,7 @@ function toolbar(
   searchPlaceholder = "Buscar",
   system = true,
 ) {
-  return `<div class="toolbar"><input id="search" aria-label="${esc(searchPlaceholder)}" placeholder="${esc(searchPlaceholder)}" value="${esc(filter.q)}">${system ? `<select id="systemFilter" aria-label="Filtrar por sistema">${options(systems, filter.system, "Todos los sistemas")}</select>` : ""}${["tasks", "log"].includes(view) && state.boat.equipment.length ? `<select id="equipmentFilter" aria-label="Filtrar por equipo">${options(state.boat.equipment, filter.equipment, "Todos los equipos")}</select>` : ""}${writable() && buttonName ? action(buttonName, buttonLabel, "", "primary") : ""}</div>`;
+  return `<div class="toolbar"><input id="search" aria-label="${esc(searchPlaceholder)}" placeholder="${esc(searchPlaceholder)}" value="${esc(filter.q)}">${system ? `<select id="systemFilter" aria-label="Filtrar por sistema">${options(systemOptions(), filter.system, "Todos los sistemas")}</select>` : ""}${["tasks", "log"].includes(view) && state.boat.equipment.length ? `<select id="equipmentFilter" aria-label="Filtrar por equipo">${options(state.boat.equipment, filter.equipment, "Todos los equipos")}</select>` : ""}${writable() && buttonName ? action(buttonName, buttonLabel, "", "primary") : ""}</div>`;
 }
 function bindFilters(renderFn) {
   if ($("#equipmentFilter"))
@@ -324,30 +431,24 @@ function matches(o) {
     (!filter.equipment || o.equipmentId === filter.equipment)
   );
 }
+function taskCard(t) {
+  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(t.assignee || "Sin responsable")} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${t.intervalDays || t.intervalHours ? `<p>Se repite ${t.intervalDays ? `cada ${t.intervalDays} días` : ""}${t.intervalDays && t.intervalHours ? " o " : ""}${t.intervalHours ? `cada ${t.intervalHours} horas` : ""}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
+}
 function renderPanel() {
   const low = state.products.filter((p) => p.current <= p.min);
-  const pending = state.tasks.filter((t) => !t.done);
+  const pending = state.tasks
+    .filter((t) => !t.done)
+    .sort((a, b) =>
+      (a.nextDate || "9999").localeCompare(b.nextDate || "9999"),
+    );
   const due = pending.filter((t) => taskStatus(t) === "Vencido");
-  const logs = [...state.logs]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 4);
+  const logs = [...state.logs].sort((a, b) =>
+    b.date.localeCompare(a.date),
+  );
+  const shownTasks = panelTasksExpanded ? pending : pending.slice(0, 8);
+  const shownLogs = panelLogsExpanded ? logs : logs.slice(0, 4);
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">≈</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REGISTRADOS</span><strong>${state.logs.length}</strong><small>Historia de mantenimiento</small></article></div><div class="columns"><section class="card"><div class="card-heading"><h2>Próximas tareas</h2>${action("goTasks", "Ver todas", "", "text-btn")}</div>${
-      pending.length
-        ? pending
-            .sort((a, b) =>
-              (a.nextDate || "9999").localeCompare(b.nextDate || "9999"),
-            )
-            .slice(0, 5)
-            .map(
-              (t) =>
-                `<div class="row-item"><div><h3>${esc(t.title)}</h3><p>${esc(t.system)} · ${esc(t.assignee || "Sin responsable")}</p><p>${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== "" && t.nextHours !== null ? ` · ${t.nextHours} h` : ""}</p></div>${statusBadge(t)}</div>`,
-            )
-            .join("")
-        : empty(
-            "No hay tareas pendientes.<br>Agregá rutinas de limpieza, controles y mantenimiento.",
-          )
-    }</section><section class="card"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
+    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">≈</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${state.logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
       low.length
         ? low
             .slice(0, 5)
@@ -359,7 +460,12 @@ function renderPanel() {
         : empty(
             "No hay faltantes registrados.<br>Definí mínimos para recibir alertas de reposición.",
           )
-    }</section></div><section class="card section-gap"><div class="card-heading"><h2>Últimos trabajos a bordo</h2>${action("goLog", "Ver historial", "", "text-btn")}</div>${logs.length ? logs.map((l) => `<div class="row-item"><div><h3>${esc(l.title)}</h3><p>${date(l.date)} · ${esc(l.responsible)} · ${esc(l.system)}</p></div>${action("showLog", "Ver detalle", l.id)}</div>`).join("") : empty("La bitácora está vacía. Cada trabajo guardará su fecha, responsable, fotos e insumos utilizados.")}</section>`;
+    }</section><section class="section-gap" id="completed-work"><div class="card-heading"><div><h2>Trabajos realizados</h2><p class="subhead">Historial con fecha, responsable, observaciones, fotos y materiales utilizados.</p></div>${writable() ? action("newLog", "＋ Registrar trabajo", "", "primary") : ""}</div>${shownLogs.map(logCard).join("") || empty("Todavía no hay trabajos realizados.")}${logs.length > 4 ? action("togglePanelLogs", panelLogsExpanded ? "Mostrar menos" : `Mostrar los ${logs.length} trabajos`, "", "text-btn") : ""}</section>`;
+}
+function renderManual() {
+  const manual = state.manual || {};
+  $("#content").innerHTML =
+    `<section class="hero"><div><h2>Manual de instrucciones</h2><p>La referencia principal para que cada persona sepa qué tarea le corresponde y cómo realizarla.</p></div><span class="wave">☰</span></section><section class="card"><div class="card-heading"><h2>Instrucciones del barco</h2>${privateAccess() ? action("editManual", "Editar manual", "", "primary") : ""}</div><div class="manual-content">${esc(manual.content || "El manual todavía no tiene contenido. Gustavo, como administrador actual, puede completarlo desde este botón.")}</div>${manual.updatedAt ? `<p class="muted">Actualizado ${date(manual.updatedAt)} por ${esc(manual.updatedBy || "responsable autorizado")}</p>` : ""}</section>`;
 }
 function renderStock() {
   const items = state.products.filter(matches);
@@ -369,7 +475,7 @@ function renderStock() {
       "＋ Agregar insumo",
       "Buscar repuesto, medida o ubicación",
     ) +
-    `<p class="subhead">Stock técnico independiente de gastronomía. Las medidas y cantidades se cargan según el inventario real.</p><div class="table-wrap"><table><thead><tr><th>Repuesto / insumo</th><th>Sistema y ubicación</th><th>Stock</th><th>Mínimo / objetivo</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td><div class="product-cell">${p.photo ? `<img class="photo" src="${esc(p.photo)}" alt="${esc(p.name)}">` : '<span class="photo-placeholder">▦</span>'}<div><strong>${esc(p.name)}</strong><small>${esc(p.specs || p.code || p.category)}</small></div></div></td><td>${esc(p.system)}<small>${esc(p.location || "Sin ubicación")} ${p.equipment ? `· ${esc(p.equipment)}` : ""}</small></td><td><strong>${p.current} ${esc(p.unit)}</strong><small>${stockBadge(p)}</small></td><td>${p.min} / ${p.target ?? p.min} ${esc(p.unit)}</td><td class="actions">${action("showProduct", "Ver", p.id)} ${writable() ? action("editProduct", "Editar", p.id) : ""}</td></tr>`).join("") || `<tr><td colspan="5">${empty("Todavía no hay insumos cargados. Agregá el primer repuesto con su ubicación y sus medidas.")}</td></tr>`}</tbody></table></div><p class="search-summary">${items.length} insumos · Valor registrado: ${money(items.reduce((a, p) => a + p.current * p.cost, 0))}</p>${writable() ? `<section class="hint"><strong>Para empezar con el listado del audio:</strong> aceite de motor, filtros de gasoil, prefiltros, aceite de caja, mangueras y bombas. ${action("suggestions", "Elegir una ficha sugerida", "", "text-btn")} Las sugerencias no agregan existencias automáticamente.</section>` : ""}`;
+    `<p class="subhead">Stock técnico y botiquín. Cada artículo puede llevar stock mínimo y fecha de vencimiento.</p><div class="table-wrap"><table><thead><tr><th>Repuesto / artículo</th><th>Sistema y ubicación</th><th>Stock</th><th>Mínimo / objetivo</th><th>Vencimiento</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td><div class="product-cell">${p.photo ? `<img class="photo" src="${esc(p.photo)}" alt="${esc(p.name)}">` : '<span class="photo-placeholder">▦</span>'}<div><strong>${esc(p.name)}</strong><small>${esc(p.specs || p.code || p.category)}</small></div></div></td><td>${esc(p.system)}<small>${esc(p.location || "Sin ubicación")} ${p.equipment ? `· ${esc(p.equipment)}` : ""}</small></td><td><strong>${p.current} ${esc(p.unit)}</strong><small>${stockBadge(p)}</small></td><td>${p.min} / ${p.target ?? p.min} ${esc(p.unit)}</td><td>${p.expiryDate ? date(p.expiryDate) : "—"}</td><td class="actions">${action("showProduct", "Ver", p.id)} ${writable() ? action("editProduct", "Editar", p.id) : ""}</td></tr>`).join("") || `<tr><td colspan="6">${empty("Todavía no hay insumos cargados. Agregá el primer repuesto o artículo de botiquín.")}</td></tr>`}</tbody></table></div><p class="search-summary">${items.length} artículos · Valor registrado: ${money(items.reduce((a, p) => a + p.current * p.cost, 0))}</p>${writable() ? `<section class="hint"><strong>Botiquín:</strong> cargá cada artículo real con cantidad, mínimo y vencimiento. El sistema marcará en rojo lo vencido. ${action("newFirstAid", "Agregar artículo de botiquín", "", "text-btn")}</section>` : ""}`;
   bindFilters(renderStock);
 }
 function renderTasks() {
@@ -378,14 +484,13 @@ function renderTasks() {
     .filter((t) => (filter.status === "done" ? t.done : !t.done));
   $("#content").innerHTML =
     toolbar("newTask", "＋ Nueva tarea", "Buscar tarea o responsable") +
-    `<div class="inline-actions" style="margin-bottom:18px">${action("pendingTasks", "Pendientes", "", "secondary")}${action("doneTasks", "Realizadas", "", "secondary")}</div><p class="subhead">Al completar una rutina, se registra el trabajo y se programa su próxima ejecución. Los plazos los definís vos.</p><div class="task-list">${
+    `<div class="inline-actions" style="margin-bottom:18px">${action("pendingTasks", "Pendientes", "", "secondary")}${action("doneTasks", "Realizadas", "", "secondary")}${writable() ? action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div><p class="subhead">Cada tarea puede tener fecha, foto, observaciones y frecuencia propia. Cuando vence sin realizarse queda señalada con bandera roja.</p><div class="task-list">${
       items
         .sort((a, b) =>
           (a.nextDate || "9999").localeCompare(b.nextDate || "9999"),
         )
         .map(
-          (t) =>
-            `<article class="card task-card"><div><div class="record-meta">${statusBadge(t)} ${badge(t.system)}</div><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><p>${esc(t.assignee || "Sin responsable")} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${t.intervalDays || t.intervalHours ? `<p>Se repite ${t.intervalDays ? `cada ${t.intervalDays} días` : ""}${t.intervalDays && t.intervalHours ? " o " : ""}${t.intervalHours ? `cada ${t.intervalHours} horas` : ""}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`,
+          taskCard,
         )
         .join("") ||
       empty(
@@ -431,6 +536,7 @@ function renderPurchases() {
   bindFilters(renderPurchases);
 }
 function renderCameras() {
+  if (!privateAccess()) return navigate("panel");
   $("#content").innerHTML =
     `<div class="toolbar">${writable() ? action("newCamera", "＋ Agregar cámara", "", "primary") : ""}</div><div class="notice"><strong>Integración pendiente de verificar.</strong> Guardá el modelo y los enlaces del proveedor. La vista en vivo y las grabaciones se abren en su sistema; esta aplicación todavía no recibe ni graba video. Para integrarlas se necesita confirmar el modelo, el acceso y la compatibilidad del proveedor.</div><div class="columns">${state.cameras.map((c) => `<article class="card"><div class="card-heading"><h2>${esc(c.name)}</h2>${badge("Sin verificar", "warn")}</div><p>${esc(c.location)} · ${esc(c.model || "Modelo pendiente")}</p><p class="subhead">${esc(c.notes)}</p><div class="inline-actions">${safeUrl(c.live) ? `<a class="primary" href="${esc(c.live)}" target="_blank" rel="noopener noreferrer">Abrir vista en vivo ↗</a>` : ""}${safeUrl(c.recordings) ? `<a class="secondary" href="${esc(c.recordings)}" target="_blank" rel="noopener noreferrer">Ver grabaciones ↗</a>` : ""}${writable() ? action("editCamera", "Configurar", c.id) : ""}</div></article>`).join("") || empty("No hay cámaras configuradas en este barco.")}</div><section class="card section-gap"><h2>Cámaras nuevas: selección inicial</h2><p><strong>Reolink RLC-810WA + grabador RLN12W.</strong> Cámara de 12 V CC, Wi-Fi 6 y 4K. El grabador también se alimenta a 12 V y centraliza video en vivo y grabaciones de varias cámaras.</p><p class="subhead">La cámara admite 20 cuentas, con un máximo de 12 transmisiones simultáneas (2 principales y 10 secundarias). El fabricante publica cifras diferentes de 12 y 16 canales para el grabador; confirmá la versión exacta antes de comprar.</p><div class="inline-actions"><a class="secondary" href="https://reolink.com/product/rlc-810wa/" target="_blank" rel="noopener">Ficha oficial de cámara ↗</a><a class="secondary" href="https://reolink.com/product/rln12w/" target="_blank" rel="noopener">Ficha oficial del grabador ↗</a></div><p class="subhead">Alternativa: RLC-510WA, 5 MP y alimentación de 12 V. Esta selección no acredita resistencia a salitre ni integración ya probada en el barco. Verificá instalación eléctrica y cobertura Wi-Fi a bordo.</p><h2 class="section-gap">Lo solicitado en la grabación</h2><p>Acceso por barco para personas autorizadas, monitoreo desde teléfono, tablet o TV y consulta de grabaciones anteriores.</p><p class="subhead">También se mencionan conexión inalámbrica, alimentación de 12 V y una cámara portátil para asistencia durante trabajos. La compatibilidad con esas opciones queda pendiente del modelo de hardware; no se da por resuelta.</p></section>`;
 }
@@ -463,7 +569,7 @@ async function renderCrew() {
     users = await api("users");
     if (view !== "crew") return;
     $("#content").innerHTML =
-      `<div class="toolbar">${action("newUser", "＋ Crear acceso", "", "primary")}${action("changeAccess", "Cambiar acceso a un barco")}</div><p class="subhead">El administrador gestiona los accesos. Capitán y marinero pueden registrar operaciones; el lector solo consulta. Cada cuenta ve únicamente sus barcos asignados.</p><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Usuario</th><th>Accesos</th></tr></thead><tbody>${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${u.admin ? "Administrador · todos los barcos" : u.boats.map((b) => `${esc(boats.find((x) => x.id === b.boat_id)?.name || "Barco")} · ${esc(b.role)}`).join("<br>") || "Sin acceso"}</td></tr>`).join("")}</tbody></table></div>`;
+      `<div class="toolbar">${action("newUser", "＋ Crear acceso", "", "primary")}${action("changeAccess", "Cambiar acceso a un barco")}</div><p class="subhead">Actualmente Gustavo es el único administrador y responsable de modificar la aplicación. Los accesos para capitán, marinero, lector o encargado se crearán más adelante, cuando corresponda; la tripulación no tendrá acceso a cámaras.</p><div class="table-wrap"><table><thead><tr><th>Persona</th><th>Usuario</th><th>Accesos</th></tr></thead><tbody>${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${u.admin ? "Administrador · todos los barcos" : u.boats.map((b) => `${esc(boats.find((x) => x.id === b.boat_id)?.name || "Barco")} · ${esc(b.role)}`).join("<br>") || "Sin acceso"}</td></tr>`).join("")}</tbody></table></div>`;
   } catch (err) {
     $("#content").innerHTML = empty(esc(err.message));
   }
@@ -482,17 +588,17 @@ function openEditor(type, obj = {}) {
     html = "";
   if (type === "product") {
     title = obj.id ? "Editar insumo" : "Agregar repuesto o insumo";
-    html = `<div class="form-grid">${field("Nombre", "name", obj.name, "text", 'required maxlength="140"')}${select("Categoría", "category", categories, obj.category || "Repuestos")}${select("Sistema", "system", systems, obj.system || "General")}${field("Equipo / modelo compatible", "equipment", obj.equipment)}${field("Código o referencia", "code", obj.code)}${field("Ubicación a bordo", "location", obj.location, "text", 'required placeholder="Ej.: pañol de proa · caja 2"')}${field("Especificaciones y medidas", "specs", obj.specs, "text", 'placeholder="Diámetro interior, material, modelo…"')}${select("Unidad", "unit", ["un", "m", "L", "kg", "juego"], obj.unit || "un")}${field(obj.id ? "Stock actual (se ajusta en movimientos)" : "Cantidad contada a bordo", "current", obj.current ?? "", "number", `required min="0" step="0.0001" ${obj.id ? "readonly" : ""}`)}${field("Stock mínimo", "min", obj.min ?? 0, "number", 'required min="0" step="0.0001"')}${field("Objetivo de reposición", "target", obj.target ?? 0, "number", 'required min="0" step="0.0001"')}${field("Costo unitario (" + state.boat.currency + ")", "cost", obj.cost ?? 0, "number", 'required min="0" step="0.01"')}${field("Proveedor / contacto", "supplier", obj.supplier)}<label>Foto del repuesto<input name="photo" type="file" accept="image/*"><small>Opcional. Sirve para identificarlo; no se deducen cantidades de la imagen.</small></label></div>`;
+    html = `<div class="form-grid">${field("Nombre", "name", obj.name, "text", 'required maxlength="140"')}${select("Categoría", "category", categories, obj.category || (obj.system === "Botiquín" ? "Botiquín" : "Repuestos"))}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Equipo / modelo compatible", "equipment", obj.equipment)}${field("Código o referencia", "code", obj.code)}${field("Ubicación a bordo", "location", obj.location, "text", 'required placeholder="Ej.: pañol de proa · caja 2"')}${field("Especificaciones y medidas", "specs", obj.specs, "text", 'placeholder="Diámetro interior, material, modelo…"')}${select("Unidad", "unit", ["un", "m", "L", "kg", "juego"], obj.unit || "un")}${field(obj.id ? "Stock actual (se ajusta en movimientos)" : "Cantidad contada a bordo", "current", obj.current ?? "", "number", `required min="0" step="0.0001" ${obj.id ? "readonly" : ""}`)}${field("Stock mínimo", "min", obj.min ?? 0, "number", 'required min="0" step="0.0001"')}${field("Objetivo de reposición", "target", obj.target ?? 0, "number", 'required min="0" step="0.0001"')}${field("Fecha de vencimiento", "expiryDate", obj.expiryDate || "", "date")}${field("Costo unitario (" + state.boat.currency + ")", "cost", obj.cost ?? 0, "number", 'required min="0" step="0.01"')}${field("Proveedor / contacto", "supplier", obj.supplier)}<label>Foto del repuesto o artículo<input name="photo" type="file" accept="image/*"><small>Opcional. Sirve para identificarlo; no se deducen cantidades de la imagen.</small></label></div>`;
   }
   if (type === "task") {
     title = obj.id ? "Editar tarea" : "Nueva tarea o rutina";
-    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systems, obj.system || "General")}${field("Responsable asignado", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Repetir cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Vacío: sin repetición por fecha"')}${field("Repetir cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}</div><p class="hint">Los intervalos los define el responsable según el equipo. Una tarea con fecha y horas vence cuando se alcanza cualquiera de los dos límites.</p>`;
+    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Responsable asignado", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Frecuencia: cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Ej.: 7"')}${field("Frecuencia: cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}${area("Observaciones", "observation", obj.observation, 'class="full"')}<label class="full">Foto de referencia<input name="taskPhoto" type="file" accept="image/*"><small>Opcional. La foto queda en la tarea; al realizarla se pueden adjuntar hasta 3 fotos nuevas.</small></label></div><p class="hint">Si configurás una frecuencia, la tarea se reprograma al completarla. Si llega la fecha o las horas sin realizarse, aparece con bandera roja.</p>`;
   }
   if (type === "log") {
     const t = obj.taskId ? state.tasks.find((t) => t.id === obj.taskId) : null;
     title = t ? "Completar tarea" : "Registrar trabajo a bordo";
     editing.taskId = t?.id || "";
-    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Inspección", "Observación"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systems, t?.system || "General")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", t?.equipmentId ? (eq(t.equipmentId)?.hours ?? "") : "", "number", 'min="0" step="0.1"')}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label></div>`;
+    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systemOptions(t?.system), t?.system || "Motor babor")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", t?.equipmentId ? (eq(t.equipmentId)?.hours ?? "") : "", "number", 'min="0" step="0.1"')}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label></div>`;
   }
   if (type === "purchase") {
     title = "Registrar compra";
@@ -512,7 +618,7 @@ function openEditor(type, obj = {}) {
   }
   if (type === "equipment") {
     title = obj.id ? "Actualizar equipo" : "Agregar equipo";
-    html = `<div class="form-grid">${field("Nombre del equipo", "name", obj.name, "text", 'required placeholder="Ej.: motor de babor"')}${select("Sistema", "system", systems, obj.system || "Motores de propulsión")}${field("Marca y modelo", "model", obj.model)}${field("Horas actuales", "hours", obj.hours ?? 0, "number", 'required min="0" step="0.1"')}</div><p class="hint">Para distinguir varios motores, usá un nombre propio por equipo. Las horas no pueden disminuir.</p>`;
+    html = `<div class="form-grid">${field("Nombre del equipo", "name", obj.name, "text", 'required placeholder="Ej.: motor de babor"')}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Marca y modelo", "model", obj.model)}${field("Horas actuales", "hours", obj.hours ?? 0, "number", 'required min="0" step="0.1"')}</div><p class="hint">Motor babor y motor estribor se registran por separado. Las horas no pueden disminuir.</p>`;
   }
   if (type === "boat") {
     title = "Ficha del barco";
@@ -526,6 +632,11 @@ function openEditor(type, obj = {}) {
     title = obj.id ? "Configurar cámara" : "Agregar cámara";
     html = `<div class="form-grid">${field("Nombre", "name", obj.name, "text", "required")}${field("Ubicación", "location", obj.location)}${field("Marca y modelo", "model", obj.model)}${field("Enlace del proveedor: vista en vivo", "live", obj.live, "url")}${field("Enlace del proveedor: grabaciones", "recordings", obj.recordings, "url")}${area("Características / observaciones", "notes", obj.notes, 'class="full"')}</div><p class="hint">No incluyas contraseñas ni tokens en los enlaces. Guardar estos datos no conecta ni verifica el video.</p>`;
   }
+  if (type === "manual") {
+    if (!privateAccess()) return;
+    title = "Editar manual de instrucciones";
+    html = `${area("Instrucciones para la tripulación", "content", state.manual?.content || "", 'class="full" rows="18"')}<p class="hint">Solo el administrador y las personas con permiso de Encargado pueden modificar este manual. Toda la tripulación puede consultarlo.</p>`;
+  }
   if (type === "user") {
     title = "Crear acceso de tripulación";
     html = `${field("Nombre", "name", "", "text", "required")}${field("Usuario", "username", "", "text", 'required autocomplete="off"')}${field("Contraseña inicial", "password", "", "password", 'required minlength="10" autocomplete="new-password"')}${select("Barco", "boat", boats, boatId)}${select(
@@ -535,6 +646,7 @@ function openEditor(type, obj = {}) {
         { id: "capitan", name: "Capitán · puede registrar operaciones" },
         { id: "marinero", name: "Marinero · puede registrar operaciones" },
         { id: "lector", name: "Lector · solo consulta" },
+        { id: "encargado", name: "Encargado · manual y cámaras" },
       ],
     )}<p class="hint">Entregá el usuario y la contraseña por un canal privado. No se envía ningún mensaje automáticamente.</p>`;
   }
@@ -548,13 +660,14 @@ function openEditor(type, obj = {}) {
       { id: "capitan", name: "Capitán" },
       { id: "marinero", name: "Marinero" },
       { id: "lector", name: "Solo lectura" },
+      { id: "encargado", name: "Encargado · manual y cámaras" },
       { id: "sin_acceso", name: "Quitar acceso a este barco" },
     ])}`;
   }
   if (type === "detail") {
     title = obj.name;
     $("#saveButton").hidden = true;
-    html = `${obj.photo ? `<div class="attachments"><img src="${esc(obj.photo)}" alt="${esc(obj.name)}"></div>` : ""}<div class="detail-grid section-gap"><p><small>Ubicación</small><br>${esc(obj.location)}</p><p><small>Sistema / equipo</small><br>${esc(obj.system)} · ${esc(obj.equipment)}</p><p><small>Medidas y especificaciones</small><br>${esc(obj.specs || "Sin especificar")}</p><p><small>Código / referencia</small><br>${esc(obj.code || "Sin especificar")}</p><p><small>Stock disponible</small><br>${obj.current} ${esc(obj.unit)}</p><p><small>Proveedor</small><br>${esc(obj.supplier || "Sin proveedor")}</p><p><small>Costo unitario</small><br>${money(obj.cost)}</p></div>`;
+    html = `${obj.photo ? `<div class="attachments"><img src="${esc(obj.photo)}" alt="${esc(obj.name)}"></div>` : ""}<div class="detail-grid section-gap"><p><small>Ubicación</small><br>${esc(obj.location)}</p><p><small>Sistema / equipo</small><br>${esc(obj.system)} · ${esc(obj.equipment)}</p><p><small>Medidas y especificaciones</small><br>${esc(obj.specs || "Sin especificar")}</p><p><small>Código / referencia</small><br>${esc(obj.code || "Sin especificar")}</p><p><small>Stock disponible</small><br>${obj.current} ${esc(obj.unit)} · ${stockBadge(obj)}</p><p><small>Fecha de vencimiento</small><br>${obj.expiryDate ? date(obj.expiryDate) : "Sin vencimiento cargado"}</p><p><small>Proveedor</small><br>${esc(obj.supplier || "Sin proveedor")}</p><p><small>Costo unitario</small><br>${money(obj.cost)}</p></div>`;
   }
   if (type === "logDetail") {
     title = "Detalle del trabajo";
@@ -683,6 +796,7 @@ $("#editorForm").onsubmit = async (event) => {
         target: R.number(d.target, "Objetivo"),
         cost: R.number(d.cost, "Costo"),
         supplier: d.supplier,
+        expiryDate: d.expiryDate || "",
         photo: obj.photo || "",
       };
       if (!p.name || !p.location)
@@ -740,8 +854,12 @@ $("#editorForm").onsubmit = async (event) => {
         intervalDays,
         intervalHours,
         description: d.description,
+        observation: d.observation,
+        photo: obj.photo || "",
         done: obj.done || false,
       };
+      const taskFile = form.elements.taskPhoto.files[0];
+      if (taskFile) task.photo = await photo(taskFile);
       const i = next.tasks.findIndex((x) => x.id === id);
       if (i >= 0) next.tasks[i] = task;
       else next.tasks.push(task);
@@ -831,6 +949,8 @@ $("#editorForm").onsubmit = async (event) => {
           nextHours: "",
           intervalDays: 0,
           intervalHours: 0,
+          observation: "",
+          photo: "",
           done: false,
         });
     } else if (type === "purchase") {
@@ -913,6 +1033,7 @@ $("#editorForm").onsubmit = async (event) => {
         currency: d.currency,
       });
     } else if (type === "camera") {
+      if (!privateAccess()) throw new Error("No tenés acceso a cámaras.");
       for (const key of ["live", "recordings"])
         if (d[key] && !safeUrl(d[key]))
           throw new Error(
@@ -931,6 +1052,14 @@ $("#editorForm").onsubmit = async (event) => {
       const i = next.cameras.findIndex((c) => c.id === id);
       if (i >= 0) next.cameras[i] = c;
       else next.cameras.push(c);
+    } else if (type === "manual") {
+      if (!privateAccess())
+        throw new Error("Solo una persona autorizada puede editar el manual.");
+      next.manual = {
+        content: d.content,
+        updatedAt: new Date().toISOString(),
+        updatedBy: session.name,
+      };
     } else if (type === "newBoat") {
       const boat = await api("boats", "POST", d);
       boats = await api("boats");
@@ -1016,6 +1145,9 @@ function validateBackup(s) {
       !l.date
     )
       throw new Error("El historial del respaldo está incompleto.");
+  for (const t of s.tasks)
+    if (!t.title || (t.photo && !safePhoto(t.photo)))
+      throw new Error("Hay una tarea incompleta o con una foto inválida.");
   for (const p of s.purchases)
     if (!Array.isArray(p.lines))
       throw new Error("Las compras del respaldo están incompletas.");
@@ -1079,6 +1211,9 @@ document.addEventListener("click", async (event) => {
       case "newProduct":
         openEditor("product");
         break;
+      case "newFirstAid":
+        openEditor("product", { system: "Botiquín", category: "Botiquín" });
+        break;
       case "editProduct":
         openEditor(
           "product",
@@ -1094,6 +1229,38 @@ document.addEventListener("click", async (event) => {
       case "newTask":
         openEditor("task");
         break;
+      case "addTemplates": {
+        const next = structuredClone(state);
+        const existing = new Set(
+          next.tasks.map((t) => `${t.system}\n${t.title}`.toLocaleLowerCase()),
+        );
+        let added = 0;
+        for (const template of taskTemplates) {
+          const key = `${template.system}\n${template.title}`.toLocaleLowerCase();
+          if (existing.has(key)) continue;
+          next.tasks.push({
+            id: uid(),
+            ...template,
+            assignee: "",
+            equipmentId:
+              next.boat.equipment.find((e) => e.system === template.system)?.id || "",
+            nextDate: "",
+            nextHours: "",
+            intervalDays: 0,
+            intervalHours: 0,
+            description: "",
+            observation: "",
+            photo: "",
+            done: false,
+          });
+          existing.add(key);
+          added++;
+        }
+        if (!added) return toast("Las tareas específicas ya están cargadas.");
+        await commit(next);
+        toast(`${added} tareas agregadas. Definí la frecuencia y próxima fecha de cada una.`);
+        break;
+      }
       case "editTask":
         openEditor(
           "task",
@@ -1136,6 +1303,21 @@ document.addEventListener("click", async (event) => {
       case "goLog":
         navigate("log");
         break;
+      case "togglePanelTasks":
+        panelTasksExpanded = !panelTasksExpanded;
+        renderPanel();
+        break;
+      case "togglePanelLogs":
+        panelLogsExpanded = !panelLogsExpanded;
+        renderPanel();
+        break;
+      case "markActivityRead": {
+        const newestActivityId = Math.max(0, ...activity.map((item) => Number(item.id) || 0));
+        localStorage.setItem(activityStorageKey(), String(newestActivityId));
+        unseenActivity = [];
+        render();
+        break;
+      }
       case "pendingTasks":
         filter.status = "";
         renderTasks();
@@ -1164,6 +1346,9 @@ document.addEventListener("click", async (event) => {
           "camera",
           state.cameras.find((c) => c.id === id),
         );
+        break;
+      case "editManual":
+        openEditor("manual");
         break;
       case "newUser":
         openEditor("user");
@@ -1231,6 +1416,8 @@ document.addEventListener("click", async (event) => {
         break;
       }
       case "logout":
+        clearInterval(activityTimer);
+        activityTimer = undefined;
         await api("logout", "POST", {});
         state = null;
         await startup();

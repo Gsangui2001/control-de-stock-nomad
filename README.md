@@ -5,7 +5,7 @@ combustible, amarre/marina/permisos, y otros gastos operativos (tripulación, li
 foto de factura adjunta. Pensada para usarse desde el **celular** — simple, rápida, botones grandes.
 Es una **PWA** (se instala en la pantalla de inicio, sin App Store ni Google Play).
 
-> KPI: que Boris cargue un gasto **en segundos**, con foto de la factura, sin renegar.
+> KPI: que Gustavo cargue un gasto **en segundos**, con foto de la factura, sin renegar.
 
 Este repo es independiente del CRM de Nomad Sailors (`github.com/Gsangui2001/Nomad`), pero **usa la
 misma base de Supabase** — ver la sección de Supabase más abajo y `docs/111-nomade-gastos-de-flota.md`
@@ -96,8 +96,8 @@ del repo del CRM, no de este repo.
    update boat_expense_users set role = 'admin'
    where id = (select id from auth.users where email = 'vos@ejemplo.com');
    ```
-   Volvé a entrar y ya tenés todos los permisos. A Boris se le asigna `gestor` del mismo modo (que
-   ya es el default).
+   Volvé a entrar y ya tenés todos los permisos. Los demás usuarios se crearán y recibirán su rol
+   más adelante; `gestor` es el rol predeterminado para una cuenta nueva.
 
 > La app funciona igual con o sin Supabase: la lógica de negocio vive en `lib/domain/` y la
 > comparten el modo demo y el modo Supabase.

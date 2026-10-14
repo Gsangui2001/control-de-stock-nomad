@@ -15,6 +15,8 @@ Las fotos se guardan individualmente con acceso autenticado; los respaldos desca
 
 Gastos conserva su acceso anterior por Supabase. Gastronomía conserva almacenamiento local del navegador y no se sincroniza entre dispositivos. Cámaras contiene selección de equipos de 12 V y enlaces del proveedor; no se conectó hardware ni se verificó video real.
 
+Actualmente Gustavo es la única cuenta administradora y la única persona con acceso asignado. Los demás usuarios se crearán más adelante. El permiso `encargado` queda disponible únicamente para una futura persona expresamente autorizada; es el único rol no administrador que puede gestionar el manual de instrucciones y las cámaras. Capitán, marinero y lector no reciben el contenido de cámaras en la API.
+
 ## Validación
 
 Compilación Next y TypeScript; pruebas HTTP contra la base real con cuenta y barco temporales: inicio/cierre de sesión, guardado y lectura, fotos privadas, conflicto de revisión, aislamiento por barco y bloqueo de escritura para lector. Revisión de escritorio y móvil en navegador. Los datos temporales deben retirarse al terminar.

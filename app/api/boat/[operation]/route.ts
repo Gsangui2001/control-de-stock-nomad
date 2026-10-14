@@ -8,9 +8,9 @@ export const maxDuration = 30;
 class ApiError extends Error { constructor(public status:number, message:string){super(message);} }
 const hash = (value:string) => createHash('sha256').update(value).digest('hex');
 const passwordHash = (password:string, salt=randomBytes(16).toString('hex')) => salt+':'+pbkdf2Sync(password,salt,310000,32,'sha256').toString('hex');
-const emptyState = (name:string) => ({schema:1,boat:{name,model:'',currency:'USD',equipment:[]},products:[],tasks:[],logs:[],movements:[],purchases:[],cameras:[]});
+const emptyState = (name:string) => ({schema:1,boat:{name,model:'',currency:'USD',equipment:[]},products:[],tasks:[],logs:[],movements:[],purchases:[],cameras:[],manual:{content:'',updatedAt:'',updatedBy:''}});
 const required = (value:unknown,max=140):string => { if(typeof value!=='string'||!value.trim()||value.length>max)throw new ApiError(400,'Completá los campos requeridos.');return value.trim(); };
-const roles=['capitan','marinero','lector'];
+const roles=['capitan','marinero','lector','encargado'];
 function validateState(s:any,boat:string) {
  if(!s||s.schema!==1||!s.boat)throw new ApiError(400,'Formato de respaldo inválido.');
  required(s.boat.name);
@@ -24,7 +24,12 @@ function validateState(s:any,boat:string) {
  for(const p of s.products){required(p.name);if(typeof p.unit!=='string'||['current','min','cost'].some(k=>!number(p[k]))||(p.photo&&!photo(p.photo)))throw new ApiError(400,'Insumo inválido.');}
  for(const l of s.logs)if(typeof l.title!=='string'||typeof l.date!=='string'||!Array.isArray(l.lines)||!Array.isArray(l.photos)||l.photos.some((v:any)=>!photo(v)))throw new ApiError(400,'Trabajo inválido.');
  for(const p of s.purchases)if(!Array.isArray(p.lines)||typeof p.date!=='string')throw new ApiError(400,'Compra inválida.');
- for(const t of s.tasks)if(typeof t.title!=='string')throw new ApiError(400,'Tarea inválida.');
+ for(const t of s.tasks)if(typeof t.title!=='string'||(t.photo&&!photo(t.photo)))throw new ApiError(400,'Tarea inválida.');
+}
+function stateForRole(result:any, admin:boolean, role=result.role) {
+ const visible=structuredClone(result);
+ if(!admin&&role!=='encargado')visible.state.cameras=[];
+ return visible;
 }
 async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
  const json=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -64,19 +69,24 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   if(op==='boats'&&method==='GET')return json(await rpc('boats'));
   if(op==='boats'&&method==='POST'){const name=required(body.name);return json(await rpc('boat_create',{id:randomBytes(16).toString('hex'),name,state:emptyState(name)}),201);}
   if(op==='users'&&method==='GET')return json(await rpc('users'));
+  if(op==='activity'&&method==='GET')return json(await rpc('activity',{boat}));
   if(op==='users'&&method==='POST'){
    const name=required(body.name), username=required(body.username).toLowerCase(),password=(required(body.password,1024),body.password as string);
    if(password.length<10||!roles.includes(body.role))throw new ApiError(400,'Usá una contraseña de al menos 10 caracteres y seleccioná un rol.');
    return json(await rpc('user_create',{boat,id:randomBytes(16).toString('hex'),name,username,password:passwordHash(password),role:body.role}),201);
   }
   if(op==='access'&&method==='POST'){if(![...roles,'sin_acceso'].includes(body.role))throw new ApiError(400,'Rol inválido.');return json(await rpc('access',{boat,user:required(body.user),role:body.role}));}
-  if(op==='state'&&method==='GET')return json(await rpc('state_get',{boat}));
+  if(op==='state'&&method==='GET')return json(stateForRole(await rpc('state_get',{boat}),auth.user.admin));
   if(op==='state'&&method==='PUT'){
-   validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
    const before=await rpc('state_get',{boat});
+   if(!auth.user.admin&&before.role!=='encargado'){
+    body.state.cameras=before.state.cameras;
+    body.state.manual=before.state.manual??{content:'',updatedAt:'',updatedBy:''};
+   }
+   validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
    const logs=new Map<string,any>(before.state.logs.map((l:any)=>[l.id,l]));
    for(const l of body.state.logs){const old=logs.get(l.id);l.recordedBy=old?.recordedBy??auth.user.name;l.recordedAt=old?.recordedAt??new Date().toISOString();}
-   return json(await rpc('state_put',{boat,state:body.state,revision:body.revision}));
+   return json(stateForRole(await rpc('state_put',{boat,state:body.state,revision:body.revision}),auth.user.admin,before.role));
   }
   if(op==='photos'&&method==='POST'){
    const data=body.data;

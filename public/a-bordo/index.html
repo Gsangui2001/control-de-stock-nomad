@@ -9,7 +9,7 @@
       href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%23102b3c%27/%3E%3Ctext x=%2710%27 y=%2746%27 font-size=%2750%27 fill=%27%2382d8d3%27%3E≈%3C/text%3E%3C/svg%3E"
     />
     <title>A bordo · Control del barco</title>
-    <link rel="stylesheet" href="styles.css?v=cloud-1" />
+    <link rel="stylesheet" href="styles.css?v=barco-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -25,20 +25,21 @@
           <button data-view="panel" class="active">
             ◫ <span>Resumen</span>
           </button>
+          <button data-view="manual" class="manual-nav">
+            ☰ <span>Manual de instrucciones</span>
+          </button>
           <button data-view="stock">▦ <span>Inventario</span></button>
-          <button data-view="tasks">✓ <span>Tareas y rutinas</span></button>
-          <button data-view="log">≡ <span>Bitácora</span></button>
           <button data-view="purchases">
             ＋ <span>Compras y movimientos</span>
           </button>
-          <button data-view="cameras">◉ <span>Cámaras</span></button>
+          <button data-view="cameras" data-private>◉ <span>Cámaras</span></button>
           <button data-view="crew">♙ <span>Tripulación</span></button>
-          <a class="expenses-link" href="/gastos">$ Gastos de flota ↗</a><button data-view="food">▤ <span>Gastronomía</span></button>
+          <button data-view="food">▤ <span>Gastronomía</span></button>
           <button data-view="settings">⚙ <span>Barco y respaldo</span></button>
         </nav>
         <div class="sidebar-foot">
-          <span class="dot"></span> Datos guardados en la nube<small
-            >Exportá un respaldo para conservar una copia.</small
+          <span class="dot"></span> Datos guardados en el servidor<small
+            >Exportá un respaldo para conservar una copia adicional.</small
           >
         </div>
       </aside>
@@ -82,7 +83,7 @@
       </form>
     </dialog>
     <div id="toast" role="status"></div>
-    <script src="boat-rules.js?v=cloud-1"></script>
-    <script src="app.js?v=cloud-1"></script>
+    <script src="boat-rules.js?v=barco-2"></script>
+    <script src="app.js?v=barco-4"></script>
   </body>
 </html>

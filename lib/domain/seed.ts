@@ -22,7 +22,7 @@ function e(
     category,
     amountUsd,
     expenseDate: dateOnly(offsetDays),
-    createdBy: "Boris",
+    createdBy: "Gustavo",
     createdAt: iso(offsetDays),
     updatedAt: iso(offsetDays),
     ...extra,
