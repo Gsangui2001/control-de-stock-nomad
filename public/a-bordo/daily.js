@@ -55,9 +55,23 @@ function dayStockItems(query = "") {
   $("#dayStockList").innerHTML = state.products.filter(p => [p.name, p.location, p.system, p.specs].join(" ").toLocaleLowerCase().includes(q)).map(p => `<article class="day-inventory"><div class="day-card-heading"><div><h2>${esc(p.name)}</h2><p class="day-muted">${esc(p.location || "Sin ubicación cargada")}</p><small>${esc(p.system)}</small></div><strong>${p.current} ${esc(p.unit)}</strong></div>${stockBadge(p)}${p.expiryDate ? `<p class="day-muted">Vencimiento: ${date(p.expiryDate)}</p>` : ""}<div class="day-actions">${dayButton("missing", "Avisar que hace falta", p.id, "day-text")}${action("showProduct", "Ver detalle", p.id, "text-btn")}</div></article>`).join("") || empty(q ? "No hay insumos con esa búsqueda." : "Todavía no hay insumos cargados. No se muestran cantidades de ejemplo.");
   if (!writable()) document.querySelectorAll('[data-day="missing"]').forEach(b => b.hidden = true);
 }
+function dayManualSections(content) {
+  const sections = [[]];
+  let sectionNumber = 0;
+  for (const line of content.split("\n")) {
+    const heading = line.match(/^(\d+)\. (.+)$/);
+    // Preserve numbered lists inside a chapter, including the daily checklist.
+    if (heading && Number(heading[1]) >= sectionNumber && !/[.!?:;]$/.test(heading[2])) {
+      sectionNumber = Number(heading[1]);
+      sections.push([]);
+    }
+    sections[sections.length - 1].push(line);
+  }
+  return sections.filter(lines => lines.length).map(lines => lines.join("\n"));
+}
 function dayManual() {
   const content = state.manual?.content || "El manual todavía no tiene contenido.";
-  const sections = content.split(/\n(?=\d+\. [A-ZÁÉÍÓÚÑ])/);
+  const sections = dayManualSections(content);
   return `${dayBack()}<p class="day-eyebrow">PARA CONSULTAR</p><h1>Manual de instrucciones</h1><p class="day-muted">La referencia de trabajo a bordo.</p>${sections.map((section, i) => { const lines = section.split("\n"); const title = lines.shift(); return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
 }
 function dayUpdates() {
