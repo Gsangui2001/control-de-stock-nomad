@@ -1,0 +1,10 @@
+const assert=require('assert/strict'),rules=require('../public/a-bordo/stock-alerts');
+for(const product of [null,{}, {current:null,min:4},{current:'',min:4},{current:-1,min:4},{current:6,min:4},{current:1,min:0}])assert.equal(rules.level(product),0);
+assert.equal(rules.level({current:4,min:4}),1);
+assert.equal(rules.level({current:0.5,min:4}),1);
+assert.equal(rules.level({current:0,min:0}),2);
+assert.equal(rules.level({current:0,min:4}),2);
+assert.equal(rules.body('stock_minimo',{name:'Arroz',current:2,min:3,unit:'kg'}),'Arroz: quedan 2 kg. Mínimo: 3 kg.');
+assert.equal(rules.body('stock_agotado',{name:'Jabón',current:0,unit:'u'}),'Jabón: sin existencias registradas (0 u).');
+assert.equal(rules.isAlert('stock_minimo'),true);assert.equal(rules.isAlert('stock_consume'),false);
+console.log('PASS: unknown counts, undefined minimums, exact threshold, zero stock and notification quantities');

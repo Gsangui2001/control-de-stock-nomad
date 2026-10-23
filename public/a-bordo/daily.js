@@ -116,6 +116,7 @@ function dayManualAppGuide(selected) {
     ]
   };
   if (!steps[selected]) return "";
+  steps[selected].push("En Mi día revisá los faltantes de stock. Los avisos aparecen al llegar al mínimo definido y al agotarse un insumo. Registrá cada consumo y recepción para mantenerlos actualizados. En Notificaciones → Activar en este teléfono habilitá los avisos; en iPhone, abrí A bordo desde su icono en la pantalla de inicio. Administración define los mínimos reales en Inventario.");
   return `<section class="day-note"><h2>Cómo usar A bordo · ${esc(dayRoleName(selected))}</h2><ol>${steps[selected].map(step => `<li>${esc(step)}</li>`).join("")}</ol><p>Ante una urgencia, contactá directamente al capitán o a administración. Registrar un aviso no garantiza que alguien lo haya leído.</p></section>`;
 }
 function dayManualBody() {
