@@ -9,7 +9,21 @@ Desde Mi día → Fotos y listas, o Stock y pedidos → Cargar foto o lista:
 
 Un conteo reemplaza solamente las cantidades de los productos incluidos. Una compra recibida suma stock y gasto en una transacción. Si la recepción ya se registró desde Pedidos, usar gasto sin entrada de stock. Registrar consumo una sola vez, desde Stock o como material utilizado en un trabajo.
 
-Gastos e inventario muestra totales separados por moneda y permite descargar CSV. El valor estimado de existencias usa precios unitarios confirmados en la moneda del barco. No convierte monedas ni declara pagado un comprobante. No concilia automáticamente el CRM.
+Control de gastos y pagos muestra totales separados por moneda y permite descargar gastos y pagos en CSV. El valor estimado de existencias usa precios unitarios confirmados en la moneda del barco. No convierte monedas ni concilia automáticamente el CRM.
+
+## Control del gasto y de los pagos
+
+La tripulación adjunta comprobantes desde Fotos y listas. Las cargas pendientes de revisión se muestran como aviso y todavía no integran los totales. Cuando administración confirma un gasto, aparece inicialmente **sin revisar su situación de pago**; eso no significa que esté impago.
+
+En Mi día → Gastos → Ver gasto y pagos, administración/encargado:
+
+1. Registra los pagos ya realizados: importe en la moneda del comprobante, fecha real, quién pagó/cuenta de origen, medio, referencia y foto opcional. Admite pagos parciales. No ejecuta pagos ni transferencias.
+2. Revisa el gasto y los pagos anteriores; completa categoría, vencimiento real si existe y notas. Al confirmar la revisión, el saldo pasa a pendiente confirmado, parcial o pagado. No se inventan fechas de vencimiento.
+3. Si hay un error, anula el **registro** de pago indicando motivo. Se conserva el historial y se reabre la revisión. La anulación no devuelve dinero.
+
+El resumen filtra por fecha del gasto, proveedor/comprobante, categoría y estado. Los pagos del resumen son los vinculados a esos gastos, aunque se hayan realizado en otra fecha. El CSV de pagos conserva las fechas reales de pago y los registros anulados identificados. No es un estado de cuenta bancario. Los vencidos requieren vencimiento definido, saldo positivo y revisión confirmada.
+
+Se bloquean pagos mayores al saldo, monedas incompatibles, reenvíos duplicados y modificaciones simultáneas con datos desactualizados. Un cambio posterior en los datos del gasto exige revisar nuevamente la situación de pago. Los respaldos incluyen controles, pagos e historial, y rechazan restauraciones que los perderían.
 
 ## Lectura y configuración
 

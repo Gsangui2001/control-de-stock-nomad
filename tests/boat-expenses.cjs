@@ -1,0 +1,12 @@
+const assert=require('assert/strict'),R=require('../public/a-bordo/expense-rules');
+const expense=(id,total,currency='USD')=>({id,date:'2026-10-23',supplier:'Proveedor QA',reference:id,total,currency});
+const data={currency:'USD',expenses:[expense('one',10),expense('two',5,'EUR'),expense('three',0.3)],controls:[],payments:[]};
+let rows=R.rows(data,'2026-10-23');assert.equal(rows[0].status,'unreviewed');assert.equal(R.totals(rows).USD.pending,0);assert.equal(R.totals(rows).USD.unreviewed,1030);
+data.controls=[{expense_id:'one',reviewed:true,category:'cocina',due_date:'2026-10-22',expense_snapshot:{...data.expenses[0]}}];
+data.payments=[{expense_id:'one',amount:3,currency:'USD'},{expense_id:'one',amount:2,currency:'USD',voided_at:'2026-10-23'},{expense_id:'three',amount:0.1,currency:'USD'},{expense_id:'three',amount:0.2,currency:'USD'}];
+rows=R.rows(data,'2026-10-23');assert.equal(rows[0].status,'partial');assert.equal(rows[0].remainingCents,700);assert.equal(rows[0].overdue,true);assert.equal(rows[2].remainingCents,0);assert.equal(rows[2].status,'unreviewed');
+assert.equal(R.totals(rows).USD.expense,1030);assert.equal(R.totals(rows).USD.paid,330);assert.equal(R.totals(rows).USD.pending,700);assert.equal(R.totals(rows).EUR.expense,500);
+assert.equal(R.filter(rows,{category:'cocina',status:'overdue'}).length,1);assert.equal(R.filter(rows,{from:'2026-10-24'}).length,0);
+data.expenses[0].total=11;assert.equal(R.rows(data,'2026-10-23')[0].status,'changed');assert.equal(R.totals(R.rows(data,'2026-10-23')).USD.pending,0);
+assert.ok(R.csv([[' =SUM(1)', 'A,"B"',0]]).includes('"\' =SUM(1)"'));assert.ok(R.csv([['A,"B"']]).includes('"A,""B"""'));
+console.log('PASS: unknown payment status, partial/void payments, exact cents, currency separation, overdue balances, filters, changed invoices, safe CSV');

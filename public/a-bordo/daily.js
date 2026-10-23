@@ -202,7 +202,7 @@ async function saveDayForm(event) {
 }
 document.addEventListener("click", async event => {
   const button = event.target.closest("[data-day]");
-  if (!button || !state || daySaving || (typeof intakeBusy !== "undefined" && intakeBusy) || (typeof opsBusy !== "undefined" && opsBusy)) return;
+  if (!button || !state || daySaving || (typeof expenseBusy !== "undefined" && expenseBusy) || (typeof intakeBusy !== "undefined" && intakeBusy) || (typeof opsBusy !== "undefined" && opsBusy)) return;
   const page = button.dataset.day;
   try {
     if (page === "equipmentGroup") { dayEquipmentGroup = button.dataset.id || ""; render(); return; }
@@ -231,6 +231,7 @@ document.addEventListener("click", async event => {
       await loadBoat(boatId);
     }
     if (button.dataset.id) daySelected = button.dataset.id;
+    if (page === "ops-expenses" && dayPage !== page) { expenseData = null; expenseError = ''; expenseSelected = ''; expenseForm = ''; }
     dayPage = page; navigate("day"); window.scrollTo(0, 0);
   } catch (err) { toast(err.message); }
   finally { button.disabled = false; }

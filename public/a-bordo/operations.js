@@ -72,7 +72,7 @@ renderDay=function(){
  if(!opsData&&!opsLoading&&!opsError)opsReload();
 };
 document.addEventListener('change',async event=>{
- if(event.target.id==='opsBoat'){opsData=null;await loadBoat(event.target.value);}
+ if(event.target.id==='opsBoat'){if(intakeBusy||expenseBusy){event.target.value=boatId;return;}opsData=null;await loadBoat(event.target.value);}
  if(event.target.id==='opsBackupFile'){
   try{
    const file=event.target.files[0];if(!file)return;if(file.size>3500000)throw Error('El respaldo supera el límite de restauración de 3,5 MB. Requiere recuperación asistida.');
@@ -115,19 +115,13 @@ document.addEventListener('submit',async event=>{
 });
 async function opsAfterSave(){const page=dayPage;await loadBoat(boatId);dayPage=page;await opsReload();}
 document.addEventListener('click',async event=>{
- const button=event.target.closest('[data-op]');if(!button||opsBusy)return;
+ const button=event.target.closest('[data-op]');if(!button||opsBusy||expenseBusy)return;
  const operation=button.dataset.op;opsBusy=true;button.disabled=true;
  try{
   if(operation==='request_product'){const p=state.products.find(p=>p.id===button.dataset.id);if(!p)throw Error('Insumo no disponible');opsRequestSeed={boat:boatId,name:p.name,unit:p.unit,area:p.area||'tecnica'};dayPage='ops-requests';render();return;}
-  if(operation==='export_expenses'){
-   const from=$('#intakeExpenseFrom')?.value||'',to=$('#intakeExpenseTo')?.value||'';
-   const rows=[['Fecha','Proveedor','Comprobante','Importe','Moneda','Registrado por'],...state.purchases.filter(p=>(!from||p.date>=from)&&(!to||p.date<=to)).map(p=>[p.date,p.supplier,p.reference,p.total,p.currency||state.boat.currency,p.recordedBy||''])];
-   const quote=value=>'"'+String(value??'').replace(/^[=+@-]/,match=>"'"+match).replaceAll('"','""')+'"';
-   const url=URL.createObjectURL(new Blob(['\uFEFF'+rows.map(row=>row.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
-   const link=document.createElement('a');link.href=url;link.download='gastos-'+state.boat.name+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
-  }
+  if(operation==='export_expenses'){expenseDownload();return;}
   if(operation==='backup'){opsDownloadBackup(await opsFetch('backup'),'respaldo');return;}
-  if(operation==='refresh'){if(dayPage==='ops-intake'){if($('#intakeReview'))intakeRead($('#intakeReview'));await opsAfterSave();intakeError='';await intakeReload();}else await opsReload();return;}
+  if(operation==='refresh'){if(dayPage==='ops-expenses'){if($('#expenseForm')){toast('Terminá o cancelá el formulario antes de actualizar.');return;}await opsAfterSave();await expenseReload();return;}if(dayPage==='ops-intake'){if($('#intakeReview'))intakeRead($('#intakeReview'));await opsAfterSave();intakeError='';await intakeReload();}else await opsReload();return;}
   if(operation==='export_requests'){
    const grouped=new Map();
    for(const row of opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status))){const k=[row.area,row.name.trim().toLowerCase(),row.unit].join('|');const item=grouped.get(k)||{area:row.area,name:row.name,unit:row.unit,quantity:0};item.quantity+=Number(row.quantity)-Number(row.received);grouped.set(k,item);}
