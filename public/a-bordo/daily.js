@@ -34,13 +34,13 @@ function dayTasks() {
     .sort((a, b) => Number(taskStatus(b) === "Vencido") - Number(taskStatus(a) === "Vencido") || (a.nextDate || "9999").localeCompare(b.nextDate || "9999"));
 }
 function dayTaskRow(t) {
-  return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : " · Sin fecha definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
+  return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : ""}${R.scheduleLabel(t) ? ` · ${esc(R.scheduleLabel(t))}` : " · Sin frecuencia definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
 }
 function dayHome() {
   const tasks = dayTasks(), overdue = tasks.filter(t => taskStatus(t) === "Vencido").length;
   const records = state.logs.filter(l => l.recordedById ? l.recordedById === session.id : (l.recordedBy || l.responsible) === session.name).slice().reverse().slice(0, 8);
   const tile = (page, icon, title, subtitle, primary = false) => `<button type="button" data-day="${page}" class="day-tile ${primary ? "primary-tile" : ""}">${dayIcon(icon)}<span>${title}<small>${subtitle}</small></span></button>`;
-  return `<p class="day-eyebrow">MI DÍA A BORDO</p><h1>Hola, ${esc(session.name.split(" ")[0])}.</h1><span class="day-role-label">${session.admin ? "Administración · todos los roles" : esc(dayRoleName(role))}</span><p class="day-muted">${tasks.length ? `${tasks.length} tareas pendientes. Vamos de a una.` : "No tenés tareas pendientes."}</p><div class="day-grid">${tile("tasks", "tasks", "Mis tareas", `${tasks.length} pendientes${overdue ? ` · ${overdue} vencidas` : ""}`, true)}${writable() ? tile("work", "plus", "Registrar trabajo", "Algo que ya hice") + tile("problem", "problem", "Avisar un problema", "Foto y comentario") : ""}${tile("stock", "stock", "Insumos", "Qué hay y dónde")}</div><h2 class="day-section">Primero lo pendiente</h2>${tasks.slice(0, 2).map(dayTaskRow).join("") || '<div class="day-note">No hay tareas pendientes para tu cuenta.</div>'}${tasks.length > 2 ? dayButton("tasks", `Ver las ${tasks.length} tareas`, "", "day-text") : ""}<div class="day-section">${dayButton("manual", dayIcon("book") + " Manual de instrucciones")}</div><details class="day-disclosure day-section"><summary>Mis últimos registros${records.length ? ` · ${records.length}` : ""}</summary>${records.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${l.reportKind ? "Aviso" : "Trabajo realizado"} · ${date(l.date)}</small></button>`).join("") || '<p class="day-muted">Tus trabajos y avisos aparecerán acá.</p>'}</details>`;
+  return `<p class="day-eyebrow">MI DÍA A BORDO</p><h1>Hola, ${esc(session.name.split(" ")[0])}.</h1><span class="day-role-label">${session.admin ? "Administración · todos los roles" : esc(dayRoleName(role))}</span><p class="day-muted">${tasks.length ? `${tasks.length} tareas pendientes. Vamos de a una.` : "No tenés tareas pendientes."}</p><div class="day-grid">${tile("tasks", "tasks", "Mis tareas", `${tasks.length} pendientes${overdue ? ` · ${overdue} vencidas` : ""}`, true)}${writable() ? tile("work", "plus", "Registrar trabajo", "Algo que ya hice") + tile("problem", "problem", "Avisar un problema", "Foto y comentario") : ""}${tile("ops-stock", "stock", "Stock y pedidos", "Qué hay, qué falta y qué llegó")}</div><h2 class="day-section">Primero lo pendiente</h2>${tasks.slice(0, 2).map(dayTaskRow).join("") || '<div class="day-note">No hay tareas pendientes para tu cuenta.</div>'}${tasks.length > 2 ? dayButton("tasks", `Ver las ${tasks.length} tareas`, "", "day-text") : ""}<div class="day-section">${dayButton("manual", dayIcon("book") + " Manual de instrucciones")}</div><details class="day-disclosure day-section"><summary>Mis últimos registros${records.length ? ` · ${records.length}` : ""}</summary>${records.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${l.reportKind ? "Aviso" : "Trabajo realizado"} · ${date(l.date)}</small></button>`).join("") || '<p class="day-muted">Tus trabajos y avisos aparecerán acá.</p>'}</details>`;
 }
 function dayPhotoFields() {
   return `<label class="day-photo-input">Agregar fotos<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. Podés usar la cámara o elegir de la galería.</small></label><div id="dayPhotoPreview" class="attachments" aria-live="polite"></div>`;
@@ -51,12 +51,12 @@ function dayWorkForm(kind) {
   const report = ["problem", "blocked", "missing"].includes(kind);
   if ((["task", "blocked"].includes(kind) && (!task || !dayOwnTask(task))) || (kind === "missing" && !product)) return dayBack() + empty("Este registro ya no está disponible.");
   const title = kind === "blocked" ? "No pude hacerla" : kind === "missing" ? "Pedir reposición" : report ? "¿Qué pasó?" : task ? task.title : "¿Qué trabajo hiciste?";
-  return `${dayBack()}<p class="day-eyebrow">${report ? "AVISO DEL BARCO" : task ? "MI TAREA" : "NUEVO REGISTRO"}</p><h1>${esc(title)}</h1>${task ? `<p class="day-muted">${esc(task.system)}${task.intervalDays ? ` · Cada ${task.intervalDays} días` : ""}${task.intervalHours ? ` · Cada ${task.intervalHours} horas` : ""}</p>${kind === "blocked" ? `<p>${esc(task.title)}</p>` : `${task.description ? `<div class="day-note">${esc(task.description)}</div>` : ""}${task.observation ? `<p>${esc(task.observation)}</p>` : ""}${task.photo ? `<img class="day-reference" src="${esc(task.photo)}" alt="Referencia de la tarea">` : ""}`}` : ""}${product ? `<div class="day-note"><strong>${esc(product.name)}</strong><br>Disponible: ${product.current} ${esc(product.unit)} · ${esc(product.location)}</div>` : ""}<form id="dayForm" data-kind="${kind}">
+  return `${dayBack()}<p class="day-eyebrow">${report ? "AVISO DEL BARCO" : task ? "MI TAREA" : "NUEVO REGISTRO"}</p><h1>${esc(title)}</h1>${task ? `<p class="day-muted">${esc(task.system)}${R.scheduleLabel(task) ? ` · ${esc(R.scheduleLabel(task))}` : ""}</p>${task.sourceRef ? `<p class="day-muted">Fuente: ${esc(task.sourceRef)}</p>` : ""}${task.lastCompleted ? `<p>Última realización registrada: ${date(task.lastCompleted)}.</p>` : (task.intervalDays || task.intervalMonths || task.routineCycle) ? `<p class="day-muted">Sin una realización inicial registrada. La próxima fecha se fija cuando guardes un trabajo real.</p>` : ""}${kind === "blocked" ? `<p>${esc(task.title)}</p>` : `${task.description ? `<div class="day-note">${esc(task.description)}</div>` : ""}${task.observation ? `<p>${esc(task.observation)}</p>` : ""}${task.photo ? `<img class="day-reference" src="${esc(task.photo)}" alt="Referencia de la tarea">` : ""}`}` : ""}${product ? `<div class="day-note"><strong>${esc(product.name)}</strong><br>Disponible: ${product.current} ${esc(product.unit)} · ${esc(product.location)}</div>` : ""}<form id="dayForm" data-kind="${kind}">
     ${!task && !report ? field("Trabajo realizado", "title", "", "text", 'required maxlength="140" placeholder="Ej.: Lavado del dinghy"') + select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"]) : ""}
     ${!task && !product ? `<label>¿Dónde?<select name="system" required>${options(systemOptions(), "", "Elegí el lugar o equipo")}</select></label>` : ""}
     <label>${kind === "blocked" ? "¿Qué te impidió hacerlo?" : report ? "Contanos qué hace falta o qué encontraste" : "Observaciones (opcional)"}<textarea name="notes" maxlength="5000" ${report ? "required" : ""} placeholder="${report ? "Escribí brevemente qué pasó." : "¿Algo para avisar o recordar?"}">${product ? `Hace falta reponer ${esc(product.name)}.` : ""}</textarea></label>
     ${dayPhotoFields()}
-    ${report ? '<label class="check"><input type="checkbox" name="urgent">Necesita atención urgente</label>' : `<details class="day-disclosure"><summary>¿Usaste algún material?</summary><p class="day-muted">Se descontará del inventario al guardar.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}</details>${task?.equipmentId ? `<div class="day-note">${esc(eq(task.equipmentId)?.name || "Equipo asignado")}${field("Horas del equipo al realizar el trabajo", "hours", "", "number", `${task.intervalHours ? "required" : ""} min="0" step="0.1" placeholder="Lectura del contador"`)}</div>` : ""}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}`}
+    ${report ? '<label class="check"><input type="checkbox" name="urgent">Necesita atención urgente</label>' : `<details class="day-disclosure"><summary>¿Usaste algún material?</summary><p class="day-muted">Se descontará del inventario al guardar.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}</details>${task?.equipmentId ? `<div class="day-note">${esc(eq(task.equipmentId)?.name || "Equipo asignado")}${field("Horas del equipo al realizar el trabajo", "hours", "", "number", `${task.intervalHours ? "required" : ""} min="0" step="0.1" placeholder="Lectura del contador"`)}</div>` : ""}${dayCycleField(task)}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}`}
     <p class="day-muted">Se registra con tu nombre: ${esc(session.name)}.</p><p id="dayError" class="form-error" role="alert"></p><button type="button" class="day-secondary" data-day="reloadDraft" id="dayReload" hidden>Actualizar datos y revisar el formulario</button>${writable() ? `<button type="submit" class="day-primary">${report ? "Enviar aviso" : "Guardar trabajo"}</button>` : '<p class="day-note">Tu acceso es de lectura.</p>'}${task && !report && writable() ? dayButton("blocked", "No pude hacer esta tarea", task.id, "day-text") : ""}</form>`;
 }
 function dayStock() {
@@ -103,7 +103,7 @@ function dayManualAppGuide(selected) {
     chef: [
       "Antes de planificar el menú, revisá Reservas: alimentación, alimentos a evitar, bebidas y celebraciones. Un dato no informado debe consultarse; no significa ausencia de restricciones.",
       "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
-      "En Inventario de flota consultá Cocina y bebidas. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
+      "En Stock y pedidos consultá Cocina y bebidas. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
       "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración gestiona la aprobación y compra, y el capitán o administración registra la recepción.",
       "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
     ],
@@ -183,22 +183,17 @@ async function saveDayForm(event) {
     next.products = R.consume(next.products, lines);
     const photos = await Promise.all(files.map(photo));
     const log = {id: uid(), taskId: task?.id || "", title: (kind === "blocked" ? "No pude hacer: " : "") + title, type: isReport ? "Aviso" : d.type || (cleaningTasks.includes(task?.system) ? "Limpieza" : "Mantenimiento"), date: isReport ? today() : d.date, responsible: session.name, system: task?.system || product?.system || d.system, equipmentId: equipment?.id || "", equipmentName: equipment?.name || "", hours: isReport ? "" : hours, notes: d.notes, observation: "", lines, photos, ...(isReport ? {reportKind: kind, urgent: Boolean(d.urgent), productId: product?.id || ""} : {})};
+    if (!isReport && task?.routineCycle) log.cycleDay = Number(d.cycleDay);
     next.logs.push(log);
     if (!isReport) {
       if (equipment && hours !== "") equipment.hours = Math.max(equipment.hours, hours);
       const grouped = new Map();
       for (const l of lines) grouped.set(l.productId, R.round((grouped.get(l.productId) || 0) + l.quantity));
       for (const [id, quantity] of grouped) movement(next, next.products.find(p => p.id === id), -quantity, "Trabajo: " + title, d.date);
-      if (task) {
-        task.lastCompleted = d.date;
-        if (task.intervalDays || task.intervalHours) {
-          task.nextDate = task.intervalDays ? addDays(d.date, task.intervalDays) : "";
-          task.nextHours = task.intervalHours ? R.round(hours + task.intervalHours) : "";
-        } else task.done = true;
-      }
+      if (task) R.completeTask(task, d.date, hours, d.cycleDay);
     }
     await commit(next);
-    dayResult = {title: isReport ? "Aviso registrado" : "Trabajo guardado", message: kind === "blocked" ? "El motivo quedó en Avisos. La tarea sigue pendiente." : isReport ? "Quedó guardado en los avisos del barco para su seguimiento." : task?.intervalDays || task?.intervalHours ? `El trabajo quedó registrado y la próxima tarea se reprogramó${task.nextDate ? " para el " + date(task.nextDate) : " por horas"}.` : "Quedó guardado con tu nombre, fecha y los materiales utilizados."};
+    dayResult = {title: isReport ? "Aviso registrado" : "Trabajo guardado", message: kind === "blocked" ? "El motivo quedó en Avisos. La tarea sigue pendiente." : isReport ? "Quedó guardado en los avisos del barco para su seguimiento." : task?.intervalDays || task?.intervalMonths || task?.intervalHours || task?.routineCycle ? `El trabajo quedó registrado y la próxima tarea se reprogramó${task.nextDate ? " para el " + date(task.nextDate) : " por horas"}.` : "Quedó guardado con tu nombre, fecha y los materiales utilizados."};
     dayPage = "success"; render(); window.scrollTo(0, 0);
   } catch (err) {
     if ($("#dayError")) $("#dayError").textContent = err.message;
@@ -207,7 +202,7 @@ async function saveDayForm(event) {
 }
 document.addEventListener("click", async event => {
   const button = event.target.closest("[data-day]");
-  if (!button || !state || daySaving) return;
+  if (!button || !state || daySaving || (typeof opsBusy !== "undefined" && opsBusy)) return;
   const page = button.dataset.day;
   try {
     if (page === "equipmentGroup") { dayEquipmentGroup = button.dataset.id || ""; render(); return; }
@@ -241,12 +236,21 @@ document.addEventListener("click", async event => {
   finally { button.disabled = false; }
 });
 
+function dayCycleField(task) {
+  if (!task?.routineCycle) return "";
+  return '<label>Día del ciclo realmente realizado<select name="cycleDay" required><option value="">Elegí el día que realizaste</option>' + task.routineCycle.map((step,i) => '<option value="'+(i+1)+'" '+(task.cycleIndex===i?'selected':'')+'>Día '+(i+1)+' · '+esc(step)+'</option>').join('') + '</select></label>';
+}
+function dayTaskGroup(t) {
+  return t.routineCycle ? 'Ciclo de 14 días' : t.routineEvent ? 'Por servicio o actividad' : t.intervalMonths ? 'Mensuales' : t.intervalDays===1 ? 'Diarias' : t.intervalDays===7 ? 'Semanales' : t.system || 'Otras tareas';
+}
 function dayGroupedTasks() {
   const tasks = dayTasks();
-  const groups = [...new Set(["Motor babor", "Motor estribor", "Generador", ...tasks.map(t => t.system || "Otros")])];
-  if (!dayEquipmentGroup) return `<div class="day-grid">${groups.map(group => {
-    const items = tasks.filter(t => (t.system || "Otros") === group);
-    return `<button class="day-tile" data-day="equipmentGroup" data-id="${esc(group)}"><span><strong>${esc(group)}</strong><small>${items.length} pendientes · ${items.filter(t => taskStatus(t) === "Vencido").length} vencidas</small></span></button>`;
-  }).join("")}</div>`;
-  return dayButton("equipmentGroup", "← Todos los equipos") + `<h2>${esc(dayEquipmentGroup)}</h2>` + (tasks.filter(t => (t.system || "Otros") === dayEquipmentGroup).map(dayTaskRow).join("") || empty("No hay tareas pendientes en este equipo."));
+  const present = [...new Set(tasks.map(dayTaskGroup))];
+  const order = ['Diarias','Semanales','Mensuales','Por servicio o actividad','Ciclo de 14 días'];
+  const groups = [...order.filter(g=>present.includes(g)),...present.filter(g=>!order.includes(g))];
+  if (!dayEquipmentGroup) return '<div class="day-grid">'+groups.map(group => {
+    const items=tasks.filter(t=>dayTaskGroup(t)===group);
+    return '<button class="day-tile" data-day="equipmentGroup" data-id="'+esc(group)+'"><span><strong>'+esc(group)+'</strong><small>'+items.length+' activas · '+items.filter(t=>taskStatus(t)==='Vencido').length+' vencidas</small></span></button>';
+  }).join('')+'</div>';
+  return dayButton('equipmentGroup','← Todas las rutinas y tareas')+'<h2>'+esc(dayEquipmentGroup)+'</h2>'+(tasks.filter(t=>dayTaskGroup(t)===dayEquipmentGroup).map(dayTaskRow).join('')||empty('No hay tareas pendientes en este grupo.'));
 }

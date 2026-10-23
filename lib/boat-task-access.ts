@@ -12,10 +12,11 @@ export function mergeCrewTasks(before:Task[],incoming:Task[],user:User,role:stri
   const updates = new Map(incoming.map(t=>[t.id,t]));
   const visible = before.filter(t=>canUseBoatTask(t,user,role));
   if(updates.size!==visible.length || visible.some(t=>!updates.has(t.id))) throw new Error('Solo administración puede crear, eliminar o reasignar tareas.');
-  const progress = new Set(['done','lastCompleted','nextDate','nextHours']);
+  const progress = new Set(['done','lastCompleted','nextDate','nextHours','cycleIndex']);
   return before.map(task=>{
     if(!canUseBoatTask(task,user,role)) return task;
     const update=updates.get(task.id)!;
+    if(JSON.stringify(update.cycleIndex)!==JSON.stringify(task.cycleIndex) && (!Array.isArray(task.routineCycle)||!Number.isInteger(update.cycleIndex)||update.cycleIndex<0||update.cycleIndex>=task.routineCycle.length)) throw new Error('Día del ciclo inválido.');
     for(const key of Array.from(new Set([...Object.keys(task),...Object.keys(update)]))) {
       if(!progress.has(key) && JSON.stringify(task[key])!==JSON.stringify(update[key])) throw new Error('Solo administración puede modificar la asignación o las instrucciones de una tarea.');
     }

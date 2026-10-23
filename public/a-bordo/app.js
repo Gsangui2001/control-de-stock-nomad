@@ -449,7 +449,7 @@ function matches(o) {
   );
 }
 function taskCard(t) {
-  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${t.intervalDays || t.intervalHours ? `<p>Se repite ${t.intervalDays ? `cada ${t.intervalDays} días` : ""}${t.intervalDays && t.intervalHours ? " o " : ""}${t.intervalHours ? `cada ${t.intervalHours} horas` : ""}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
+  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${R.scheduleLabel(t) ? `<p>${esc(R.scheduleLabel(t))}</p>` : ""}${t.sourceRef ? `<p class="muted">${esc(t.sourceRef)}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
 }
 function renderPanel() {
   const low = state.products.filter((p) => p.current <= p.min);
@@ -610,13 +610,13 @@ function openEditor(type, obj = {}) {
   }
   if (type === "task") {
     title = obj.id ? "Editar tarea" : "Nueva tarea o rutina";
-    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${select("Rol asignado", "assignedRole", dayRoles, obj.assignedRole || "", "Toda la tripulación")}${field("Persona asignada (opcional)", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Frecuencia: cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Ej.: 7"')}${field("Frecuencia: cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}${area("Observaciones", "observation", obj.observation, 'class="full"')}<label class="full">Foto de referencia<input name="taskPhoto" type="file" accept="image/*"><small>Opcional. La foto queda en la tarea; al realizarla se pueden adjuntar hasta 3 fotos nuevas.</small></label></div><p class="hint">Si configurás una frecuencia, la tarea se reprograma al completarla. Si llega la fecha o las horas sin realizarse, aparece con bandera roja.</p>`;
+    html = `<div class="form-grid">${field("Tarea", "title", obj.title, "text", "required")}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${select("Rol asignado", "assignedRole", dayRoles, obj.assignedRole || "", "Toda la tripulación")}${field("Persona asignada (opcional)", "assignee", obj.assignee)}${select("Equipo", "equipmentId", state.boat.equipment, obj.equipmentId, "Sin equipo específico")}${field("Próxima fecha", "nextDate", obj.nextDate || "", "date")}${field("Próximo mantenimiento a las horas", "nextHours", obj.nextHours ?? "", "number", 'min="0" step="0.1"')}${field("Frecuencia: cada cuántos días", "intervalDays", obj.intervalDays || "", "number", 'min="1" step="1" placeholder="Ej.: 7"')}${field("Repetir cada meses", "intervalMonths", obj.intervalMonths || "", "number", 'min="1" step="1"')}${field("Repetir según operación", "routineEvent", obj.routineEvent || "", "text", 'maxlength="140"')}${field("Frecuencia: cada cuántas horas", "intervalHours", obj.intervalHours || "", "number", 'min="1" step="0.1" placeholder="Vacío: sin repetición por horas"')}${area("Instrucciones / controles", "description", obj.description, 'class="full"')}${area("Observaciones", "observation", obj.observation, 'class="full"')}<label class="full">Foto de referencia<input name="taskPhoto" type="file" accept="image/*"><small>Opcional. La foto queda en la tarea; al realizarla se pueden adjuntar hasta 3 fotos nuevas.</small></label></div><p class="hint">Si configurás una frecuencia, la tarea se reprograma al completarla. Si llega la fecha o las horas sin realizarse, aparece con bandera roja.</p>`;
   }
   if (type === "log") {
     const t = obj.taskId ? state.tasks.find((t) => t.id === obj.taskId) : null;
     title = t ? "Completar tarea" : "Registrar trabajo a bordo";
     editing.taskId = t?.id || "";
-    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systemOptions(t?.system), t?.system || "Motor babor")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", t?.equipmentId ? (eq(t.equipmentId)?.hours ?? "") : "", "number", 'min="0" step="0.1"')}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label></div>`;
+    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systemOptions(t?.system), t?.system || "Motor babor")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", t?.equipmentId ? (eq(t.equipmentId)?.hours ?? "") : "", "number", 'min="0" step="0.1"')}${dayCycleField(t)}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label></div>`;
   }
   if (type === "purchase") {
     title = "Registrar compra";
@@ -855,6 +855,9 @@ $("#editorForm").onsubmit = async (event) => {
         d.intervalHours === ""
           ? 0
           : R.number(d.intervalHours, "Intervalo de horas", true);
+      const intervalMonths = d.intervalMonths ? R.number(d.intervalMonths, "Intervalo de meses") : 0;
+      if (!Number.isInteger(intervalMonths)) throw Error("El intervalo de meses debe ser entero.");
+      if ((intervalDays && intervalMonths) || (d.routineEvent && (intervalDays || intervalMonths || intervalHours))) throw Error("Elegí una frecuencia por días, por meses o según operación.");
       if (!d.title) throw new Error("Escribí la tarea.");
       if ((nextHours !== "" || intervalHours) && !d.equipmentId)
         throw new Error("Seleccioná el equipo para programar por horas.");
@@ -863,8 +866,8 @@ $("#editorForm").onsubmit = async (event) => {
       if (nextHours === "" && intervalHours)
         nextHours = R.round(Number(eq(d.equipmentId).hours) + intervalHours);
       let nextDate = d.nextDate;
-      if (!nextDate && intervalDays) nextDate = addDays(today(), intervalDays);
       const task = {
+        ...obj,
         id: id || uid(),
         title: d.title,
         system: d.system,
@@ -874,6 +877,8 @@ $("#editorForm").onsubmit = async (event) => {
         nextDate,
         nextHours,
         intervalDays,
+        intervalMonths,
+        routineEvent: d.routineEvent || "",
         intervalHours,
         description: d.description,
         observation: d.observation,
@@ -949,15 +954,8 @@ $("#editorForm").onsubmit = async (event) => {
           d.responsible,
         );
       if (task) {
-        task.lastCompleted = d.date;
-        if (task.intervalDays || task.intervalHours) {
-          task.nextDate = task.intervalDays
-            ? addDays(d.date, task.intervalDays)
-            : "";
-          task.nextHours = task.intervalHours
-            ? R.round(hours + task.intervalHours)
-            : "";
-        } else task.done = true;
+        R.completeTask(task, d.date, hours, d.cycleDay);
+        if (task.routineCycle) log.cycleDay = Number(d.cycleDay);
       }
       if (d.followup)
         next.tasks.push({
