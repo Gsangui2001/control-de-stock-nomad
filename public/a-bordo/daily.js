@@ -70,28 +70,63 @@ function dayStockItems(query = "") {
 function dayManualSections(content) {
   const sections = [[]];
   let sectionNumber = 0;
+  let inAppendix = false;
   for (const line of content.split("\n")) {
     const heading = line.match(/^(\d+)\. (.+)$/);
+    const appendix = /^AP[ÉE]NDICE [A-Z]\s*$/i.test(line.trim());
     // Preserve numbered lists inside a chapter, including the daily checklist.
-    if (heading && Number(heading[1]) >= sectionNumber && !/[.!?:;]$/.test(heading[2])) {
-      sectionNumber = Number(heading[1]);
+    if (appendix || (!inAppendix && heading && Number(heading[1]) >= sectionNumber && !/[.!?:;]$/.test(heading[2]))) {
+      if (appendix) inAppendix = true;
+      else sectionNumber = Number(heading[1]);
       sections.push([]);
     }
     sections[sections.length - 1].push(line);
   }
-  const chapters = sections.filter(lines => /^\d+\. /.test(lines[0] || ""));
+  const chapters = sections.filter(lines => /^(?:\d+\. |AP[ÉE]NDICE [A-Z])/i.test(lines[0] || ""));
   // The cover is not an instruction. Preserve unnumbered manuals as a fallback.
   return (chapters.length ? chapters : sections.filter(lines => lines.length)).map(lines => lines.join("\n"));
+}
+function dayManualChapterRole(section) {
+  const title = dayNormalize(section.split("\n")[0]);
+  if (/^apendice [ab]$/.test(title.trim())) return "marinero";
+  return dayRoles.find(r => title.includes("responsabilidades del " + r.id))?.id || null;
+}
+function dayManualAppGuide(selected) {
+  const steps = {
+    capitan: [
+      "En Reservas revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
+      "En Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
+      "Coordiná el trabajo de la tripulación y solicitá a administración las asignaciones o cambios de programación. Tu acceso no permite crear usuarios ni reasignar tareas.",
+      "Revisá Pedidos, descargá el pedido consolidado y coordiná suministros y lavandería. Administración aprueba y marca las compras; registrá la recepción únicamente cuando recibas la mercadería.",
+      "Informá cobros únicamente cuando aparezca una instrucción verificada en una reserva asignada a tu cuenta. Registrá el importe recibido y el medio o comprobante; administración confirma la recepción."
+    ],
+    chef: [
+      "Antes de planificar el menú, revisá Reservas: alimentación, alimentos a evitar, bebidas y celebraciones. Un dato no informado debe consultarse; no significa ausencia de restricciones.",
+      "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
+      "En Inventario de flota consultá Cocina y bebidas. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
+      "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración gestiona la aprobación y compra, y el capitán o administración registra la recepción.",
+      "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
+    ],
+    marinero: [
+      "Consultá tu rutina diaria del Apéndice A y el ciclo de limpieza del Apéndice B. Los horarios son referencias del manual; coordiná los ajustes con el capitán.",
+      "En Mis tareas revisá limpieza, conservación y mantenimiento asignado. Al terminar registrá fecha, observaciones, fotos y materiales utilizados.",
+      "Si falta un material o no podés completar una tarea, registrá el impedimento y avisá al capitán. La tarea debe permanecer pendiente hasta realizarse.",
+      "En Pedidos anotá faltantes de limpieza, insumos para huéspedes y materiales operativos. Indicá cantidad, unidad, detalle y urgencia cuando corresponda.",
+      "Revisá Reservas para preparar camarotes, baños y atención al huésped. Coordiná servicio de mesa con Chef y maniobras con el capitán, según el manual."
+    ]
+  };
+  if (!steps[selected]) return "";
+  return `<section class="day-note"><h2>Cómo usar A bordo · ${esc(dayRoleName(selected))}</h2><ol>${steps[selected].map(step => `<li>${esc(step)}</li>`).join("")}</ol><p>Ante una urgencia, contactá directamente al capitán o a administración. Registrar un aviso no garantiza que alguien lo haya leído.</p></section>`;
 }
 function dayManualBody() {
   const content = state.manual?.content || "El manual todavía no tiene contenido.";
   const selected = dayManualRole || (dayRoles.some(r => r.id === role) ? role : "all");
   const sections = dayManualSections(content).filter(section => {
-    const title = dayNormalize(section.split("\n")[0]);
-    const chapterRole = dayRoles.find(r => title.includes("responsabilidades del " + r.id));
-    return selected === "all" || chapterRole?.id === selected;
+    const chapterRole = dayManualChapterRole(section);
+    return selected === "all" || !chapterRole || chapterRole === selected || (selected === "capitan" && /^AP[ÉE]NDICE /i.test(section));
   });
-  return `${dayRolePicker("manualRole", selected)}<p class="day-muted">${selected === "all" ? "Instrucciones comunes y responsabilidades de cada rol." : `Responsabilidades de ${dayRoleName(selected)}. En Todos podés consultar el manual general.`}</p>${sections.map((section, i) => { const lines = section.split("\n"); const title = lines.shift().toLocaleUpperCase("es"); return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
+  if (selected !== "all") sections.sort((a,b) => Number(dayManualChapterRole(b) === selected) - Number(dayManualChapterRole(a) === selected));
+  return `${dayRolePicker("manualRole", selected)}<p class="day-muted">${selected === "all" ? "Instrucciones comunes y responsabilidades de cada rol." : `Manual de ${dayRoleName(selected)}: responsabilidades, procedimientos comunes y anexos aplicables. En Todos podés consultar el manual completo.`}</p>${dayManualAppGuide(selected)}${sections.map((section, i) => { const lines = section.split("\n"); let title = lines.shift().toLocaleUpperCase("es"); if (/^AP[ÉE]NDICE /i.test(title)) { const subtitle = lines.find(line => line.trim()); if (subtitle) title += " · " + subtitle.trim(); } return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Manual de referencia actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
 }
 function dayManual() {
   return `${dayBack()}<p class="day-eyebrow">PARA CONSULTAR</p><h1>Manual de instrucciones</h1>${dayManualBody()}`;
