@@ -42,3 +42,14 @@ no registra recepción y no altera confirmaciones de capitán en el CRM.
 La entrega de una notificación en un teléfono requiere activar los avisos en
 ese dispositivo y comprobar recepción real. Un trabajo en cola o la aceptación
 del proveedor no se presenta como evidencia de recepción por la tripulación.
+
+Los registros importados que solo dicen Nomade/NOMADE como texto libre quedan
+fuera de las plantillas externas. Deben vincularse al barco canónico en el CRM
+antes de ingresar al circuito de publicación; no se reasignan por nombre.
+
+Verificado el 23/10/2026: despliegue público `dpl_841hcA5Midcfo3yHdQvG44b6iFYG`,
+frontend `881d69f`, build y API por roles aprobados. Ocho archivos públicos
+coinciden byte a byte con la versión probada. Interfaz móvil verificada con
+fixture de publicación/revisión y lectura de producción. Cero publicaciones,
+revisiones o avisos reales de prueba. Recepción push en teléfonos pendiente de
+activación; había cero suscripciones activas.

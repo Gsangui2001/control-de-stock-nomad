@@ -59,4 +59,5 @@ begin
  failed=false;begin perform boat_control.briefs('brief-test-secret','external_templates',base||'{"session":"brief-qa-chef"}');exception when insufficient_privilege then failed=true;end;assert failed,'external guest details admin only';
  data=boat_control.briefs('brief-test-secret','external_templates',base);
  assert not exists(select 1 from jsonb_array_elements(data) x where boat_control.crm_reservation_matches((x->>'id')::uuid,base->>'boat')),'Nomade excluded from external templates';
+ assert not exists(select 1 from jsonb_array_elements(data) x where lower(trim(x->>'boatName')) in ('nomade','nomad')),'free-text Nomade imports excluded too';
 end $$;

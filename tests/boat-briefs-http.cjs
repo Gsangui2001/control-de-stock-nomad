@@ -19,6 +19,7 @@ async function call(op,role='admin',data,boatId=boat){
   assert.equal((await call('reservations',role,undefined,'00000000000000000000000000000000')).status,403);
  }
  const templates=await call('external_templates');assert.equal(templates.status,200);assert.ok(templates.result.every(r=>!admin.result.some(n=>n.id===r.id)));
+ assert.ok(templates.result.every(r=>!/^nomad[e]?$/i.test((r.boatName||'').normalize('NFD').replace(/[\u0300-\u036f\s]/g,''))),'free-text Nomade imports must not become external captain templates');
  assert.equal((await call('brief_review','chef',{key:crypto.randomUUID(),id,version:0})).status,400);
  console.log(JSON.stringify({passed:true,base,adminDrafts:admin.result.length,externalTemplates:templates.result.length,checks:'session, role isolation, publication authorization, schema, templates; no customer writes'}));
 })().catch(e=>{console.error(e.message);process.exitCode=1;});
