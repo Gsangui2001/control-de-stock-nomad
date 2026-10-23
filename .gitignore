@@ -19,6 +19,7 @@ next-env.d.ts
 /public/sw.js.map
 /public/workbox-*.js.map
 /public/fallback-*.js
+/public/a-bordo/ocr/
 
 # misc
 .DS_Store

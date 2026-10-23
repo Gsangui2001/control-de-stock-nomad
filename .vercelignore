@@ -1,5 +1,6 @@
 .env*
 node_modules
+public/a-bordo/ocr
 .git
 .next
 .work

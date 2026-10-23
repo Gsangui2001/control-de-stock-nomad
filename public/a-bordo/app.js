@@ -112,10 +112,10 @@ const systemOptions = (current = "") => {
   if (current && !systems.includes(current)) legacy.add(current);
   return [...systems, ...legacy];
 };
-const money = (n) =>
+const money = (n, currency = state?.boat.currency || "USD") =>
   new Intl.NumberFormat("es-AR", {
     style: "currency",
-    currency: state?.boat.currency || "USD",
+    currency,
     maximumFractionDigits: 2,
   }).format(n || 0);
 const options = (items, selected = "", blank = "") =>
@@ -546,7 +546,7 @@ function renderPurchases() {
         .reverse()
         .map(
           (p) =>
-            `<tr><td>${date(p.date)}</td><td>${esc(p.supplier)}<small>${esc(p.reference)}</small></td><td>${p.lines.map((l) => `${l.quantity} ${esc(l.unit)} · ${esc(l.name)}`).join("<br>")}</td><td>${money(p.total)}</td></tr>`,
+            `<tr><td>${date(p.date)}</td><td>${esc(p.supplier)}<small>${esc(p.reference)}</small></td><td>${p.lines.map((l) => `${l.quantity} ${esc(l.unit)} · ${esc(l.name)}`).join("<br>")}</td><td>${money(p.total, p.currency || state.boat.currency)}</td></tr>`,
         )
         .join("") ||
       `<tr><td colspan="4">${empty("No hay compras registradas.")}</td></tr>`
@@ -687,7 +687,7 @@ function openEditor(type, obj = {}) {
   if (type === "detail") {
     title = obj.name;
     $("#saveButton").hidden = true;
-    html = `${obj.photo ? `<div class="attachments"><img src="${esc(obj.photo)}" alt="${esc(obj.name)}"></div>` : ""}<div class="detail-grid section-gap"><p><small>Ubicación</small><br>${esc(obj.location)}</p><p><small>Sistema / equipo</small><br>${esc(obj.system)} · ${esc(obj.equipment)}</p><p><small>Medidas y especificaciones</small><br>${esc(obj.specs || "Sin especificar")}</p><p><small>Código / referencia</small><br>${esc(obj.code || "Sin especificar")}</p><p><small>Stock disponible</small><br>${obj.current} ${esc(obj.unit)} · ${stockBadge(obj)}</p><p><small>Fecha de vencimiento</small><br>${obj.expiryDate ? date(obj.expiryDate) : "Sin vencimiento cargado"}</p><p><small>Proveedor</small><br>${esc(obj.supplier || "Sin proveedor")}</p><p><small>Costo unitario</small><br>${money(obj.cost)}</p></div>`;
+    html = `${obj.photo ? `<div class="attachments"><img src="${esc(obj.photo)}" alt="${esc(obj.name)}"></div>` : ""}<div class="detail-grid section-gap"><p><small>Ubicación</small><br>${esc(obj.location)}</p><p><small>Sistema / equipo</small><br>${esc(obj.system)} · ${esc(obj.equipment)}</p><p><small>Medidas y especificaciones</small><br>${esc(obj.specs || "Sin especificar")}</p><p><small>Código / referencia</small><br>${esc(obj.code || "Sin especificar")}</p><p><small>Stock disponible</small><br>${obj.current} ${esc(obj.unit)} · ${stockBadge(obj)}</p><p><small>Fecha de vencimiento</small><br>${obj.expiryDate ? date(obj.expiryDate) : "Sin vencimiento cargado"}</p><p><small>Proveedor</small><br>${esc(obj.supplier || "Sin proveedor")}</p><p><small>Costo unitario</small><br>${obj.costKnown===false ? "Costo no confirmado en la moneda del barco" : money(obj.cost)}</p></div>`;
   }
   if (type === "logDetail") {
     title = "Detalle del trabajo";

@@ -1,0 +1,17 @@
+const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),ts=require('typescript'),moduleExports={};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/boat-intake.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:moduleExports,require,Intl,Date});
+const {parseIntakeList,validateIntakeApply}=moduleExports;
+let d=parseIntakeList('Proveedor: Prueba\nFecha: 2026-10-23\nTotal: USD 12,50\nArroz; 4; kg; Alacena\n2 L de leche\nPapel: 6 rollos\nCantidad ilegible');
+assert.equal(d.supplier,'Prueba');assert.equal(d.currency,'USD');assert.equal(d.total,12.5);assert.equal(d.items.length,4);assert.equal(d.items[0].quantity,4);assert.equal(d.items[0].unitCost,null);assert.equal(d.items[1].name,'leche');assert.equal(d.items[2].quantity,6);assert.equal(d.items[3].quantity,null);
+assert.throws(()=>validateIntakeApply('count',d));
+d={...d,items:[{...d.items[0],area:'gastronomia'}]};assert.doesNotThrow(()=>validateIntakeApply('count',d));
+assert.throws(()=>validateIntakeApply('purchase',{...d,currency:''}));
+assert.throws(()=>validateIntakeApply('purchase',{...d,total:null}));
+assert.throws(()=>validateIntakeApply('count',{...d,date:'2026-02-31'}));
+assert.equal(parseIntakeList('Precio $12').currency,'');
+assert.equal(parseIntakeList('2 cajas de bebidas').items[0].unit,'cajas');
+assert.equal(parseIntakeList('2 cajas de bebidas').items[0].quantity,2);
+assert.equal(parseIntakeList('"Arroz, integral",4,kg,Alacena,2.50').items[0].name,'Arroz, integral');
+assert.equal(parseIntakeList('"Arroz, integral",4,kg,Alacena,2.50').items[0].unitCost,2.5);
+assert.equal(parseIntakeList('Leche;2;L;Heladera;1,50').items[0].unitCost,1.5);
+console.log('PASS: conservative extraction, unknown prices/currency, units preserved and application validation');

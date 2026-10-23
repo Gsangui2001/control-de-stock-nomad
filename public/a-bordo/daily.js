@@ -97,13 +97,13 @@ function dayManualAppGuide(selected) {
       "En Reservas revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
       "En Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
       "Coordiná el trabajo de la tripulación y solicitá a administración las asignaciones o cambios de programación. Tu acceso no permite crear usuarios ni reasignar tareas.",
-      "Revisá Pedidos, descargá el pedido consolidado y coordiná suministros y lavandería. Administración aprueba y marca las compras; registrá la recepción únicamente cuando recibas la mercadería.",
+      "Usá Stock y pedidos → Cargar foto o lista para enviar conteos o comprobantes revisados. Administración confirma las existencias y los gastos. Si una compra ya se recibió desde Pedidos, cargá el comprobante como Gasto sin entrada de stock. Revisá Pedidos, descargá el pedido consolidado y coordiná suministros y lavandería. Administración aprueba y marca las compras; registrá la recepción únicamente cuando recibas la mercadería.",
       "Informá cobros únicamente cuando aparezca una instrucción verificada en una reserva asignada a tu cuenta. Registrá el importe recibido y el medio o comprobante; administración confirma la recepción."
     ],
     chef: [
       "Antes de planificar el menú, revisá Reservas: alimentación, alimentos a evitar, bebidas y celebraciones. Un dato no informado debe consultarse; no significa ausencia de restricciones.",
       "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
-      "En Stock y pedidos consultá Cocina y bebidas. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
+      "En Stock y pedidos consultá Cocina y bebidas. Usá Cargar foto o lista para preparar un conteo, compra recibida, gasto o faltantes; revisá lo leído y enviá la carga. Administración confirma existencias y gastos. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
       "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración gestiona la aprobación y compra, y el capitán o administración registra la recepción.",
       "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
     ],
@@ -111,7 +111,7 @@ function dayManualAppGuide(selected) {
       "Consultá tu rutina diaria del Apéndice A y el ciclo de limpieza del Apéndice B. Los horarios son referencias del manual; coordiná los ajustes con el capitán.",
       "En Mis tareas revisá limpieza, conservación y mantenimiento asignado. Al terminar registrá fecha, observaciones, fotos y materiales utilizados.",
       "Si falta un material o no podés completar una tarea, registrá el impedimento y avisá al capitán. La tarea debe permanecer pendiente hasta realizarse.",
-      "En Pedidos anotá faltantes de limpieza, insumos para huéspedes y materiales operativos. Indicá cantidad, unidad, detalle y urgencia cuando corresponda.",
+      "En Stock y pedidos podés cargar una foto o lista de limpieza, insumos para huéspedes y materiales operativos. Elegí conteo, compra recibida, gasto o faltantes; revisá lo leído. Administración confirma existencias y gastos. En Pedidos anotá los faltantes. Indicá cantidad, unidad, detalle y urgencia cuando corresponda.",
       "Revisá Reservas para preparar camarotes, baños y atención al huésped. Coordiná servicio de mesa con Chef y maniobras con el capitán, según el manual."
     ]
   };
@@ -202,7 +202,7 @@ async function saveDayForm(event) {
 }
 document.addEventListener("click", async event => {
   const button = event.target.closest("[data-day]");
-  if (!button || !state || daySaving || (typeof opsBusy !== "undefined" && opsBusy)) return;
+  if (!button || !state || daySaving || (typeof intakeBusy !== "undefined" && intakeBusy) || (typeof opsBusy !== "undefined" && opsBusy)) return;
   const page = button.dataset.day;
   try {
     if (page === "equipmentGroup") { dayEquipmentGroup = button.dataset.id || ""; render(); return; }
