@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { flushBoatPush } from '@/lib/boat-push';
+import { protectCrewHistory } from '@/lib/boat-crew-state';
 import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
 
 export const runtime = 'nodejs';
@@ -84,6 +86,13 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   if(op==='state'&&method==='GET')return json(stateForRole(await rpc('state_get',{boat}),auth.user));
   if(op==='state'&&method==='PUT'){
    const before=await rpc('state_get',{boat});
+   const requestHash=hash(JSON.stringify({boat,state:body.state,revision:body.revision}));
+   const commitRpc=async(lookup_only:boolean)=>{
+    const {data,error}=await client.rpc('boat_state_commit_rpc',{server_key:secret,payload:{boat,state:body.state,revision:body.revision,key:body.key,session},request_hash:requestHash,lookup_only});
+    if(error)throw new ApiError(['PT409','40001'].includes(error.code)?409:error.code==='42501'?403:/^(P0001|22|23)/.test(error.code||'')?400:503,error.message);
+    return data;
+   };
+   if(body.key){if(!/^[a-f0-9-]{36}$/.test(body.key))throw new ApiError(400,'Identificador inválido.');const previous=await commitRpc(true);if(previous)return json(stateForRole(previous,auth.user,before.role));}
    if(!body.state||typeof body.state!=='object')throw new ApiError(400,'Estado inválido.');
    if(!auth.user.admin&&before.role!=='encargado'){
     body.state.cameras=before.state.cameras;
@@ -91,6 +100,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    }
    validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
    if(!auth.user.admin&&before.role!=='encargado'){
+    try{protectCrewHistory(before.state,body.state);}catch(error){throw new ApiError(403,(error as Error).message);}
     try{body.state.tasks=mergeCrewTasks(before.state.tasks,body.state.tasks,auth.user,before.role);}catch(error){throw new ApiError(403,(error as Error).message);}
     for(const log of body.state.logs){
      if(log.taskId&&!before.state.logs.some((l:any)=>l.id===log.id)){
@@ -101,7 +111,9 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    }
    const logs=new Map<string,any>(before.state.logs.map((l:any)=>[l.id,l]));
    for(const l of body.state.logs){const old=logs.get(l.id);l.recordedBy=old?.recordedBy??auth.user.name;l.recordedById=old?.recordedById??(old?undefined:auth.user.id);l.recordedAt=old?.recordedAt??new Date().toISOString();}
-   return json(stateForRole(await rpc('state_put',{boat,state:body.state,revision:body.revision}),auth.user,before.role));
+   const saved=body.key?await commitRpc(false):await rpc('state_put',{boat,state:body.state,revision:body.revision});
+   await flushBoatPush(5).catch(()=>{});
+   return json(stateForRole(saved,auth.user,before.role));
   }
   if(op==='photos'&&method==='POST'){
    const data=body.data;

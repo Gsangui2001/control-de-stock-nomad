@@ -34,13 +34,15 @@
     }));
   }
   function due(plan, today, hours) {
+    if (!plan.nextDate && (plan.nextHours == null || plan.nextHours === "")) return "Sin programación";
     if (
-      (plan.nextDate && plan.nextDate <= today) ||
+      (plan.nextDate && plan.nextDate < today) ||
       (plan.nextHours !== null &&
         plan.nextHours !== "" &&
         Number(plan.nextHours) <= hours)
     )
       return "Vencido";
+    if(plan.nextDate === today) return "Hoy";
     const days = plan.nextDate
       ? (new Date(plan.nextDate + "T12:00:00") -
           new Date(today + "T12:00:00")) /

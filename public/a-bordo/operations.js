@@ -1,0 +1,145 @@
+"use strict";
+let opsData=null,opsReservations=[],opsCandidates=[],opsLoading=false,opsBusy=false,opsError='',opsRenderToken=0;
+const opsLabels={request_create:'Faltante agregado',request_status:'Pedido actualizado',request_receive:'Pedido recibido',stock_add:'Inventario cargado',stock_consume:'Consumo registrado',transfer_send:'Transferencia enviada',transfer_receive:'Transferencia recibida',transfer_cancel:'Transferencia cancelada',reservation_link:'Reserva vinculada',reservation_preferences:'Reserva actualizada',collection_instruction:'Cobro indicado',collection_report:'Cobro informado',collection_review:'Cobro revisado',tareas_por_atender:'Tareas de hoy o vencidas',trabajo_realizado:'Trabajo realizado',problema_registrado:'Problema registrado',transferencia_pendiente:'Transferencia pendiente',push_test:'Prueba de notificación'};
+const opsButton=(page,label)=>`<button type="button" class="day-secondary" data-day="ops-${page}">${label}</button>`;
+const opsAction=(op,id,label,extra={})=>`<button type="button" class="day-secondary" data-op="${op}" data-id="${esc(id)}" ${Object.entries(extra).map(([k,v])=>`data-${k}="${esc(v)}"`).join(' ')}>${label}</button>`;
+const opsField=(label,name,type='text',value='',attrs='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
+const opsAmount=(name='quantity',max='')=>opsField('Cantidad',name,'number','',`required min="0.0001" step="0.0001" ${max?`max="${max}"`:''}`);
+const opsArea=()=>`<label>Área<select name="area"><option value="gastronomia">Cocina y bebidas</option><option value="tecnica">Mecánica e insumos técnicos</option></select></label>`;
+const opsForm=(operation,body,id='')=>`<form class="ops-form" data-operation="${operation}" data-id="${esc(id)}">${body}<p class="form-error" role="alert"></p><button class="day-primary" type="submit">Guardar</button></form>`;
+async function opsFetch(operation,body) {
+ let response;try{response=await fetch('/api/boat-ops/'+operation+(body?'':'?boat='+encodeURIComponent(boatId)),{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify({...body,boat:boatId}):undefined});}catch{throw Error('No se pudo confirmar el guardado. El borrador queda en este dispositivo; reintentá al recuperar conexión.');}
+ const data=await response.json();if(!response.ok){const error=Error(data.error||'No se pudo completar');error.status=response.status;throw error;}return data;
+}
+async function opsReload() {
+ const token=++opsRenderToken, boat=boatId;
+ opsLoading=true;opsError='';
+ try{
+  const [data,reservations]=await Promise.all([opsFetch('overview'),opsFetch('reservations')]);
+  if(token!==opsRenderToken||boat!==boatId)return;
+  opsData=data;opsReservations=reservations;
+ }catch(e){opsError=e.message;}finally{if(token===opsRenderToken){opsLoading=false;if(view==='day')render();}}
+}
+function opsPreparation(){
+ const missing=[];
+ if(!state.boat.equipment.length)missing.push('Cargar equipos y horas reales');
+ if(!state.products.length)missing.push('Contar y cargar existencias');
+ const unassigned=state.tasks.filter(t=>!t.done&&!t.assignedRole).length;
+ const unscheduled=state.tasks.filter(t=>!t.done&&!t.nextDate&&(t.nextHours==null||t.nextHours==='')).length;
+ if(unassigned)missing.push(`${unassigned} tareas sin rol asignado`);
+ if(unscheduled)missing.push(`${unscheduled} tareas sin programación`);
+ return `<h2>Preparar el barco para trabajar</h2><p class="day-muted">Completá los datos reales. No se crean existencias ni frecuencias de ejemplo.</p>${missing.map(t=>`<div class="day-note">${esc(t)}</div>`).join('')||'<div class="day-note">Equipos, inventario y programación cargados.</div>'}<div class="ops-actions">${dayButton('manage','Administrar tareas y tripulación')}${opsButton('stock','Cargar inventario')}</div><p>En Administrar → Barco y respaldo cargá equipos; en cada tarea indicá rol, fecha y frecuencia. En Tripulación se crean accesos personales.</p>${session.admin?`<h3>Respaldo completo</h3>${opsAction('backup','','Descargar respaldo')}<p>Incluye inventario, tareas, fotos, pedidos, transferencias y reservas vinculadas. La restauración conserva cobros y transferencias: si cambiaron desde la copia, exige recuperación coordinada.</p><label>Restaurar una copia de este barco<input id="opsBackupFile" type="file" accept="application/json"></label>`:''}`;
+}
+function opsRequests(){
+ const all=opsData.requests;
+ return `<h2>Pedidos y faltantes</h2>${opsAction("export_requests","","Descargar pedido consolidado")}<p>Los faltantes se acumulan por área. Una compra suma existencias al registrar su recepción.</p><details class="day-disclosure"><summary>＋ Falta algo</summary>${opsForm('request_create',opsArea()+opsField('Producto','name','text','','required maxlength="140"')+opsField('Unidad (un, kg, L, caja…)','unit','text','','required maxlength="20"')+opsAmount()+`<label>Detalle<textarea name="notes" maxlength="5000"></textarea></label><label class="check"><input name="urgent" type="checkbox">Urgente</label><label>Foto opcional<input name="photo" type="file" accept="image/*"></label>`)}</details>${['gastronomia','tecnica'].map(area=>`<h3>${area==='gastronomia'?'Cocina y bebidas':'Mecánica'}</h3>${all.filter(q=>q.area===area).map(q=>`<article class="day-inventory"><h3>${esc(q.name)}</h3><p>${q.quantity} ${esc(q.unit)} · ${esc(q.status)}${q.urgent?' · URGENTE':''}</p><p>Recibido: ${q.received} · Pendiente: ${Number(q.quantity)-Number(q.received)}</p><p>${esc(q.notes)}</p>${q.photo?`<img class="day-reference" src="${esc(q.photo)}" alt="Faltante">`:''}<div class="ops-actions">${q.status==='borrador'&&(dayManager()||q.created_by===session.id)?opsAction('request_status',q.id,'Solicitar',{status:'solicitado'}):''}${dayManager()&&['solicitado','aprobado'].includes(q.status)?opsAction('request_status',q.id,q.status==='solicitado'?'Aprobar':'Marcar comprado',{status:q.status==='solicitado'?'aprobado':'comprado'}):''}${dayManager()&&Number(q.received)===0&&!['recibido','cancelado'].includes(q.status)?opsAction('request_status',q.id,'Cancelar',{status:'cancelado'}):''}</div>${q.status==='comprado'&&(dayManager()||role==='capitan')?`<details class="day-disclosure"><summary>Recibir mercadería</summary>${opsForm('request_receive',opsAmount('quantity',Number(q.quantity)-Number(q.received))+opsProductChoice(q.area,q.unit)+opsField('Ubicación','location','text','','required'),q.id)}</details>`:''}</article>`).join('')||empty('No hay pedidos en esta área.')}`).join('')}`;
+}
+function opsProductChoice(area,unit){return `<label>Sumar a<select name="productId"><option value="">Crear nuevo insumo</option>${state.products.filter(p=>(p.area||'tecnica')===area&&p.unit===unit).map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.location)}</option>`).join('')}</select></label>`;}
+function opsStock(){
+ return `<h2>Inventario compartido</h2><p>Existencias guardadas por barco. Cocina y mecánica permanecen separadas.</p>${dayManager()?`<details class="day-disclosure"><summary>＋ Cargar cantidad contada</summary>${opsForm('stock_add',opsArea()+opsField('Producto','name','text','','required')+opsField('Unidad','unit','text','','required')+opsField('Cantidad contada','quantity','number','','required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note'))}</details><details class="day-disclosure"><summary>Recuperar inventario gastronómico anterior</summary><p>Descargá primero el respaldo del navegador anterior. Revisaremos los productos antes de cargarlos. No se importan reservas de restaurante ni datos de ejemplo automáticamente.</p><input id="legacyInventory" type="file" accept="application/json"><div id="legacyReview"></div></details>`:''}${opsData.fleet.map(boat=>`<details class="day-disclosure" ${boat.id===boatId?'open':''}><summary>${esc(boat.name)} · ${boat.products.length} insumos</summary>${['gastronomia','tecnica'].map(area=>`<h3>${area==='gastronomia'?'Cocina y bebidas':'Técnico'}</h3>${boat.products.filter(p=>(p.area||'tecnica')===area).map(p=>`<article class="day-inventory"><h3>${esc(p.name)}</h3><strong>${p.current} ${esc(p.unit)}</strong><p>${esc(p.location)}</p>${boat.id===boatId&&writable()?`<details class="day-disclosure"><summary>Registrar consumo</summary>${opsForm('stock_consume',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsAmount('quantity',p.current)+opsField('Motivo','note','text','','required minlength="3"'))}</details>`:''}${boat.id===boatId&&(dayManager()||['chef','capitan'].includes(role))&&opsData.fleet.length>1?`<details class="day-disclosure"><summary>Transferir a otro barco</summary>${opsForm('transfer_send',`<input type="hidden" name="productId" value="${esc(p.id)}"><label>Destino<select name="target">${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`+opsAmount('quantity',p.current))}</details>`:''}</article>`).join('')||empty('Sin insumos cargados.')}`).join('')}</details>`).join('')}`;
+}
+function opsTransfers(){return `<h2>Transferencias</h2><p>La salida queda en tránsito hasta que el destino confirma cuánto recibió.</p>${opsData.transfers.map(t=>`<article class="day-inventory"><h3>${esc(t.product.name)}</h3><p>${esc(opsData.fleet.find(b=>b.id===t.source_id)?.name||'Origen')} → ${esc(opsData.fleet.find(b=>b.id===t.target_id)?.name||'Destino')}</p><p>${t.quantity} ${esc(t.product.unit)} · ${esc(t.status)} · Recibido ${t.received}</p>${t.status==='en_transito'&&t.target_id===boatId&&(dayManager()||['capitan','chef'].includes(role))?opsForm('transfer_receive',opsAmount('quantity',Number(t.quantity)-Number(t.received))+opsProductChoice(t.product.area||'tecnica',t.product.unit)+opsField('Ubicación','location','text','','required'),t.id):''}${t.status==='en_transito'&&t.source_id===boatId&&Number(t.received)===0?opsAction('transfer_cancel',t.id,'Cancelar y devolver al origen'):''}</article>`).join('')||empty('No hay transferencias.')}`;}
+function opsReservationsView(){return `<h2>Reservas de ${esc(state.boat.name)}</h2><p>Fechas y datos operativos consultados del CRM. Las reservas contratadas de Nomade se vinculan desde el CRM. Administración puede revisar otras vinculaciones.</p>${session.admin?opsAction('candidates','','Vincular reserva del CRM'):''}<div id="opsCandidates"></div>${opsReservations.map(res=>{
+ const reported=(res.reports||[]).filter(x=>x.status!=='rechazado').reduce((a,x)=>a+Number(x.amount),0);
+ const confirmed=(res.reports||[]).filter(x=>x.status==='confirmado').reduce((a,x)=>a+Number(x.amount),0);
+ return `<details class="day-disclosure"><summary>${date(res.start)} · ${esc(res.name||'Reserva')} · ${res.guests||'—'} pasajeros</summary><p>${date(res.start)} → ${date(res.end)} · ${esc(res.status)}</p><p>${esc(res.notes||'Sin observaciones operativas')}</p>${(res.passengers||[]).map(p=>`<article class="day-inventory"><h3>${esc(p.name)}</h3><p>Alimentación: ${esc(p.food||'No informado')}</p>${p.avoid?`<div class="ops-critical">Evitar: ${esc(p.avoid)}</div>`:''}<p>${esc(p.requests||'')}</p></article>`).join('')}<p>Actividades: ${esc((res.interests||[]).join(', '))}</p>${res.collection?`<div class="ops-critical"><h3>Cobrar al huésped</h3><strong>${Math.max(0,Number(res.collection.amount)-confirmed)} ${esc(res.collection.currency)}</strong><p>${esc(res.collection.concept)} · ${date(res.collection.due_date)}</p><p>Informado sin confirmar: ${reported-confirmed}. La confirmación operativa no concilia el libro financiero del CRM.</p>${res.collection.valid===false?'<p>El saldo cambió en el CRM. Administración debe verificarlo nuevamente.</p>':''}${res.collection.valid!==false&&Number(res.collection.amount)>reported?opsForm('collection_report',opsField('Importe cobrado','amount','number','','required min="0.01" step="0.01" max="'+(Number(res.collection.amount)-reported)+'"')+opsField('Medio / comprobante','note'),res.id):''}</div>`:''}${(res.reports||[]).map(c=>`<div class="day-note">${c.amount} ${esc(c.currency)} · ${esc(c.status)} · ${esc(c.note)}${session.admin&&c.status==='informado'?opsAction('collection_review',c.id,'Confirmar recepción',{status:'confirmado'})+opsAction('collection_review',c.id,'Rechazar',{status:'rechazado'}):''}</div>`).join('')}${session.admin?`<details class="day-disclosure"><summary>Asignación y observaciones complementarias</summary>${opsForm('reservation_preferences',`<label>Capitán<select name="captainId"><option value="">Sin asignar</option>${opsData.members.filter(m=>m.role==='capitan').map(m=>`<option value="${esc(m.id)}" ${m.id===res.captainId?'selected':''}>${esc(m.name)}</option>`).join('')}</select></label>`+['food','allergies','drinks','activities'].map((key,i)=>opsField(['Alimentación adicional','Alergias adicionales','Bebidas','Actividades adicionales'][i],key,'text',res.preferences?.[key]||'')).join(''),res.id)}</details><details class="day-disclosure"><summary>Verificar instrucción de cobro</summary><p>Referencia del CRM: ${res.crmBalance==null?'No informado':esc(res.crmBalance)+' '+esc(res.currency||'')}. Confirmá el importe antes de habilitarlo al capitán.</p>${opsForm('collection_instruction',opsField('Importe','amount','number',res.crmBalance??'','required min="0.01" step="0.01"')+`<label>Moneda<select name="currency"><option>USD</option><option>EUR</option><option>ARS</option></select></label>`+opsField('Concepto','concept','text','Saldo de reserva','required')+opsField('Fecha de cobro','dueDate','date',res.start||'','required')+`<label class="check"><input type="checkbox" name="verified" required>Verifiqué el importe y la moneda en el CRM</label>`,res.id)}</details>`:''}${Object.entries(res.preferences||{}).filter(([,v])=>v).map(([k,v])=>`<p><strong>${esc(({food:'Alimentación',allergies:'Alergias',drinks:'Bebidas',activities:'Actividades'})[k]||k)}:</strong> ${esc(v)}</p>`).join('')}</details>`;
+ }).join('')||empty('No hay reservas vinculadas.')}`;}
+function opsNotifications(){return `<h2>Notificaciones</h2><p>Activá los avisos en este dispositivo. En iPhone, agregá A bordo a la pantalla de inicio y abrilo desde su icono.</p><div class="ops-actions">${opsAction('subscribe','','Activar en este teléfono')}${opsAction('unsubscribe','','Desactivar en este teléfono')}${opsAction('push_test','','Enviar prueba')}</div><p id="pushResult" role="status"></p>${opsData.notifications.map(n=>`<article class="day-inventory"><strong>${esc(opsLabels[n.kind]||n.kind)}</strong><p>${date(n.created_at)} · ${n.read_at?'Leída':'Sin leer'}</p>${!n.read_at?opsAction('notification_read',n.id,'Marcar leída'):''}</article>`).join('')||empty('Sin novedades.')}`;}
+const opsOriginalRenderDay=renderDay;
+renderDay=function(){
+ opsOriginalRenderDay();
+ if(dayPage==='home'){
+  const target=document.querySelector('.day-grid');
+  target?.insertAdjacentHTML('afterend',`<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('stock','Inventario de flota')}${opsButton('transfers','Transferencias')}${opsButton('reservations','Reservas')}${opsButton('notifications','Notificaciones')}${dayManager()?opsButton('setup','Preparar barco'):''}</div>`);
+ }
+ const header=document.querySelector('#dayHeader');
+ if(header&&boats.length>1)header.insertAdjacentHTML('beforeend',`<select id="opsBoat" aria-label="Cambiar barco">${boats.map(b=>`<option value="${esc(b.id)}" ${b.id===boatId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`);
+ if(!dayPage.startsWith('ops-'))return;
+ const name=dayPage.slice(4);
+ const content=name==='setup'?opsPreparation():!opsData?'<p>Cargando datos…</p>':({requests:opsRequests,stock:opsStock,transfers:opsTransfers,reservations:opsReservationsView,notifications:opsNotifications}[name]?.()||'');
+ $('#content').innerHTML=`<div class="day-content">${dayBack()}<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('stock','Stock')}${opsButton('reservations','Reservas')}${opsAction('refresh','','Actualizar')}</div>${opsError?`<p class="form-error" role="alert">${esc(opsError)}</p>`:''}${content}<p class="day-muted">${opsLoading?'Actualizando…':'Los cambios se confirman al guardarse en el servidor.'}</p></div>`;
+ if(!opsData&&!opsLoading&&!opsError)opsReload();
+};
+document.addEventListener('change',async event=>{
+ if(event.target.id==='opsBoat'){opsData=null;await loadBoat(event.target.value);}
+ if(event.target.id==='opsBackupFile'){
+  try{
+   const file=event.target.files[0];if(!file)return;if(file.size>3500000)throw Error('El respaldo supera el límite de restauración de 3,5 MB. Requiere recuperación asistida.');
+   const backup=JSON.parse(await file.text());if(backup.boat!==boatId||backup.version!==1)throw Error('El respaldo no corresponde a este barco.');
+   if(!confirm('¿Restaurar inventario, tareas y pedidos de esta copia? Se descargará y conservará el estado actual antes de restaurar.'))return;
+   const current=await opsFetch('backup');opsDownloadBackup(current,'antes-de-restaurar');
+   await opsFetch('backup_restore',{backup,revision:current.revision,key:uid()});toast('Respaldo restaurado.');await opsAfterSave();
+  }catch(e){toast(e.message);}return;
+ }
+ if(event.target.id==='legacyInventory'){
+  try{
+   const file=event.target.files[0];if(file.size>2000000)throw Error('El archivo supera 2 MB.');
+   const imported=JSON.parse(await file.text());
+   if(!Array.isArray(imported.products)||imported.products.length>1000)throw Error('Respaldo inválido.');
+   $('#legacyReview').innerHTML='<p>Revisá cada producto y confirmá la cantidad contada. No se importará nada automáticamente.</p>'+imported.products.map(p=>opsForm('stock_add',`<input type="hidden" name="area" value="gastronomia">`+opsField('Producto','name','text',p.name,'required')+opsField('Unidad','unit','text',p.unit,'required')+opsField('Cantidad contada','quantity','number',p.current,'required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note','text','Revisión de respaldo gastronómico'))).join('');
+  }catch(e){toast(e.message);}
+ }
+});
+document.addEventListener('submit',async event=>{
+ const form=event.target;if(!form.matches('.ops-form'))return;
+ event.preventDefault();if(opsBusy||!form.reportValidity())return;
+ clearTimeout(draftTimer);opsBusy=true;const button=form.querySelector('[type=submit]');button.disabled=true;
+ try{
+  const data=Object.fromEntries(new FormData(form));if(form.dataset.id)data.id=form.dataset.id;
+  for(const key of ['quantity','amount'])if(key in data)data[key]=Number(data[key]);
+  if(form.dataset.operation==='request_create'){
+   data.urgent=form.elements.urgent.checked;
+   const file=form.elements.photo.files[0];data.photo=file?(await api('photos','POST',{boat:boatId,data:await photo(file)})).url:'';
+  }
+  if(form.dataset.operation==='collection_instruction')data.verified=form.elements.verified.checked;
+  if(form.dataset.operation==='reservation_preferences'){data.preferences={};for(const key of ['food','allergies','drinks','activities']){data.preferences[key]=data[key];delete data[key];}}
+  const serialized=JSON.stringify(data);if(form.dataset.payload!==serialized){form.dataset.key=uid();form.dataset.payload=serialized;}
+  form._opsPending ||= {...data,key:form.dataset.key};
+  await draftSave(form);
+  await opsFetch(form.dataset.operation,form._opsPending);
+  await draftWrite(draftKey(form),null);
+  toast('Guardado en el servidor');await opsAfterSave();
+ }catch(e){if(e.status&&e.status<500){form._opsPending=null;await draftSave(form);}form.querySelector('.form-error').textContent=e.message;}finally{opsBusy=false;button.disabled=false;}
+});
+async function opsAfterSave(){const page=dayPage;await loadBoat(boatId);dayPage=page;await opsReload();}
+document.addEventListener('click',async event=>{
+ const button=event.target.closest('[data-op]');if(!button||opsBusy)return;
+ const operation=button.dataset.op;opsBusy=true;button.disabled=true;
+ try{
+  if(operation==='backup'){opsDownloadBackup(await opsFetch('backup'),'respaldo');return;}
+  if(operation==='refresh'){await opsReload();return;}
+  if(operation==='export_requests'){
+   const grouped=new Map();
+   for(const row of opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status))){const k=[row.area,row.name.trim().toLowerCase(),row.unit].join('|');const item=grouped.get(k)||{area:row.area,name:row.name,unit:row.unit,quantity:0};item.quantity+=Number(row.quantity)-Number(row.received);grouped.set(k,item);}
+   const quote=v=>'"'+String(v).replaceAll('"','""')+'"';
+   const content='\uFEFF'+[['Área','Producto','Unidad','Pendiente'],...[...grouped.values()].map(x=>[x.area,x.name,x.unit,x.quantity])].map(row=>row.map(quote).join(',')).join('\r\n');
+   const url=URL.createObjectURL(new Blob([content],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='pedido-'+state.boat.name+'-'+today()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+  }
+  if(operation==='candidates'){
+   opsCandidates=await opsFetch('reservation_candidates');
+   $('#opsCandidates').innerHTML=opsCandidates.map(r=>`<div class="day-note">${esc(r.name)} · ${date(r.start)} ${opsAction('reservation_link',r.id,'Vincular a '+esc(state.boat.name))}</div>`).join('')||empty('No hay reservas disponibles.');return;
+  }
+  if(operation==='subscribe'||operation==='unsubscribe'){
+   if(!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Este navegador no permite notificaciones. En iPhone abrí la app instalada en inicio.');
+   if(operation==='subscribe'&&!opsData.pushPublicKey)throw Error('Las notificaciones todavía no están configuradas en el servidor.');
+   const permission=operation==='subscribe'?await Notification.requestPermission():Notification.permission;
+   if(operation==='subscribe'&&permission!=='granted')throw Error('No se habilitó el permiso de notificaciones.');
+   const registration=await navigator.serviceWorker.register('/a-bordo/push-sw.js',{scope:'/a-bordo/'});
+   if(!registration.active)await new Promise(resolve=>{const worker=registration.installing||registration.waiting;worker?.addEventListener('statechange',()=>{if(worker.state==='activated')resolve();});});
+   let subscription=await registration.pushManager.getSubscription();
+   if(operation==='unsubscribe'){if(subscription){await opsFetch('push_unsubscribe',{key:uid(),endpoint:subscription.endpoint});await subscription.unsubscribe();}toast('Notificaciones desactivadas en este dispositivo');return;}
+   if(!subscription){const key=opsData.pushPublicKey.replace(/-/g,'+').replace(/_/g,'/');const bytes=Uint8Array.from(atob(key),c=>c.charCodeAt(0));subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:bytes});}
+   await opsFetch('push_subscribe',{key:uid(),subscription:subscription.toJSON()});toast('Dispositivo habilitado. Usá Enviar prueba para comprobarlo.');return;
+  }
+  if(['collection_review','reservation_link','transfer_cancel'].includes(operation)&&!confirm('¿Confirmar esta operación?'))return;
+  button.dataset.key ||=uid();
+  const payload={key:button.dataset.key};if(button.dataset.id)payload.id=operation==='notification_read'?Number(button.dataset.id):button.dataset.id;if(button.dataset.status)payload.status=button.dataset.status;
+  await opsFetch(operation,payload);toast(operation==='push_test'?'Prueba registrada; comprobá que llegue al teléfono.':'Guardado');await opsAfterSave();
+ }catch(e){toast(e.message);}finally{opsBusy=false;button.disabled=false;}
+});
+
+const opsOriginalLoadBoat=loadBoat;
+loadBoat=async function(id){if(id!==boatId){opsData=null;opsReservations=[];opsRenderToken++;opsLoading=false;opsError='';$('#content').innerHTML='<p role="status">Cargando barco…</p>';}return opsOriginalLoadBoat(id);};
+renderFood=function(){dayPage="ops-stock";view="day";render();};
+
+function opsDownloadBackup(backup,prefix){const url=URL.createObjectURL(new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=prefix+'-'+state.boat.name+'-'+today()+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}

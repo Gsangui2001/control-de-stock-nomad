@@ -41,3 +41,6 @@ yarn-error.log*
 .env*
 
 /supabase/.temp/
+/.work/
+/output/
+/.playwright-cli/

@@ -4,6 +4,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
+const crewExports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'lib/boat-crew-state.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:crewExports});
 const exportsObject = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'lib/boat-task-access.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:exportsObject});
 const {canUseBoatTask,mergeCrewTasks}=exportsObject;
@@ -33,14 +34,15 @@ vm.runInContext(fs.readFileSync(path.join(root,'public/a-bordo/daily.js'),'utf8'
 assert.equal(vm.runInContext('dayTasks().map(t=>t.id).join(",")',sandbox),'shared,chef');
 let html=vm.runInContext('dayManualBody()',sandbox);
 assert.ok(!html.includes('MANUAL OPERATIVO DE TRIPULACIÓN'));
-assert.ok(html.includes('5. GESTIÓN DEL MANTENIMIENTO'));
+assert.ok(!html.includes('5. GESTIÓN DEL MANTENIMIENTO'));
 assert.ok(html.includes('8. RESPONSABILIDADES DEL CHEF'));
 assert.ok(!html.includes('7. RESPONSABILIDADES DEL CAPITÁN'));
 assert.ok(!html.includes('8. RESPONSABILIDADES DEL MARINERO'));
-assert.ok(html.includes('1. OBJETIVO'));
-assert.ok(html.includes('1. Revisar\n2. Limpiar'));
+assert.ok(!html.includes('1. OBJETIVO'));
+assert.ok(!html.includes('1. Revisar\n2. Limpiar'));
 vm.runInContext('dayManualRole="all"',sandbox);
 assert.ok(vm.runInContext('dayManualBody()',sandbox).includes('7. RESPONSABILIDADES DEL CAPITÁN'));
+assert.ok(vm.runInContext('dayManualBody()',sandbox).includes('1. Revisar\n2. Limpiar'));
 // Compare client and server task eligibility for every supported crew role.
 for(const role of ['capitan','chef','marinero','lector']) {
   sandbox.role=role;
@@ -69,7 +71,7 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
     throw Error('Unexpected RPC '+op);
   };
   const routeExports={};
-  const mockRequire=name=>name==='@supabase/supabase-js'?{createClient:()=>({rpc:(_fn,{operation,payload})=>({abortSignal:async()=>{try{return {data:await rpc(operation,payload),error:null};}catch(error){return {data:null,error};}}})})}:name==='next/server'?{NextResponse:{json:(data,opts)=>({data,status:opts.status})}}:name==='@/lib/boat-task-access'?exportsObject:require(name);
+  const mockRequire=name=>name==='@supabase/supabase-js'?{createClient:()=>({rpc:(_fn,{operation,payload})=>({abortSignal:async()=>{try{return {data:await rpc(operation,payload),error:null};}catch(error){return {data:null,error};}}})})}:name==='next/server'?{NextResponse:{json:(data,opts)=>({data,status:opts.status})}}:name==='@/lib/boat-task-access'?exportsObject:name==='@/lib/boat-push'?{flushBoatPush:async()=>({})}:name==='@/lib/boat-crew-state'?crewExports:require(name);
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'app/api/boat/[operation]/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:routeExports,require:mockRequire,process:{env:{BOAT_CONTROL_SERVER_SECRET:'test-only'}},Buffer,URL,structuredClone,AbortSignal});
   const call=async(method,body,operation='state')=>routeExports[method]({method,nextUrl:new URL('https://fixture/api/boat/'+operation+'?boat=00000000000000000000000000000001'),cookies:{get:()=>undefined},headers:{get:k=>k==='content-type'?'application/json':null},text:async()=>JSON.stringify(body)},{params:{operation}});
   let response=await call('GET');

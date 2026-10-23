@@ -87,7 +87,7 @@ let state,
   revision,
   session,
   boats = [],
-  boatId = "",
+  boatId = new URLSearchParams(location.search).get("boat") || "",
   role = "",
   view = "day",
   editing = null,
@@ -182,7 +182,7 @@ async function api(path, method = "GET", body) {
     });
   } catch {
     throw new Error(
-      "No hay conexión con el servidor. No se guardaron cambios.",
+      "No hay conexión. No se pudo confirmar el guardado; conservá el formulario y revisá el estado antes de repetir.",
     );
   }
   let data;
@@ -198,7 +198,7 @@ async function api(path, method = "GET", body) {
       state = null;
       startup();
     }
-    throw new Error(data.error || "No se pudo completar la acción.");
+    const error=new Error(data.error || "No se pudo completar la acción."); error.status=r.status; throw error;
   }
   return data;
 }
@@ -233,14 +233,23 @@ async function portableBackup() {
   return copy;
 }
 async function commit(next) {
-  await uploadPhotos(next);
-  const saved = await api("state?boat=" + encodeURIComponent(boatId), "PUT", {
-    state: next,
-    revision,
-  });
-  state = saved.state;
-  revision = saved.revision;
-  render();
+  const key = `pending-state:${session.id}:${boatId}`;
+  let pending = await draftRead(key);
+  if(pending)throw new Error('Hay un guardado anterior sin confirmar. Volvé a Mi día y usá Revisar guardado pendiente antes de registrar otro trabajo.');
+  if(!pending){
+    await uploadPhotos(next);
+    pending={state:next,revision,key:uid(),draftKey:draftKey($("#dayForm")||$("#editorForm"))};
+    await draftWrite(key,pending);
+  }
+  try {
+    const saved = await api("state?boat=" + encodeURIComponent(boatId), "PUT", pending);
+    await draftWrite(key,null);
+    if(pending.draftKey)await draftWrite(pending.draftKey,null);
+    state=saved.state;revision=saved.revision;render();
+  } catch(error) {
+    if(error.status && error.status<500)await draftWrite(key,null);
+    throw error;
+  }
 }
 async function loadBoat(id) {
   boatId = id;
@@ -296,6 +305,7 @@ async function startup() {
       return;
     }
     await loadBoat(boats.some((b) => b.id === boatId) ? boatId : boats[0].id);
+    if(new URLSearchParams(location.search).has("notifications")){dayPage="ops-notifications";render();}
     clearInterval(activityTimer);
     if (session.admin)
       activityTimer = setInterval(
@@ -779,6 +789,7 @@ function movement(
 }
 $("#editorForm").onsubmit = async (event) => {
   event.preventDefault();
+  clearTimeout(draftTimer);
   if (!editing || !writable()) return;
   const button = $("#saveButton");
   if (button.disabled) return;
