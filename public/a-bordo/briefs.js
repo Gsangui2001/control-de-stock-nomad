@@ -15,7 +15,7 @@ function briefContent(res){
 }
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
- return `<h2>Reservas de ${esc(state.boat.name)}</h2><p>${isAdmin?'Revisá los datos del CRM, completá la ficha y publicala para la tripulación del Nomade. Los cambios guardados quedan en borrador hasta que los publiques.':'Estas son las fichas publicadas para la tripulación del Nomade. Abrí cada ficha y confirmá que revisaste su versión actual.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}
+ return `<h2>Reservas de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota revisa y aprueba cada ficha desde la reserva del CRM. Después le pide a Claudio que la publique aquí. Los cambios guardados quedan en borrador y requieren nueva aprobación.':'Estas son las fichas publicadas para la tripulación del Nomade. Abrí cada ficha y confirmá que revisaste su versión actual.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}
  ${isAdmin?'<div class="ops-actions"><button type="button" class="day-secondary" data-brief-action="external">Plantillas para otros capitanes</button></div><div id="briefExternal"></div>':''}
  ${opsReservations.map(res=>{
   const b=res.brief||{},changed=b.sourceChanged||b.draftChanged;
@@ -25,7 +25,7 @@ function briefReservationsView(){
   ${briefContent(res)}
   ${isAdmin?`<details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
    <p>${['confirmed','in_progress'].includes(res.status)?'La reserva está confirmada en el CRM.':'La reserva debe confirmarse en el CRM antes de publicar la ficha.'}</p>
-   <button type="button" class="day-primary" data-brief-action="publish" data-id="${esc(res.id)}" ${!['confirmed','in_progress'].includes(res.status)?'disabled':''}>${b.version?'Publicar actualización y avisar':'Publicar para la tripulación'}</button>
+   <p>La publicación requiere la aprobación de Carlota en la ficha de la reserva.</p><a class="day-primary" href="https://crm.nomadsailors.com/operaciones" target="_blank" rel="noopener">Abrir reservas en el CRM</a>
    <h3>Revisión de la versión ${b.version||'pendiente'}</h3>${(b.reviews||[]).map(rv=>`<p>${esc(rv.name)} · ${esc(rv.role)}: <strong>${rv.reviewedAt?'Revisado · '+briefTime(rv.reviewedAt):'Pendiente'}</strong></p>`).join('')||'<p>No hay tripulantes asignados.</p>'}`:
    b.reviewedAt?`<div class="day-note">Revisaste la versión ${b.version} el ${briefTime(b.reviewedAt)}.</div>`:
    ['capitan','chef','marinero','encargado'].includes(role)?`<button type="button" class="day-primary" data-brief-action="review" data-id="${esc(res.id)}" ${b.sourceChanged?'disabled':''}>Revisé la ficha · versión ${b.version}</button>`:''}
@@ -57,7 +57,7 @@ document.addEventListener('submit',async event=>{
  // Keep the same request after an ambiguous network failure; the server receipt
  // resolves it before any new content is sent.
  form._opsPending ||= {...data,key:uid()};
- try{await draftSave(form);await opsFetch('brief_save',form._opsPending);await draftWrite(draftKey(form),null);toast('Borrador guardado. Revisalo y publicalo para avisar a la tripulación.');await opsAfterSave();}
+ try{await draftSave(form);await opsFetch('brief_save',form._opsPending);await draftWrite(draftKey(form),null);toast('Borrador guardado. Carlota debe revisarlo y aprobarlo en el CRM.');await opsAfterSave();}
  catch(e){if(e.status&&e.status<500)form._opsPending=null;form.querySelector('.form-error').textContent=e.message;}
  finally{briefBusy=false;button.disabled=false;}
 });

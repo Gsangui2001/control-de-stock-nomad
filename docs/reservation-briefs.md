@@ -53,3 +53,5 @@ coinciden byte a byte con la versión probada. Interfaz móvil verificada con
 fixture de publicación/revisión y lectura de producción. Cero publicaciones,
 revisiones o avisos reales de prueba. Recepción push en teléfonos pendiente de
 activación; había cero suscripciones activas.
+
+Desde el circuito CRM del 23/10, toda nueva publicación exige aprobación de Carlota en la reserva. La migración 20261023230725_crm_nomade_brief_approval, mantenida en Nomad, agrega el RPC autenticado y un trigger que bloquea publicaciones desde el camino antiguo. La app conserva borradores y acuses; enlaza al CRM para aprobar y publicar. Ver docs/nomade-brief-crm-2026-10-23.md en Nomad. La prueba SQL histórica de este repositorio describe el estado anterior a ese trigger; la suite vigente de aprobación está en tests/nomade-brief de Nomad.
