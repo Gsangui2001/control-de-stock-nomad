@@ -203,7 +203,7 @@ async function saveDayForm(event) {
 }
 document.addEventListener("click", async event => {
   const button = event.target.closest("[data-day]");
-  if (!button || !state || daySaving || (typeof expenseBusy !== "undefined" && expenseBusy) || (typeof intakeBusy !== "undefined" && intakeBusy) || (typeof opsBusy !== "undefined" && opsBusy)) return;
+  if (!button || !state || daySaving || (typeof expenseBusy !== "undefined" && expenseBusy) || (typeof intakeBusy !== "undefined" && intakeBusy) || (typeof opsBusy !== "undefined" && opsBusy) || (typeof briefBusy !== "undefined" && briefBusy)) return;
   const page = button.dataset.day;
   try {
     if (page === "equipmentGroup") { dayEquipmentGroup = button.dataset.id || ""; render(); return; }

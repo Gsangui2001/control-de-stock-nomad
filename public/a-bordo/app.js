@@ -305,7 +305,8 @@ async function startup() {
       return;
     }
     await loadBoat(boats.some((b) => b.id === boatId) ? boatId : boats[0].id);
-    if(new URLSearchParams(location.search).has("notifications")){dayPage="ops-notifications";render();}
+    if(new URLSearchParams(location.search).has("reservation")){dayPage="ops-reservations";render();}
+    else if(new URLSearchParams(location.search).has("notifications")){dayPage="ops-notifications";render();}
     clearInterval(activityTimer);
     if (session.admin)
       activityTimer = setInterval(
@@ -1457,4 +1458,7 @@ $("#navigation").addEventListener("click", (e) => {
 $("#quickLog").onclick = () => openEditor("log");
 $("#closeDialog").onclick = $("#cancelDialog").onclick = () =>
   $("#editor").close();
-startup();
+// Deep links can load operational views immediately. Wait for the later scripts
+// (operations, intake, expenses and briefs) before resolving the first session.
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startup,{once:true});
+else startup();

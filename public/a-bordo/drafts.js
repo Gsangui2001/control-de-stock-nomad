@@ -4,7 +4,7 @@ async function draftRead(key){const db=await boatDraftDB;return new Promise((res
 async function draftWrite(key,value){const db=await boatDraftDB;return new Promise((resolve,reject)=>{const tx=db.transaction('drafts','readwrite');if(value===null)tx.objectStore('drafts').delete(key);else tx.objectStore('drafts').put(value,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
 function draftKey(form){
  if(!form||!session||!boatId)return '';
- const identity=form.matches('.ops-form')?[form.dataset.operation,form.dataset.id||form.elements.productId?.value||'new'].join(':'):form.id==='dayForm'?[form.dataset.kind,['task','blocked','missing'].includes(form.dataset.kind)?daySelected:'new'].join(':'):form.id==='editorForm'&&editing?[editing.type,editing.id||'new'].join(':'):'';
+ const identity=form.matches('.ops-form,.brief-form')?[form.dataset.operation,form.dataset.id||form.elements.productId?.value||'new'].join(':'):form.id==='dayForm'?[form.dataset.kind,['task','blocked','missing'].includes(form.dataset.kind)?daySelected:'new'].join(':'):form.id==='editorForm'&&editing?[editing.type,editing.id||'new'].join(':'):'';
  return identity?[session.id,boatId,identity].join(':'):'';
 }
 async function draftSave(form){
@@ -29,14 +29,14 @@ new MutationObserver(()=>{
    };marker.append(recover);
   }).catch(()=>{});
  }
- document.querySelectorAll('#dayForm,.ops-form,#editorForm').forEach(form=>{
+ document.querySelectorAll('#dayForm,.ops-form,.brief-form,#editorForm').forEach(form=>{
   if(!form.querySelector('[name]')||draftForms.has(form.querySelector('[name]'))||!draftKey(form)||form.closest('#legacyReview'))return;draftForms.add(form.querySelector('[name]'));
   const key=draftKey(form);
   draftRead(key).then(saved=>{
    if(!saved||!form.isConnected||key!==draftKey(form))return;
    const box=document.createElement('div');box.className='day-note';box.textContent='Hay un borrador guardado en este dispositivo. ';
    const restore=document.createElement('button');restore.type='button';restore.textContent='Recuperar';
-   restore.onclick=()=>{for(const [name,value] of Object.entries(saved.values)){const field=form.elements.namedItem(name);if(!field)continue;if(field.type==='file'){const transfer=new DataTransfer();value.forEach(file=>transfer.items.add(file));field.files=transfer.files;}else if(field.type==='checkbox')field.checked=value;else field.value=value;}form._opsPending=saved.pending;box.remove();toast('Borrador recuperado. Revisalo antes de guardar.');};
+   restore.onclick=()=>{for(const [name,value] of Object.entries(saved.values)){const field=form.elements.namedItem(name);if(!field)continue;if(field.type==='file'){const transfer=new DataTransfer();value.forEach(file=>transfer.items.add(file));field.files=transfer.files;}else if(field.type==='checkbox')field.checked=value;else field.value=value;}form._opsPending=saved.pending;if(form.matches('.brief-form'))form.dataset.dirty='true';box.remove();toast('Borrador recuperado. Revisalo antes de guardar.');};
    const discard=document.createElement('button');discard.type='button';discard.textContent='Descartar';discard.onclick=async()=>{if(saved.pending){toast('Hay un envío sin confirmar. Recuperalo y reintentá antes de descartarlo.');return;}await draftWrite(key,null);box.remove();};
    box.append(restore,discard);form.prepend(box);
   }).catch(()=>{});

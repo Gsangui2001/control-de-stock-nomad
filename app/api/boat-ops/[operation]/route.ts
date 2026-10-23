@@ -24,6 +24,9 @@ const schemas:Record<string,z.ZodTypeAny>={
  transfer_receive:z.object({...common,id,quantity:amount,productId:z.string().max(100).optional(),location:text}),
  transfer_cancel:z.object({...common,id}),
  reservation_link:z.object({...common,id}),
+ brief_save:z.object({...common,id,revision:z.number().int().nonnegative(),details:z.object(Object.fromEntries(['embarkation','embarkationTime','disembarkation','disembarkationTime','food','allergies','drinks','activities','transport','requests'].map(k=>[k,z.string().trim().max(2000)])))}),
+ brief_publish:z.object({...common,id,revision:z.number().int().nonnegative(),sourceHash:z.string().regex(/^[a-f0-9]{64}$/)}),
+ brief_review:z.object({...common,id,version:z.number().int().positive()}),
  reservation_preferences:z.object({...common,id,captainId:z.string().max(100),preferences:z.object({food:z.string().max(2000),allergies:z.string().max(2000),drinks:z.string().max(2000),activities:z.string().max(2000)})}),
  collection_instruction:z.object({...common,id,amount,currency:z.enum(['USD','EUR','ARS']),concept:text,dueDate:z.string().date(),verified:z.literal(true)}),
  collection_report:z.object({...common,id,amount,note:z.string().max(500)}),
@@ -46,7 +49,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const operation=params.operation;
   let payload:any;
   if(req.method==='GET') {
-   if(!['overview','reservations','reservation_candidates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
+   if(!['overview','reservations','reservation_candidates','external_templates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
    payload=z.object({boat:common.boat}).parse({boat:req.nextUrl.searchParams.get('boat')});
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
@@ -59,7 +62,8 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    if(payload.photo&&!new RegExp('^/api/boat/photos\\?boat='+payload.boat+'&id=[a-f0-9-]{36}$').test(payload.photo))return json({error:'Foto inválida'},400);
   }
   payload.session=createHash('sha256').update(req.cookies.get('boat_session')?.value||'').digest('hex');
-  const {data,error}=await client.rpc(operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc',{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
+  const rpc=operation.startsWith('brief_')||['reservations','external_templates'].includes(operation)?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:error.code==='23505'?409: /^(P0001|22|23)/.test(error.code||'')?400:503;
    return json({error:status===409?'Ese registro ya está vinculado. Actualizá la vista.':error.message},status);
