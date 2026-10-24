@@ -1,8 +1,21 @@
 # Fichas de viaje del Nomade
 
-En A bordo → Reservas, administración revisa los datos del CRM, completa el
-borrador y pulsa **Publicar para la tripulación**. La reserva debe estar
-confirmada o en curso y asignada inequívocamente al Nomade en el CRM.
+Carlota revisa y aprueba en la reserva del CRM; después pide a Claudio la
+publicación. En A bordo → Reservas, administración puede revisar el borrador.
+La reserva debe estar confirmada o en curso y asignada inequívocamente al Nomade.
+
+Desde el 24/10/2026, la vista es una ficha breve de **Información del huésped**:
+fechas, cliente, pasajeros, país, aire acondicionado, llegada/salida, comidas,
+bebidas y experiencia. País y aire acondicionado se completan explícitamente y
+forman parte de la misma aprobación. Los datos desconocidos quedan pendientes;
+un guion no significa ausencia de alergias. Se conservan todas las restricciones
+registradas por pasajero y en la ficha. Las notas internas no se muestran en la
+tarjeta ni se entregan en el payload de tripulación. El contacto se despliega
+por separado según los permisos existentes. Los controles administrativos quedan
+plegados y el tripulante confirma con **Ya la revisé**, ligado a la versión.
+
+Regresión de la vista: `node --test tests/boat-guest-card.cjs`. La ampliación de
+campos y los controles de aprobación se verifican en la suite Nomad indicada abajo.
 
 La publicación crea una versión inmutable, avisos para los miembros actuales
 (capitán, chef, marinero, encargado) y trabajos durables de notificación para

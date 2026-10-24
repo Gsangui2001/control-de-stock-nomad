@@ -1,21 +1,36 @@
 "use strict";
 let briefExternal=null,briefBusy=false;
-const briefFields={embarkation:'Lugar de embarque',embarkationTime:'Hora de embarque (hora local)',disembarkation:'Lugar de desembarque',disembarkationTime:'Hora de desembarque (hora local)',food:'Alimentación adicional',allergies:'Alergias y restricciones confirmadas',drinks:'Bebidas',activities:'Actividades acordadas',transport:'Traslado y coordinación',requests:'Pedidos especiales y preparativos'};
+const briefFields={country:'País de procedencia',airConditioning:'Aire acondicionado (sí, no o por confirmar)',embarkation:'Lugar de embarque',embarkationTime:'Hora de embarque (hora local)',disembarkation:'Lugar de desembarque',disembarkationTime:'Hora de desembarque / salida tardía',food:'Dieta específica',allergies:'Alergias / alimentos a evitar',drinks:'Bebidas preferidas',activities:'Experiencia deseada',transport:'Cómo llegan / traslado',requests:'Preparación y pedidos especiales'};
 const briefMissing=value=>value===null||value===undefined||value===''?'Pendiente de informar':String(value);
 const briefInterest=value=>({snorkeling:'Esnórquel',diving:'Buceo',guna_culture:'Cultura guna',fishing:'Pesca',relax:'Descanso',sailing:'Navegación',gastronomy:'Gastronomía',remote_islands:'Islas remotas',family_activities:'Actividades en familia',other:'Otros'})[value]||value;
 const briefTime=value=>value?new Date(value).toLocaleString('es',{dateStyle:'short',timeStyle:'short'}):'Pendiente';
 function briefContent(res){
- const details=res.details||res.brief?.draft||{};
- return `<div class="brief-facts"><p><strong>Cliente</strong><br>${esc(briefMissing(res.name))}</p><p><strong>Pasajeros</strong><br>${esc(briefMissing(res.guests))}</p><p><strong>Ingreso</strong><br>${date(res.start)}</p><p><strong>Salida</strong><br>${date(res.end)}</p></div>${('phone' in res)?`<p><strong>Contacto principal:</strong> ${esc(briefMissing(res.phone))} · ${esc(briefMissing(res.email))}</p>`:''}
- <p><strong>Observaciones operativas:</strong> ${esc(briefMissing(res.notes))}</p>
- <h3>Pasajeros y alimentación</h3>${(res.passengers||[]).map(p=>`<article class="day-inventory"><strong>${esc(briefMissing(p.name))}</strong><p>Alimentación: ${esc(briefMissing(p.food))}</p><p class="${p.avoid?'ops-critical':''}">Restricciones / evitar: ${esc(briefMissing(p.avoid))}</p><p>Pedidos: ${esc(briefMissing(p.requests))}</p></article>`).join('')||'<p>Pendiente de informar los pasajeros y sus restricciones.</p>'}
- <p><strong>Intereses:</strong> ${esc(briefMissing((res.interests||[]).map(briefInterest).join(', ')))}</p>
- ${Object.entries(res.legacyPreferences||{}).filter(([,v])=>v).map(([k,v])=>`<p><strong>${esc(({food:'Alimentación',allergies:'Alergias',drinks:'Bebidas',activities:'Actividades'})[k]||k)} (registro previo):</strong> ${esc(v)}</p>`).join('')}
- ${Object.entries(briefFields).map(([key,label])=>`<p class="${key==='allergies'&&details[key]?'ops-critical':''}"><strong>${label}:</strong> ${esc(briefMissing(details[key]))}</p>`).join('')}`;
+ const details=res.details||res.brief?.draft||{},legacy=res.legacyPreferences||{},passengers=res.passengers||[];
+ // Never summarize internal notes into the crew card. Only explicitly structured
+ // fields from the approved snapshot belong in the arrival briefing.
+ const value=v=>typeof v==='string'&&!/^\s*[-–—]\s*$/.test(v)?v.trim():'';
+ const joined=items=>[...new Set(items.map(value).filter(Boolean))].join(' · ');
+ const named=key=>passengers.filter(p=>value(p[key])).map(p=>`${value(p.name)||'Pasajero'}: ${value(p[key])}`);
+ const pending='Pendiente de confirmar';
+ const row=(label,content,critical=false)=>`<p class="guest-line${critical?' guest-alert':''}"><strong>${label}</strong><span>${esc(content||pending)}</span></p>`;
+ const facts=(label,content)=>`<div><dt>${label}</dt><dd>${esc(content||pending)}</dd></div>`;
+ const avoid=joined([details.allergies,legacy.allergies,...named('avoid')]);
+ const diet=joined([details.food,legacy.food,...named('food')]);
+ const requests=joined([details.requests,...named('requests')]);
+ const names=joined(passengers.map(p=>p.name));
+ const guests=res.guests==null?'Cantidad pendiente':`${res.guests} pasajero${res.guests===1?'':'s'}`;
+ const experience=joined([details.activities,legacy.activities,...(res.interests||[]).map(briefInterest)]);
+ return `<article class="guest-sheet" aria-label="Información del huésped">
+ <h3>Información del huésped</h3>
+ <dl class="guest-facts">${facts('Fecha del charter',`${res.start?date(res.start):pending} → ${res.end?date(res.end):pending}`)}${facts('Cliente principal',value(res.name))}${facts('Pasajeros / acompañantes',`${guests}${names?' · '+names:' · Nombres pendientes'}`)}${facts('País de procedencia',value(details.country))}</dl>
+ <div class="guest-block">${row('Aire acondicionado',value(details.airConditioning))}${row('Llegada',joined([details.transport,details.embarkation,details.embarkationTime]))}${row('Salida',joined([details.disembarkation,details.disembarkationTime]))}</div>
+ <div class="guest-block"><h4>Comidas y bebidas</h4>${row('A evitar',avoid,Boolean(avoid))}${row('Prefieren beber',joined([details.drinks,legacy.drinks]))}${row('Dieta específica',diet)}</div>
+ <div class="guest-block">${row('Experiencia',experience)}${requests?row('Para recibirlos',requests):''}</div>
+ </article>${('phone' in res)?`<details class="day-disclosure guest-contact"><summary>Contacto del cliente</summary><p>${esc(joined([res.phone,res.email])||pending)}</p></details>`:''}`;
 }
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
- return `<h2>Reservas de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota revisa y aprueba cada ficha desde la reserva del CRM. Después le pide a Claudio que la publique aquí. Los cambios guardados quedan en borrador y requieren nueva aprobación.':'Estas son las fichas publicadas para la tripulación del Nomade. Abrí cada ficha y confirmá que revisaste su versión actual.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}
+ return `<h2>Huéspedes de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota revisa y aprueba en el CRM. Después Claudio publica la ficha para la tripulación.':'Abrí la ficha para preparar la llegada y confirmá que la revisaste.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}
  ${isAdmin?'<div class="ops-actions"><button type="button" class="day-secondary" data-brief-action="external">Plantillas para otros capitanes</button></div><div id="briefExternal"></div>':''}
  ${opsReservations.map(res=>{
   const b=res.brief||{},changed=b.sourceChanged||b.draftChanged;
@@ -23,12 +38,12 @@ function briefReservationsView(){
   ${b.version?`<p class="day-muted">Publicada: ${briefTime(b.publishedAt)}</p>`:'<div class="day-note">Todavía no está publicada para la tripulación.</div>'}
   ${changed?`<div class="ops-critical">${isAdmin?'Hay cambios sin publicar. Revisá y publicá una nueva versión para solicitar otra revisión.':'El CRM cambió desde esta publicación. Administración debe actualizar la ficha; esta es la última versión publicada.'}</div>`:''}
   ${briefContent(res)}
-  ${isAdmin?`<details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
+  ${isAdmin?`<details class="day-disclosure guest-admin"><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
    <p>${['confirmed','in_progress'].includes(res.status)?'La reserva está confirmada en el CRM.':'La reserva debe confirmarse en el CRM antes de publicar la ficha.'}</p>
    <p>La publicación requiere la aprobación de Carlota en la ficha de la reserva.</p><a class="day-primary" href="https://crm.nomadsailors.com/operaciones" target="_blank" rel="noopener">Abrir reservas en el CRM</a>
-   <h3>Revisión de la versión ${b.version||'pendiente'}</h3>${(b.reviews||[]).map(rv=>`<p>${esc(rv.name)} · ${esc(rv.role)}: <strong>${rv.reviewedAt?'Revisado · '+briefTime(rv.reviewedAt):'Pendiente'}</strong></p>`).join('')||'<p>No hay tripulantes asignados.</p>'}`:
+   <h3>Revisión de la versión ${b.version||'pendiente'}</h3>${(b.reviews||[]).map(rv=>`<p>${esc(rv.name)} · ${esc(rv.role)}: <strong>${rv.reviewedAt?'Revisado · '+briefTime(rv.reviewedAt):'Pendiente'}</strong></p>`).join('')||'<p>No hay tripulantes asignados.</p>'}</details>`:
    b.reviewedAt?`<div class="day-note">Revisaste la versión ${b.version} el ${briefTime(b.reviewedAt)}.</div>`:
-   ['capitan','chef','marinero','encargado'].includes(role)?`<button type="button" class="day-primary" data-brief-action="review" data-id="${esc(res.id)}" ${b.sourceChanged?'disabled':''}>Revisé la ficha · versión ${b.version}</button>`:''}
+   ['capitan','chef','marinero','encargado'].includes(role)?`<button type="button" class="day-primary" data-brief-action="review" data-id="${esc(res.id)}" ${b.sourceChanged?'disabled':''}>Ya la revisé · versión ${b.version}</button>`:''}
   </details>`;
  }).join('')||empty('No hay fichas disponibles para este barco.')}
  ${isAdmin&&opsReservations.length?`<details class="day-disclosure"><summary>Asignación de capitán e instrucciones de cobro</summary>${briefLegacyReservations()}</details>`:''}`;
