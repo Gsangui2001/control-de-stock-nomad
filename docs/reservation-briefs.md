@@ -1,7 +1,7 @@
 # Fichas de viaje del Nomade
 
-Carlota revisa y aprueba en la reserva del CRM; después pide a Claudio la
-publicación. En A bordo → Reservas, administración puede revisar el borrador.
+Carlota completa la ficha en la reserva del CRM y toca Listo para aprobar y
+publicar en una sola acción. En A bordo → Reservas, administración puede revisar el borrador.
 La reserva debe estar confirmada o en curso y asignada inequívocamente al Nomade.
 
 Desde el 24/10/2026, la vista es una ficha breve de **Información del huésped**:
@@ -10,8 +10,9 @@ bebidas y experiencia. País y aire acondicionado se completan explícitamente y
 forman parte de la misma aprobación. Los datos desconocidos quedan pendientes;
 un guion no significa ausencia de alergias. Se conservan todas las restricciones
 registradas por pasajero y en la ficha. Las notas internas no se muestran en la
-tarjeta ni se entregan en el payload de tripulación. El contacto se despliega
-por separado según los permisos existentes. Los controles administrativos quedan
+tarjeta ni se entregan en el payload de tripulación. El capitán recibe únicamente la ficha aprobada y su confirmación de lectura;
+no recibe contacto, notas internas ni datos de cobro. Administración y encargado
+conservan el contacto según sus permisos. Los controles administrativos quedan
 plegados y el tripulante confirma con **Ya la revisé**, ligado a la versión.
 
 Regresión de la vista: `node --test tests/boat-guest-card.cjs`. La ampliación de
@@ -31,8 +32,7 @@ reservas ni confirma su estado comercial. Reintentos con la misma clave no
 duplican publicación, aviso ni revisión; publicar sin cambios tampoco avisa.
 
 La tripulación solo recibe versiones publicadas. Cocina y marinero no reciben
-teléfono/email del cliente ni importes del CRM. Se conserva el control previo
-de instrucciones de cobro para el capitán asignado.
+teléfono/email del cliente ni importes del CRM. El payload del capitán también excluye instrucciones e informes de cobro.
 
 ## Otros barcos
 
@@ -68,3 +68,5 @@ revisiones o avisos reales de prueba. Recepción push en teléfonos pendiente de
 activación; había cero suscripciones activas.
 
 Desde el circuito CRM del 23/10, toda nueva publicación exige aprobación de Carlota en la reserva. La migración 20261023230725_crm_nomade_brief_approval, mantenida en Nomad, agrega el RPC autenticado y un trigger que bloquea publicaciones desde el camino antiguo. La app conserva borradores y acuses; enlaza al CRM para aprobar y publicar. Ver docs/nomade-brief-crm-2026-10-23.md en Nomad. La prueba SQL histórica de este repositorio describe el estado anterior a ese trigger; la suite vigente de aprobación está en tests/nomade-brief de Nomad.
+
+El límite de campos del capitán se aplica en el RPC, mediante la migración nomade_captain_card_only del CRM. La interfaz también oculta contactos de respuestas antiguas en caché. La confirmación Ya la revisé se conserva por versión.

@@ -25,3 +25,10 @@ test('crew only has versioned review; administration keeps draft controls inside
  const crew=app();crew.opsReservations=[source];const out=crew.briefReservationsView();assert.match(out,/Ya la revisé · versión 1/);assert.doesNotMatch(out,/Guardar borrador|data-brief-action="publish"|brief-form/);
  const admin=app(true);admin.opsReservations=[{...source,brief:{version:0,draft:{country:'Brasil'},reviews:[]}}];const draft=admin.briefReservationsView();assert.match(draft,/Administración · editar y ver revisiones/);assert.match(draft,/name="country"/);assert.match(draft,/aprobación de Carlota/);assert.doesNotMatch(draft,/data-brief-action="publish"/);
 });
+
+test('captain only sees the guest card and review, even if old cached data includes contact',()=>{
+ const a=app();a.role='capitan';a.opsReservations=[{id:'r',name:'Guest',phone:'PRIVATE_PHONE',email:'PRIVATE_EMAIL',collection:{amount:999},reports:[{amount:999}],brief:{version:1}}];
+ const out=a.briefReservationsView();
+ assert.match(out,/Información del huésped/);assert.match(out,/Ya la revisé · versión 1/);
+ assert.doesNotMatch(out,/PRIVATE_PHONE|PRIVATE_EMAIL|Contacto del cliente|Administración|999|Guardar borrador/);
+});
