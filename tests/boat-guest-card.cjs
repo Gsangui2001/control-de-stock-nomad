@@ -32,3 +32,16 @@ test('captain only sees the guest card and review, even if old cached data inclu
  assert.match(out,/Información del huésped/);assert.match(out,/Ya la revisé · versión 1/);
  assert.doesNotMatch(out,/PRIVATE_PHONE|PRIVATE_EMAIL|Contacto del cliente|Administración|999|Guardar borrador/);
 });
+
+test('captain collection shows only approved amount and a separate receipt action',()=>{
+ const a=app();a.role='capitan';
+ const res={id:'r',details:{captainCollection:'collect'},captainBalance:{status:'known',amountUsd:700,reportedCount:0},brief:{version:2}};
+ const out=a.briefPayment(res);assert.match(out,/USD 700,00/);assert.match(out,/data-brief-action="payment"/);
+ assert.doesNotMatch(a.briefPayment({...res,brief:{sourceChanged:true}}),/data-brief-action/);
+ assert.doesNotMatch(a.briefPayment({...res,captainBalance:{status:'incomplete',amountUsd:null}}),/USD 0|data-brief-action/);
+ assert.match(a.briefPayment({...res,details:{captainCollection:'none'}}),/No tenés que cobrar/);
+ assert.doesNotMatch(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:700,reportedCount:1}}),/data-brief-action/);
+ const paid=a.briefPayment({...res,captainPayment:{amountUsd:700,reportedBy:'Captain QA',reportedAt:'2026-01-01T12:00:00Z'}});
+ assert.match(paid,/Pago recibido/);assert.doesNotMatch(paid,/data-brief-action/);
+ a.role='chef';assert.equal(a.briefPayment(res),'');
+});

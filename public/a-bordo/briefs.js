@@ -28,6 +28,19 @@ function briefContent(res){
  <div class="guest-block">${row('Experiencia',experience)}${requests?row('Para recibirlos',requests):''}</div>
  </article>${(role!=='capitan'&&('phone' in res))?`<details class="day-disclosure guest-contact"><summary>Contacto del cliente</summary><p>${esc(joined([res.phone,res.email])||pending)}</p></details>`:''}`;
 }
+function briefPayment(res){
+ if(role!=='capitan')return '';
+ const money=n=>'USD '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const payment=res.captainPayment, balance=res.captainBalance, mode=res.details?.captainCollection;
+ let content;
+ if(payment)content=`<strong>Pago recibido: ${esc(money(payment.amountUsd))}</strong><p>Informado por ${esc(payment.reportedBy)} · ${briefTime(payment.reportedAt)}.</p>`;
+ else if(res.brief?.sourceChanged)content='<p>Por confirmar con Carlota. La instrucción de cobro cambió.</p>';
+ else if(mode==='none')content='<strong>No tenés que cobrar a bordo.</strong>';
+ else if(balance?.status==='known'&&balance.amountUsd===0)content='<strong>Sin saldo pendiente.</strong>';
+ else if(mode==='collect'&&balance?.status==='known'&&balance.amountUsd>0&&!balance.reportedCount)content=`<p>Debés cobrar al cliente <strong>${esc(money(balance.amountUsd))}</strong></p><button type="button" class="day-primary" data-brief-action="payment" data-id="${esc(res.id)}">Recibí ${esc(money(balance.amountUsd))}</button>`;
+ else content='<p>Por confirmar con Carlota. Todavía no hay un cobro autorizado.</p>';
+ return `<section class="guest-sheet" aria-label="Cobro al cliente"><h3>Cobro al cliente</h3>${content}</section>`;
+}
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
  return `<h2>Huéspedes de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota completa la ficha en el CRM y toca Listo para enviarla a la tripulación.':'Abrí la ficha para preparar la llegada y confirmá que la revisaste.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}
@@ -37,7 +50,7 @@ function briefReservationsView(){
   return `<details class="day-disclosure brief-card" id="brief-${esc(res.id)}" ${new URLSearchParams(location.search).get('reservation')===res.id?'open':''}><summary>${date(res.start)} · ${esc(res.name||'Cliente pendiente')} · ${res.guests??'—'} pasajeros · ${b.version?'Versión '+b.version:'Borrador'}</summary>
   ${b.version?`<p class="day-muted">Publicada: ${briefTime(b.publishedAt)}</p>`:'<div class="day-note">Todavía no está publicada para la tripulación.</div>'}
   ${changed?`<div class="ops-critical">${isAdmin?'Hay cambios sin publicar. Revisá y publicá una nueva versión para solicitar otra revisión.':'El CRM cambió desde esta publicación. Administración debe actualizar la ficha; esta es la última versión publicada.'}</div>`:''}
-  ${briefContent(res)}
+  ${briefContent(res)}${briefPayment(res)}
   ${isAdmin?`<details class="day-disclosure guest-admin"><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
    <p>${['confirmed','in_progress'].includes(res.status)?'La reserva está confirmada en el CRM.':'La reserva debe confirmarse en el CRM antes de publicar la ficha.'}</p>
    <p>La publicación requiere la aprobación de Carlota en la ficha de la reserva.</p><a class="day-primary" href="https://crm.nomadsailors.com/operaciones" target="_blank" rel="noopener">Abrir reservas en el CRM</a>
@@ -91,10 +104,11 @@ document.addEventListener('click',async event=>{
   const b=res.brief;
   if(action==='publish'&&document.querySelector(`[data-operation="brief_save"][data-id="${CSS.escape(res.id)}"]`)?.dataset.dirty){throw Error('Guardá el borrador antes de publicar.');}
   if(action==='publish'&&!confirm('¿Publicar los datos guardados y avisar a la tripulación del Nomade?'))return;
+  if(action==='payment'&&!confirm('¿Recibiste el importe completo indicado? Se informará a Carlota con tu nombre y la fecha.'))return;
   button.dataset.key ||=uid();
   const payload={key:button.dataset.key,id:res.id,...(action==='publish'?{revision:b.revision,sourceHash:b.sourceHash}:{version:b.version})};
-  const result=await opsFetch(action==='publish'?'brief_publish':'brief_review',payload);
-  toast(action==='publish'?(result.unchanged?'La ficha ya estaba publicada sin cambios.':'Ficha publicada y aviso registrado.'):'Revisión confirmada en el servidor.');
+  const result=await opsFetch(action==='publish'?'brief_publish':action==='payment'?'brief_payment':'brief_review',payload);
+  toast(action==='payment'?'Pago informado a Carlota.':action==='publish'?(result.unchanged?'La ficha ya estaba publicada sin cambios.':'Ficha publicada y aviso registrado.'):'Revisión confirmada en el servidor.');
   await opsAfterSave();
  }catch(e){toast(e.message);}finally{briefBusy=false;button.disabled=false;}
 });

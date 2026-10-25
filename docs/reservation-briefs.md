@@ -70,3 +70,12 @@ activación; había cero suscripciones activas.
 Desde el circuito CRM del 23/10, toda nueva publicación exige aprobación de Carlota en la reserva. La migración 20261023230725_crm_nomade_brief_approval, mantenida en Nomad, agrega el RPC autenticado y un trigger que bloquea publicaciones desde el camino antiguo. La app conserva borradores y acuses; enlaza al CRM para aprobar y publicar. Ver docs/nomade-brief-crm-2026-10-23.md en Nomad. La prueba SQL histórica de este repositorio describe el estado anterior a ese trigger; la suite vigente de aprobación está en tests/nomade-brief de Nomad.
 
 El límite de campos del capitán se aplica en el RPC, mediante la migración nomade_captain_card_only del CRM. La interfaz también oculta contactos de respuestas antiguas en caché. La confirmación Ya la revisé se conserva por versión.
+
+### Cobro autorizado en la ficha
+Carlota elige en CRM si el capitán cobra el saldo conocido de Finance V2. El bloque del capitán
+muestra USD y «Recibí USD …», independiente de la lectura. Solo se permite reportar el importe
+completo aprobado, con versión vigente. Cambios de saldo bloquean el botón hasta nueva aprobación.
+El informe es inmutable, idempotente por reserva y visible en CRM; no modifica el libro financiero.
+Administración registra/verifica el movimiento con comprobante en Finanzas. No hay conciliación
+automática, cobros parciales ni un segundo informe desde este botón. La migración canónica vive
+exclusivamente en el repo CRM: `nomade_captain_payment`.

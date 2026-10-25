@@ -26,6 +26,7 @@ const schemas:Record<string,z.ZodTypeAny>={
  reservation_link:z.object({...common,id}),
  brief_save:z.object({...common,id,revision:z.number().int().nonnegative(),details:z.object(Object.fromEntries(['embarkation','embarkationTime','disembarkation','disembarkationTime','food','allergies','drinks','activities','transport','requests'].map(k=>[k,z.string().trim().max(2000)])))}),
  brief_publish:z.object({...common,id,revision:z.number().int().nonnegative(),sourceHash:z.string().regex(/^[a-f0-9]{64}$/)}),
+ brief_payment:z.object({...common,id,version:z.number().int().positive()}).strict(),
  brief_review:z.object({...common,id,version:z.number().int().positive()}),
  reservation_preferences:z.object({...common,id,captainId:z.string().max(100),preferences:z.object({food:z.string().max(2000),allergies:z.string().max(2000),drinks:z.string().max(2000),activities:z.string().max(2000)})}),
  collection_instruction:z.object({...common,id,amount,currency:z.enum(['USD','EUR','ARS']),concept:text,dueDate:z.string().date(),verified:z.literal(true)}),
