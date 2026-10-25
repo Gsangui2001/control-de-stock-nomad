@@ -33,7 +33,7 @@ function briefPayment(res){
  const money=n=>'USD '+Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
  const payment=res.captainPayment, balance=res.captainBalance, mode=res.details?.captainCollection;
  let content;
- if(payment)content=`<strong>Pago recibido: ${esc(money(payment.amountUsd))}</strong><p>Informado por ${esc(payment.reportedBy)} · ${briefTime(payment.reportedAt)}.</p>`;
+ if(payment)content=`<strong>${payment.status==='cleared'?(payment.balanceUsd===0?'Pagado · saldo cero':'Pago verificado por Carlota'):'Pago informado · pendiente de Carlota'}: ${esc(money(payment.amountUsd))}</strong><p>Informado por ${esc(payment.reportedBy)} · ${briefTime(payment.reportedAt)}.</p>${payment.status==='cleared'&&payment.balanceUsd!=null?`<p>Saldo pendiente: ${esc(money(payment.balanceUsd))}</p>`:''}`;
  else if(res.brief?.sourceChanged)content='<p>Por confirmar con Carlota. La instrucción de cobro cambió.</p>';
  else if(mode==='none')content='<strong>No tenés que cobrar a bordo.</strong>';
  else if(balance?.status==='known'&&balance.amountUsd===0)content='<strong>Sin saldo pendiente.</strong>';

@@ -79,3 +79,8 @@ El informe es inmutable, idempotente por reserva y visible en CRM; no modifica e
 Administración registra/verifica el movimiento con comprobante en Finanzas. No hay conciliación
 automática, cobros parciales ni un segundo informe desde este botón. La migración canónica vive
 exclusivamente en el repo CRM: `nomade_captain_payment`.
+
+Verificación humana: la ficha ahora diferencia «Pago informado · pendiente de Carlota» y pago
+verificado. Carlota revisa destino/comprobante en CRM; el RPC canónico concilia el movimiento y
+actualiza el saldo. Solo saldo conocido cero y movimiento conciliado se muestran como Pagado.
+El capitán recibe ese estado sin cuenta, beneficiario ni comprobante financiero.

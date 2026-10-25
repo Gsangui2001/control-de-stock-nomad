@@ -42,6 +42,13 @@ test('captain collection shows only approved amount and a separate receipt actio
  assert.match(a.briefPayment({...res,details:{captainCollection:'none'}}),/No tenés que cobrar/);
  assert.doesNotMatch(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:700,reportedCount:1}}),/data-brief-action/);
  const paid=a.briefPayment({...res,captainPayment:{amountUsd:700,reportedBy:'Captain QA',reportedAt:'2026-01-01T12:00:00Z'}});
- assert.match(paid,/Pago recibido/);assert.doesNotMatch(paid,/data-brief-action/);
+ assert.match(paid,/Pago informado · pendiente de Carlota/);assert.doesNotMatch(paid,/data-brief-action/);
  a.role='chef';assert.equal(a.briefPayment(res),'');
+});
+
+test('only verified zero balance is shown as paid',()=>{
+ const a=app();a.role='capitan';const base={id:'r',captainPayment:{amountUsd:700,status:'cleared',balanceUsd:0,reportedBy:'QA',reportedAt:'2026-01-01T12:00:00Z'}};
+ assert.match(a.briefPayment(base),/Pagado · saldo cero/);
+ assert.doesNotMatch(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:100}}),/Pagado · saldo cero/);
+ assert.doesNotMatch(a.briefPayment({...base,captainPayment:{...base.captainPayment,status:'reported'}}),/Pagado · saldo cero/);
 });
