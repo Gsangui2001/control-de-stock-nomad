@@ -48,7 +48,23 @@ export class SupabaseRepo implements Repo {
     if (filter?.to) q = q.lte("expense_date", filter.to);
     const { data, error } = await q;
     if (error) throw error;
-    return (data ?? []).map(toExpense);
+    const expenses = (data ?? []).map(toExpense);
+    return this.withCreatorNames(expenses);
+  }
+
+  /**
+   * `created_by` es el uuid de auth.users — lo cambia por el nombre de `boat_expense_users`. Por RLS
+   * un admin ve todos los nombres y un gestor solo el suyo; los que no se pueden leer quedan en "—".
+   */
+  private async withCreatorNames(expenses: Expense[]): Promise<Expense[]> {
+    const ids = Array.from(new Set(expenses.map((e) => e.createdBy).filter((id) => id !== "—")));
+    if (ids.length === 0) return expenses;
+    const { data, error } = await this.sb.from("boat_expense_users").select("id, name").in("id", ids);
+    const names = new Map<string, string>();
+    if (!error) {
+      for (const u of data ?? []) if (u.name) names.set(u.id, u.name);
+    }
+    return expenses.map((e) => ({ ...e, createdBy: names.get(e.createdBy) ?? "—" }));
   }
 
   async createExpense(input: ExpenseInput): Promise<Expense> {
@@ -69,7 +85,8 @@ export class SupabaseRepo implements Repo {
       .select("*")
       .single();
     if (error) throw error;
-    return toExpense(data);
+    const [named] = await this.withCreatorNames([toExpense(data)]);
+    return named;
   }
 
   async updateExpense(id: string, input: Partial<ExpenseInput>): Promise<Expense> {
@@ -89,7 +106,8 @@ export class SupabaseRepo implements Repo {
       .select("*")
       .single();
     if (error) throw error;
-    return toExpense(data);
+    const [named] = await this.withCreatorNames([toExpense(data)]);
+    return named;
   }
 
   async deleteExpense(id: string): Promise<void> {

@@ -11,6 +11,7 @@ import { totalAmount, totalsByCategory, filterByDateRange } from "@/lib/domain/e
 import { categoryLabel } from "@/lib/domain/types";
 import type { ExpenseCategoryKey } from "@/lib/domain/types";
 import { formatMoney } from "@/lib/utils";
+import { monthRange } from "@/lib/dates";
 import { PageContainer, DemoBanner, EmptyState } from "@/components/app/common";
 import { StatCard } from "@/components/app/StatCard";
 
@@ -20,12 +21,6 @@ const CATEGORY_ICON: Record<ExpenseCategoryKey, typeof Wrench> = {
   amarre_marina_permisos: Anchor,
   otros_operativos: Package,
 };
-
-function monthRange(d = new Date()) {
-  const from = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { from, to };
-}
 
 export default function DashboardPage() {
   const { user } = useRepoContext();

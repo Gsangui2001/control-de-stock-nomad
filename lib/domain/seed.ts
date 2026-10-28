@@ -1,12 +1,14 @@
 import type { Boat, DatabaseSnapshot, Expense } from "./types";
+import { localDateISO } from "../dates";
 
 const now = new Date();
-const iso = (offsetDays = 0) => {
+const daysFromNow = (offsetDays = 0) => {
   const d = new Date(now);
   d.setDate(d.getDate() + offsetDays);
-  return d.toISOString();
+  return d;
 };
-const dateOnly = (offsetDays = 0) => iso(offsetDays).slice(0, 10);
+const iso = (offsetDays = 0) => daysFromNow(offsetDays).toISOString();
+const dateOnly = (offsetDays = 0) => localDateISO(daysFromNow(offsetDays));
 
 function e(
   id: string,

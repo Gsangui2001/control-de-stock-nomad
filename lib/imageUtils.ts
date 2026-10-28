@@ -33,14 +33,36 @@ async function loadBitmap(file: File): Promise<ImageBitmap | HTMLImageElement> {
   });
 }
 
-/** Comprime una foto a un JPEG chico (máx. 640px) y la devuelve como data-URL. */
-export async function compressImageToDataUrl(file: File): Promise<string> {
+export interface CompressOptions {
+  maxDimension?: number;
+  quality?: number;
+  maxResultLength?: number;
+}
+
+// Para mandar a leer con IA: más resolución que la foto que se guarda (los números chicos de una
+// factura tienen que ser legibles), pero lejos del límite de 4,5MB por request de Vercel — una foto
+// original de celular (3-8MB, ~4-11MB en base64) lo pasa y el escaneo falla con 413.
+export const SCAN_COMPRESS_OPTIONS: CompressOptions = {
+  maxDimension: 1600,
+  quality: 0.85,
+  maxResultLength: 3_000_000,
+};
+
+/** Comprime una foto a un JPEG (por default máx. 640px) y la devuelve como data-URL. */
+export async function compressImageToDataUrl(
+  file: File,
+  {
+    maxDimension = MAX_DIMENSION,
+    quality = JPEG_QUALITY,
+    maxResultLength = MAX_RESULT_LENGTH,
+  }: CompressOptions = {}
+): Promise<string> {
   const bitmap = await loadBitmap(file);
   const width = "width" in bitmap ? bitmap.width : 0;
   const height = "height" in bitmap ? bitmap.height : 0;
   if (!width || !height) throw new Error("Imagen inválida");
 
-  const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height));
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
   const w = Math.round(width * scale);
   const h = Math.round(height * scale);
 
@@ -54,8 +76,8 @@ export async function compressImageToDataUrl(file: File): Promise<string> {
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(bitmap, 0, 0, w, h);
 
-  const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
-  if (dataUrl.length > MAX_RESULT_LENGTH) {
+  const dataUrl = canvas.toDataURL("image/jpeg", quality);
+  if (dataUrl.length > maxResultLength) {
     throw new Error("La imagen quedó demasiado pesada, probá con otra foto");
   }
   return dataUrl;

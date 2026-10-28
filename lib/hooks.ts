@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { useRepoContext } from "./providers/RepoProvider";
 import type { Boat, Expense } from "./domain/types";
 import type { ExpenseFilter } from "./repo/Repo";
@@ -24,6 +25,15 @@ export function useAsync<T>(
     loader()
       .then((res) => {
         if (active) setData(res);
+      })
+      .catch((err) => {
+        console.error("useAsync", err);
+        if (active) {
+          toast.error("No se pudieron cargar los datos", {
+            id: "load-error",
+            description: "Revisá la conexión y probá de nuevo.",
+          });
+        }
       })
       .finally(() => {
         if (active) setLoading(false);

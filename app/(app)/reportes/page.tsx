@@ -9,6 +9,7 @@ import { useBoats, useExpenses } from "@/lib/hooks";
 import { totalAmount, totalsByCategory, filterByDateRange } from "@/lib/domain/expenses";
 import { categoryLabel } from "@/lib/domain/types";
 import { formatMoney } from "@/lib/utils";
+import { monthRange } from "@/lib/dates";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { PageContainer, PageTitle, DemoBanner } from "@/components/app/common";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,12 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const CHART_COLORS = ["#0f5ba8", "#26b2b2", "#e0a53a", "#3aa76d"];
-
-function monthRange(d = new Date()) {
-  const from = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
-  return { from, to };
-}
 
 export default function ReportesPage() {
   const { data: boats } = useBoats();

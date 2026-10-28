@@ -52,8 +52,9 @@ const INVOICE_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
 };
 
-// Foto de factura en base64 (~10MB en bytes ≈ ~14M caracteres en base64)
-const MAX_BASE64_LENGTH = 14_000_000;
+// El cliente manda un JPEG ya comprimido (ver SCAN_COMPRESS_OPTIONS en lib/imageUtils.ts, ~3M
+// caracteres como mucho). Vercel corta el body en 4,5MB de todas formas.
+const MAX_BASE64_LENGTH = 4_000_000;
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;

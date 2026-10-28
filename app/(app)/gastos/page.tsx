@@ -9,7 +9,8 @@ import { useBoats, useExpenses } from "@/lib/hooks";
 import { useRepoContext } from "@/lib/providers/RepoProvider";
 import { canManage, canWrite } from "@/lib/permissions";
 import { formatMoney } from "@/lib/utils";
-import { compressImageToDataUrl } from "@/lib/imageUtils";
+import { compressImageToDataUrl, SCAN_COMPRESS_OPTIONS } from "@/lib/imageUtils";
+import { localDateISO } from "@/lib/dates";
 import { EXPENSE_CATEGORIES, categoryLabel } from "@/lib/domain/types";
 import type { Expense, ExpenseCategoryKey } from "@/lib/domain/types";
 import {
@@ -54,21 +55,14 @@ interface ScanInvoiceResult {
   error?: string;
 }
 
-function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1] ?? "";
-      const mediaType = result.match(/^data:(.*?);base64/)?.[1] ?? file.type;
-      resolve({ base64, mediaType });
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
+const today = () => localDateISO();
 
-const today = () => new Date().toISOString().slice(0, 10);
+function errorMessage(err: unknown): string | undefined {
+  if (err && typeof err === "object" && "message" in err && typeof err.message === "string") {
+    return err.message;
+  }
+  return undefined;
+}
 
 export default function GastosPage() {
   const { data: boats } = useBoats();
@@ -79,7 +73,12 @@ export default function GastosPage() {
 
   async function remove(id: string) {
     if (!window.confirm("¿Borrar este gasto? No se puede deshacer.")) return;
-    await repo.deleteExpense(id);
+    try {
+      await repo.deleteExpense(id);
+    } catch (err) {
+      toast.error("No se pudo borrar el gasto", { description: errorMessage(err) });
+      return;
+    }
     refresh();
     toast.success("Gasto borrado");
   }
@@ -94,6 +93,7 @@ export default function GastosPage() {
   const [description, setDescription] = useState("");
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | undefined>();
   const [scanning, setScanning] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function boatName(id: string) {
@@ -123,11 +123,13 @@ export default function GastosPage() {
 
     setScanning(true);
     try {
-      const { base64, mediaType } = await fileToBase64(file);
+      // Se manda una versión comprimida (JPEG) y no la foto original: la original de un celular
+      // pasa el límite de tamaño de Vercel, y en iPhone puede venir en HEIC, que la IA no acepta.
+      const scanDataUrl = await compressImageToDataUrl(file, SCAN_COMPRESS_OPTIONS);
       const res = await fetch("/api/scan-invoice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mediaType }),
+        body: JSON.stringify({ imageBase64: scanDataUrl.split(",")[1] ?? "", mediaType: "image/jpeg" }),
       });
       const data: ScanInvoiceResult = await res.json();
       if (!res.ok) {
@@ -155,6 +157,7 @@ export default function GastosPage() {
   }
 
   async function submit() {
+    if (saving) return;
     if (!boatId) {
       toast.error("Elegí un barco");
       return;
@@ -164,15 +167,29 @@ export default function GastosPage() {
       toast.error("Cargá un monto válido");
       return;
     }
-    await repo.createExpense({
-      boatId,
-      category,
-      amountUsd,
-      expenseDate: date,
-      vendor: vendor || undefined,
-      description: description || undefined,
-      receiptImageUrl,
-    });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Elegí una fecha");
+      return;
+    }
+    setSaving(true);
+    try {
+      await repo.createExpense({
+        boatId,
+        category,
+        amountUsd,
+        expenseDate: date,
+        vendor: vendor.trim() || undefined,
+        description: description.trim() || undefined,
+        receiptImageUrl,
+      });
+    } catch (err) {
+      toast.error("No se pudo guardar el gasto", {
+        description: errorMessage(err) ?? "Revisá la conexión y probá de nuevo.",
+      });
+      return;
+    } finally {
+      setSaving(false);
+    }
     refresh();
     toast.success("Gasto cargado");
     setOpen(false);
@@ -336,8 +353,9 @@ export default function GastosPage() {
               <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Opcional" />
             </div>
 
-            <Button size="xl" className="w-full" onClick={submit}>
-              Cargar gasto
+            <Button size="xl" className="w-full" onClick={submit} disabled={saving || scanning}>
+              {saving && <Loader2 className="h-5 w-5 animate-spin" />}
+              {saving ? "Guardando..." : "Cargar gasto"}
             </Button>
           </div>
         </SheetContent>
