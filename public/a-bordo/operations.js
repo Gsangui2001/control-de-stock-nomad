@@ -66,14 +66,14 @@ renderDay=function(){
   const target=document.querySelector('.day-grid');
   const shortages=state.products.filter(p=>BoatStockAlerts.level(p));
   if(shortages.length)target?.insertAdjacentHTML('beforebegin',`<section class="ops-critical" aria-label="Faltantes de stock"><strong>${shortages.length} insumo(s) necesitan reposición</strong><p>${shortages.slice(0,4).map(p=>esc(p.name)+': '+esc(p.current)+' '+esc(p.unit)).join(' · ')}${shortages.length>4?' · y otros '+(shortages.length-4):''}</p>${opsButton('stock','Revisar faltantes')}</section>`);
-  target?.insertAdjacentHTML('afterend',`<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('intake','Fotos y listas')}${opsButton('expenses','Gastos')}${opsButton('transfers','Transferencias')}${opsButton('reservations','Reservas')}${opsButton('notifications','Notificaciones')}${dayManager()?opsButton('setup','Preparar barco'):''}</div>`);
+  target?.insertAdjacentHTML('afterend',`<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('intake','Fotos y listas')}${opsButton('expenses','Gastos')}${opsButton('transfers','Transferencias')}${opsButton('reservations','Reservas')}${typeof briefAgendaAllowed==='function'&&briefAgendaAllowed()?opsButton('agenda','Agenda del mes'):''}${opsButton('notifications','Notificaciones')}${dayManager()?opsButton('setup','Preparar barco'):''}</div>`);
  }
  const header=document.querySelector('#dayHeader');
  if(header&&boats.length>1)header.insertAdjacentHTML('beforeend',`<select id="opsBoat" aria-label="Cambiar barco">${boats.map(b=>`<option value="${esc(b.id)}" ${b.id===boatId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`);
  if(!dayPage.startsWith('ops-'))return;
  const name=dayPage.slice(4);
- const content=name==='setup'?opsPreparation():!opsData?'<p>Cargando datos…</p>':({requests:opsRequests,stock:opsStock,intake:intakeView,expenses:intakeExpenses,transfers:opsTransfers,reservations:opsReservationsView,notifications:opsNotifications}[name]?.()||'');
- $('#content').innerHTML=`<div class="day-content">${dayBack()}<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('stock','Stock')}${opsButton('reservations','Reservas')}${opsAction('refresh','','Actualizar')}</div>${opsError?`<p class="form-error" role="alert">${esc(opsError)}</p>`:''}${content}<p class="day-muted">${opsLoading?'Actualizando…':'Los cambios se confirman al guardarse en el servidor.'}</p></div>`;
+ const content=name==='setup'?opsPreparation():!opsData?'<p>Cargando datos…</p>':({requests:opsRequests,stock:opsStock,intake:intakeView,expenses:intakeExpenses,transfers:opsTransfers,reservations:opsReservationsView,agenda:()=>typeof briefAgendaView==='function'?briefAgendaView():'',notifications:opsNotifications}[name]?.()||'');
+ $('#content').innerHTML=`<div class="day-content">${dayBack()}<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('stock','Stock')}${opsButton('reservations','Reservas')}${typeof briefAgendaAllowed==='function'&&briefAgendaAllowed()?opsButton('agenda','Agenda del mes'):''}${opsAction('refresh','','Actualizar')}</div>${opsError?`<p class="form-error" role="alert">${esc(opsError)}</p>`:''}${content}<p class="day-muted">${opsLoading?'Actualizando…':'Los cambios se confirman al guardarse en el servidor.'}</p></div>`;
  if($('#opsStockSearch'))$('#opsStockSearch').oninput=opsFilterStock;
  if($('#opsStockArea'))$('#opsStockArea').onchange=opsFilterStock;
  if(!opsData&&!opsLoading&&!opsError)opsReload();
