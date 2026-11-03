@@ -84,3 +84,24 @@ Verificación humana: la ficha ahora diferencia «Pago informado · pendiente de
 verificado. Carlota revisa destino/comprobante en CRM; el RPC canónico concilia el movimiento y
 actualiza el saldo. Solo saldo conocido cero y movimiento conciliado se muestran como Pagado.
 El capitán recibe ese estado sin cuenta, beneficiario ni comprobante financiero.
+
+### Ficha en el formato de Gerardo y agenda del mes (2026-11-03)
+La ficha sigue el orden de la referencia del dueño: Información del huésped; Fecha del charter
+(`dd/mm - dd/mm`, más «LATE CHECK OUT» si el desembarque menciona salida tardía o late check out);
+Nombre del cliente principal con su edad entre paréntesis (`primaryAge`; sin edad, sin paréntesis);
+Acompañantes «Nombre (edad)» — el principal es el pasajero con `primary: true` y, en datos sin esa
+marca, el que coincide por nombre normalizado; «-» solo si consta que viaja solo —; País de
+procedencia; Aire acondicionado, Llegada, Salida; Información de comidas (A evitar, Prefieren,
+Dieta específica); A pagar y Experiencia. Lo que falta dice «Pendiente de confirmar».
+
+«A pagar» lo ve solo el capitán: «no cobra a bordo», «pagado» (saldo conocido cero o pago
+registrado sin saldo), «USD X» con el botón «Sí, me pagaron USD X», o «por confirmar con Carlota».
+El sí del capitán llama `brief_payment` y el CRM lo aprueba solo: la respuesta trae
+`payment.status = 'cleared'` y la ficha pasa a pagado. Un pago viejo en estado `reported` se ve
+como «Pago informado · pendiente de registro».
+
+La agenda (`agenda`, lectura del RPC `boat_control.briefs`, mismo payload que `reservations`) la
+ven capitán, encargado y administración del Nomade: charters confirmados por mes, con «Navegando»,
+«Ficha enviada / en preparación» y, solo para el capitán, «Cobrar USD X» o «Pagado». Un renglón
+con ficha enviada abre esa ficha. La operación la implementa el CRM; si todavía no existe, la
+pantalla muestra el error del servidor y el resto de la app sigue igual.

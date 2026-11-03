@@ -50,7 +50,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const operation=params.operation;
   let payload:any;
   if(req.method==='GET') {
-   if(!['overview','reservations','reservation_candidates','external_templates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
+   if(!['overview','reservations','agenda','reservation_candidates','external_templates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
    payload=z.object({boat:common.boat}).parse({boat:req.nextUrl.searchParams.get('boat')});
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
@@ -63,7 +63,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    if(payload.photo&&!new RegExp('^/api/boat/photos\\?boat='+payload.boat+'&id=[a-f0-9-]{36}$').test(payload.photo))return json({error:'Foto inválida'},400);
   }
   payload.session=createHash('sha256').update(req.cookies.get('boat_session')?.value||'').digest('hex');
-  const rpc=operation.startsWith('brief_')||['reservations','external_templates'].includes(operation)?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const rpc=operation.startsWith('brief_')||['reservations','agenda','external_templates'].includes(operation)?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
   const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:error.code==='23505'?409: /^(P0001|22|23)/.test(error.code||'')?400:503;

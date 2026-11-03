@@ -11,6 +11,13 @@ async function call(op,role='admin',data,boatId=boat){
  assert.equal((await call('reservations','none')).status,401);
  const admin=await call('reservations');assert.equal(admin.status,200,JSON.stringify(admin.result));assert.ok(admin.result.length>0);
  assert.ok(admin.result.every(r=>r.brief&&Number.isInteger(r.brief.revision)&&r.brief.sourceHash));
+ // Monthly agenda: read-only, sorted, and amounts only as number or null.
+ assert.equal((await call('agenda','none')).status,401);
+ for(const role of ['admin','capitan']){
+  const agenda=await call('agenda',role);assert.equal(agenda.status,200,JSON.stringify(agenda.result));assert.ok(Array.isArray(agenda.result));
+  assert.ok(agenda.result.every((r,i,all)=>Number.isInteger(r.briefVersion)&&typeof r.paid==='boolean'&&(r.toCollectUsd===null||typeof r.toCollectUsd==='number')&&(i===0||String(all[i-1].start)<=String(r.start))));
+  assert.ok(agenda.result.every(r=>!('phone' in r)&&!('email' in r)));
+ }
  const id=admin.result[0].id;
  for(const role of ['capitan','chef','marinero']){
   const result=await call('reservations',role);assert.equal(result.status,200);assert.ok(result.result.every(r=>r.brief.version>0&&!r.brief.draft&&!('crmBalance' in r)));
