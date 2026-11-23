@@ -86,7 +86,7 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
     throw Error('Unexpected RPC '+op);
   };
   const routeExports={};
-  const mockRequire=name=>name==='@supabase/supabase-js'?{createClient:()=>({rpc:(_fn,{operation,payload})=>({abortSignal:async()=>{try{return {data:await rpc(operation,payload),error:null};}catch(error){return {data:null,error};}}})})}:name==='next/server'?{NextResponse:{json:(data,opts)=>({data,status:opts.status})}}:name==='@/lib/boat-task-access'?exportsObject:name==='@/lib/boat-push'?{flushBoatPush:async()=>({})}:name==='@/lib/boat-crew-state'?crewExports:require(name);
+  const mockRequire=name=>name==='@/public/a-bordo/boat-rules.js'?require('../public/a-bordo/boat-rules.js'):name==='@supabase/supabase-js'?{createClient:()=>({rpc:(_fn,{operation,payload})=>({abortSignal:async()=>{try{return {data:await rpc(operation,payload),error:null};}catch(error){return {data:null,error};}}})})}:name==='next/server'?{NextResponse:{json:(data,opts)=>({data,status:opts.status})}}:name==='@/lib/boat-task-access'?exportsObject:name==='@/lib/boat-push'?{flushBoatPush:async()=>({})}:name==='@/lib/boat-crew-state'?crewExports:require(name);
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'app/api/boat/[operation]/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:routeExports,require:mockRequire,process:{env:{BOAT_CONTROL_SERVER_SECRET:'test-only'}},Buffer,URL,structuredClone,AbortSignal});
   const call=async(method,body,operation='state')=>routeExports[method]({method,nextUrl:new URL('https://fixture/api/boat/'+operation+'?boat=00000000000000000000000000000001'),cookies:{get:()=>undefined},headers:{get:k=>k==='content-type'?'application/json':null},text:async()=>JSON.stringify(body)},{params:{operation}});
   let response=await call('GET');
@@ -120,5 +120,39 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   changed=response.data.state;changed.tasks[1].assignedRole='marinero';
   assert.equal((await call('PUT',{state:changed,revision})).status,200);
   assert.equal((await call('POST',{name:'Fixture',username:'fixture',password:'dummy-not-a-real-password',role:'chef'},'users')).status,201);
+  const part={id:'spare',name:'Spare',unit:'un',current:4,min:1,cost:2};
+  changed=structuredClone((await call('GET')).data.state);
+  changed.products.push(part);
+  assert.equal((await call('PUT',{state:changed,revision})).status,200,'administrator can load technical stock');
+  account.admin=false;
+  for (const role of ['capitan','chef','marinero','lector','encargado']) {
+    currentRole=role;
+    const visible=(await call('GET')).data.state;
+    for (const modify of [
+      s=>s.products.push({...part,id:'second'}),
+      s=>s.products[0].current++,
+      s=>s.purchases.push({id:'receipt',date:'2026-10-24',lines:[]})
+    ]) {
+      const update=structuredClone(visible); modify(update);
+      assert.equal((await call('PUT',{state:update,revision})).status,403,role+' cannot load inventory');
+    }
+  }
+  currentRole='encargado';
+  changed=structuredClone((await call('GET')).data.state);
+  changed.tasks[0].assignedRole='chef';
+  assert.equal((await call('PUT',{state:changed,revision})).status,403,'only admin assigns tasks');
+  changed=structuredClone((await call('GET')).data.state);
+  changed.products[0].current=3;
+  changed.logs.push({id:'work-material',title:'Routine',date:'2026-10-24',lines:[{productId:'spare',quantity:1}],photos:[]});
+  changed.movements.push({id:'use',productId:'spare',delta:-1});
+  assert.equal((await call('PUT',{state:changed,revision})).status,200,'work still consumes stock');
+  changed=structuredClone((await call('GET')).data.state);
+  changed.logs.push({id:'report',title:'Notice',reportKind:'novedad',date:'2026-10-24',lines:[],photos:[]});
+  assert.equal((await call('PUT',{state:changed,revision})).status,200);
+  changed=structuredClone((await call('GET')).data.state);
+  const report=changed.logs.find(l=>l.id==='report');
+  report.resolvedAt='2026-10-25T12:00:00Z'; report.resolvedBy=user.name;
+  assert.equal((await call('PUT',{state:changed,revision})).status,200,'manager can resolve a notice');
+  console.log('PASS: technical inventory protected across roles, work consumption and notice resolution');
   console.log('PASS: API role filtering, save/merge, hidden tasks, manual/camera protection, actor stamping, conflicts and Chef validation');
 })().catch(error=>{console.error(error);process.exitCode=1;});

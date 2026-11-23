@@ -1,8 +1,13 @@
 // A crew member may append work and its stock consumption, never rewrite history.
-export function protectCrewHistory(before:any, incoming:any) {
+export function protectCrewHistory(before:any, incoming:any, managerName?:string) {
  for(const key of ['logs','movements','purchases']){
   for(const old of before[key]){
    const next=incoming[key].find((x:any)=>x.id===old.id);
+   if(key==='logs' && old.reportKind && !old.resolvedAt && next?.resolvedBy===managerName && managerName && typeof next.resolvedAt==='string' && Number.isFinite(Date.parse(next.resolvedAt))){
+    const {resolvedAt:oldAt,resolvedBy:oldBy,...original}=old;
+    const {resolvedAt:newAt,resolvedBy:newBy,...updated}=next;
+    if(JSON.stringify(original)===JSON.stringify(updated))continue;
+   }
    if(!next||JSON.stringify(next)!==JSON.stringify(old))throw Error('El historial existente no se puede editar ni eliminar.');
   }
  }

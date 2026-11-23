@@ -2,7 +2,7 @@ type Task = Record<string, any>;
 type User = {id:string; name:string; username?:string};
 const normalized = (value:unknown) => String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function canUseBoatTask(task:Task,user:User,role:string):boolean {
-  if(role==='lector') return true;
+  if(role==='lector'||role==='encargado') return true;
   if(task.assignedRole && task.assignedRole!==role) return false;
   return !task.assignee || [user.id,user.name,user.username,role].some(value=>normalized(value)===normalized(task.assignee));
 }

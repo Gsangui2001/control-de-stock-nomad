@@ -187,7 +187,7 @@ async function saveDayForm(event) {
     if (!isReport && task?.routineCycle) log.cycleDay = Number(d.cycleDay);
     next.logs.push(log);
     if (!isReport) {
-      if (equipment && hours !== "") equipment.hours = Math.max(equipment.hours, hours);
+      if (equipment && hours !== "") equipment.hours = Math.max(equipment.hours ?? hours, hours);
       const grouped = new Map();
       for (const l of lines) grouped.set(l.productId, R.round((grouped.get(l.productId) || 0) + l.quantity));
       for (const [id, quantity] of grouped) movement(next, next.products.find(p => p.id === id), -quantity, "Trabajo: " + title, d.date);

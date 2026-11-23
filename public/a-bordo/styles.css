@@ -753,3 +753,7 @@ footer {
     padding: 9px 5px;
   }
 }
+.survey-dialog { width: min(34rem, 94vw); max-height: 85vh; overflow: auto; }
+.survey-dialog .survey-card { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem; align-items: start; margin: .8rem 0; }
+.survey-card input { width: auto; margin-top: .25rem; }
+.survey-card img { width: 52px; max-height: 80px; object-fit: contain; }

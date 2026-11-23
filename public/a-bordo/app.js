@@ -208,6 +208,7 @@ async function uploadPhotos(next) {
     return (await api("photos", "POST", { boat: boatId, data: value })).url;
   };
   for (const p of next.products) if (p.photo) p.photo = await upload(p.photo);
+  for (const e of next.boat.equipment) if (e.photo) e.photo = await upload(e.photo);
   for (const t of next.tasks) if (t.photo) t.photo = await upload(t.photo);
   for (const l of next.logs)
     for (let i = 0; i < l.photos.length; i++) l.photos[i] = await upload(l.photos[i]);
@@ -227,6 +228,7 @@ async function portableBackup() {
     });
   };
   for (const p of copy.products) if (p.photo) p.photo = await load(p.photo);
+  for (const e of copy.boat.equipment) if (e.photo) e.photo = await load(e.photo);
   for (const t of copy.tasks) if (t.photo) t.photo = await load(t.photo);
   for (const l of copy.logs)
     for (let i = 0; i < l.photos.length; i++) l.photos[i] = await load(l.photos[i]);
@@ -450,7 +452,7 @@ function matches(o) {
   );
 }
 function taskCard(t) {
-  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${R.scheduleLabel(t) ? `<p>${esc(R.scheduleLabel(t))}</p>` : ""}${t.sourceRef ? `<p class="muted">${esc(t.sourceRef)}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${writable() ? action("editTask", "Editar", t.id) : ""}</div></article>`;
+  return `<article class="card task-card ${taskStatus(t) === "Vencido" ? "overdue" : ""}">${t.photo ? `<img class="task-photo" src="${esc(t.photo)}" alt="Foto de ${esc(t.title)}">` : ""}<div><div class="record-meta">${statusBadge(t)} ${taskStatus(t) === "Vencido" ? badge("🚩 Atención", "bad") : ""} ${badge(t.system)}</div><h3>${esc(t.title)}</h3>${t.description ? `<p>${esc(t.description)}</p>` : ""}${t.observation ? `<p><strong>Observaciones:</strong> ${esc(t.observation)}</p>` : ""}<p>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${t.nextDate ? date(t.nextDate) : "Sin fecha límite"}${t.nextHours !== null && t.nextHours !== "" ? ` · ${t.nextHours} h de ${esc(eq(t.equipmentId)?.name || "equipo")}` : ""}</p>${R.scheduleLabel(t) ? `<p>${esc(R.scheduleLabel(t))}</p>` : ""}${t.sourceRef ? `<p class="muted">${esc(t.sourceRef)}</p>` : ""}</div><div class="actions">${!t.done && writable() ? action("completeTask", "Registrar trabajo", t.id, "primary") : ""}${session.admin ? action("editTask", "Editar", t.id) : ""}</div></article>`;
 }
 function renderPanel() {
   const low = state.products.filter((p) => p.current <= p.min);
@@ -466,7 +468,7 @@ function renderPanel() {
   const shownTasks = panelTasksExpanded ? pending : pending.slice(0, 8);
   const shownLogs = panelLogsExpanded ? logs : logs.slice(0, 4);
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">${dayIcon("anchor")}</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${writable() ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
+    `<div class="hero"><div><h2>El estado de tu barco, a la vista.</h2><p>${state.products.length ? `${pending.length} tareas pendientes · ${low.length} insumos para revisar.` : "Empezá cargando los equipos y los repuestos reales del barco."}</p></div><span class="wave">${dayIcon("anchor")}</span></div><div class="metrics"><article class="metric"><span>REPUESTOS E INSUMOS</span><strong>${state.products.length}</strong><small>En el inventario técnico</small></article><article class="metric"><span>PARA REPONER</span><strong>${low.length}</strong><small>En el mínimo o por debajo</small></article><article class="metric"><span>TAREAS PENDIENTES</span><strong>${pending.length}</strong><small>${due.length} vencidas por fecha u horas</small></article><article class="metric"><span>TRABAJOS REALIZADOS</span><strong>${logs.length}</strong><small>Historial del barco</small></article></div><section class="section-gap" id="pending-work"><div class="card-heading"><div><h2>Tareas pendientes</h2><p class="subhead">Lo que todavía hay que hacer. Al registrar el trabajo, queda guardado abajo como realizado.</p></div><div class="inline-actions">${session.admin ? action("newTask", "＋ Nueva tarea", "", "secondary") + action("newLog", "＋ Registrar trabajo", "", "primary") + action("addTemplates", "Agregar tareas del barco", "", "secondary") : writable() ? action("newLog", "＋ Registrar trabajo", "", "primary") : ""}</div></div><div class="task-list">${shownTasks.map(taskCard).join("") || empty("No hay tareas pendientes.")}</div>${pending.length > 8 ? action("togglePanelTasks", panelTasksExpanded ? "Mostrar menos" : `Mostrar las ${pending.length} tareas`, "", "text-btn") : ""}</section><section class="card section-gap"><div class="card-heading"><h2>Lista de reposición</h2>${action("goStock", "Ver inventario", "", "text-btn")}</div>${
       low.length
         ? low
             .slice(0, 5)
@@ -489,11 +491,11 @@ function renderStock() {
   const items = state.products.filter(matches);
   $("#content").innerHTML =
     toolbar(
-      "newProduct",
+      session.admin ? "newProduct" : "",
       "＋ Agregar insumo",
       "Buscar repuesto, medida o ubicación",
     ) +
-    `<p class="subhead">Stock técnico y botiquín. Cada artículo puede llevar stock mínimo y fecha de vencimiento.</p><div class="table-wrap"><table><thead><tr><th>Repuesto / artículo</th><th>Sistema y ubicación</th><th>Stock</th><th>Mínimo / objetivo</th><th>Vencimiento</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td><div class="product-cell">${p.photo ? `<img class="photo" src="${esc(p.photo)}" alt="${esc(p.name)}">` : '<span class="photo-placeholder">▦</span>'}<div><strong>${esc(p.name)}</strong><small>${esc(p.specs || p.code || p.category)}</small></div></div></td><td>${esc(p.system)}<small>${esc(p.location || "Sin ubicación")} ${p.equipment ? `· ${esc(p.equipment)}` : ""}</small></td><td><strong>${p.current} ${esc(p.unit)}</strong><small>${stockBadge(p)}</small></td><td>${p.min} / ${p.target ?? p.min} ${esc(p.unit)}</td><td>${p.expiryDate ? date(p.expiryDate) : "—"}</td><td class="actions">${action("showProduct", "Ver", p.id)} ${writable() ? action("editProduct", "Editar", p.id) : ""}</td></tr>`).join("") || `<tr><td colspan="6">${empty("Todavía no hay insumos cargados. Agregá el primer repuesto o artículo de botiquín.")}</td></tr>`}</tbody></table></div><p class="search-summary">${items.length} artículos · Valor registrado: ${money(items.reduce((a, p) => a + p.current * p.cost, 0))}</p>${writable() ? `<section class="hint"><strong>Botiquín:</strong> cargá cada artículo real con cantidad, mínimo y vencimiento. El sistema marcará en rojo lo vencido. ${action("newFirstAid", "Agregar artículo de botiquín", "", "text-btn")}</section>` : ""}`;
+    `<p class="subhead">Stock técnico y botiquín. Cada artículo puede llevar stock mínimo y fecha de vencimiento.</p><div class="table-wrap"><table><thead><tr><th>Repuesto / artículo</th><th>Sistema y ubicación</th><th>Stock</th><th>Mínimo / objetivo</th><th>Vencimiento</th><th></th></tr></thead><tbody>${items.map((p) => `<tr><td><div class="product-cell">${p.photo ? `<img class="photo" src="${esc(p.photo)}" alt="${esc(p.name)}">` : '<span class="photo-placeholder">▦</span>'}<div><strong>${esc(p.name)}</strong><small>${esc(p.specs || p.code || p.category)}</small></div></div></td><td>${esc(p.system)}<small>${esc(p.location || "Sin ubicación")} ${p.equipment ? `· ${esc(p.equipment)}` : ""}</small></td><td><strong>${p.current} ${esc(p.unit)}</strong><small>${stockBadge(p)}</small></td><td>${p.min} / ${p.target ?? p.min} ${esc(p.unit)}</td><td>${p.expiryDate ? date(p.expiryDate) : "—"}</td><td class="actions">${action("showProduct", "Ver", p.id)} ${session.admin ? action("editProduct", "Editar", p.id) : ""}</td></tr>`).join("") || `<tr><td colspan="6">${empty("Todavía no hay insumos cargados. Agregá el primer repuesto o artículo de botiquín.")}</td></tr>`}</tbody></table></div><p class="search-summary">${items.length} artículos · Valor registrado: ${money(items.reduce((a, p) => a + p.current * p.cost, 0))}</p>${session.admin ? `<section class="hint"><strong>Botiquín:</strong> cargá cada artículo real con cantidad, mínimo y vencimiento. El sistema marcará en rojo lo vencido. ${action("newFirstAid", "Agregar artículo de botiquín", "", "text-btn")}</section>` : ""}`;
   bindFilters(renderStock);
 }
 function renderTasks() {
@@ -501,8 +503,8 @@ function renderTasks() {
     .filter(matches)
     .filter((t) => (filter.status === "done" ? t.done : !t.done));
   $("#content").innerHTML =
-    toolbar("newTask", "＋ Nueva tarea", "Buscar tarea o responsable") +
-    `<div class="inline-actions" style="margin-bottom:18px">${action("pendingTasks", "Pendientes", "", "secondary")}${action("doneTasks", "Realizadas", "", "secondary")}${writable() ? action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div><p class="subhead">Cada tarea puede tener fecha, foto, observaciones y frecuencia propia. Cuando vence sin realizarse queda señalada con bandera roja.</p><div class="task-list">${
+    toolbar(session.admin ? "newTask" : "", "＋ Nueva tarea", "Buscar tarea o responsable") +
+    `<div class="inline-actions" style="margin-bottom:18px">${action("pendingTasks", "Pendientes", "", "secondary")}${action("doneTasks", "Realizadas", "", "secondary")}${session.admin ? action("addTemplates", "Agregar tareas del barco", "", "secondary") : ""}</div><p class="subhead">Cada tarea puede tener fecha, foto, observaciones y frecuencia propia. Cuando vence sin realizarse queda señalada con bandera roja.</p><div class="task-list">${
       items
         .sort((a, b) =>
           (a.nextDate || "9999").localeCompare(b.nextDate || "9999"),
@@ -542,7 +544,7 @@ function renderLog() {
 function renderPurchases() {
   const movements = [...state.movements].reverse().filter(matches);
   $("#content").innerHTML =
-    `<div class="toolbar">${writable() ? action("newPurchase", "＋ Registrar compra", "", "primary") + " " + action("newMovement", "Entrada, salida o recuento") : ""}${action("exportShopping", "Exportar lista de reposición")}</div><div class="hint">Las compras suman stock. Los trabajos descuentan sus materiales automáticamente. Usá un recuento para corregir una diferencia física, indicando el motivo.</div><h2>Compras recientes</h2><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Proveedor / comprobante</th><th>Detalle</th><th>Total</th></tr></thead><tbody>${
+    `<div class="toolbar">${session.admin ? action("newPurchase", "＋ Registrar compra", "", "primary") + " " + action("newMovement", "Entrada, salida o recuento") : ""}${action("exportShopping", "Exportar lista de reposición")}</div><div class="hint">Las compras suman stock. Los trabajos descuentan sus materiales automáticamente. Usá un recuento para corregir una diferencia física, indicando el motivo.</div><h2>Compras recientes</h2><div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Proveedor / comprobante</th><th>Detalle</th><th>Total</th></tr></thead><tbody>${
       [...state.purchases]
         .reverse()
         .map(
@@ -579,8 +581,9 @@ function safeUrl(value) {
 }
 function renderSettings() {
   $("#content").innerHTML =
-    `<div class="columns"><section class="card"><div class="card-heading"><h2>Ficha del barco</h2>${writable() ? action("editBoat", "Editar") : ""}</div><h3>${esc(state.boat.name)}</h3><p>${esc(state.boat.model || "Modelo sin cargar")}</p><p class="subhead">Moneda: ${esc(state.boat.currency)} · Acceso: ${esc(role)}</p>${session.admin ? action("newBoat", "＋ Agregar otro barco") : ""}</section><section class="card"><h2>Respaldo de este barco</h2><p class="subhead">Incluye inventario, fotos, tareas, historial y cámaras. Las cuentas de acceso se guardan por separado en el servidor.</p><div class="inline-actions">${action("export", "Descargar respaldo", "", "primary")}${writable() ? action("import", "Restaurar respaldo") : ""}</div><input hidden id="importFile" type="file" accept="application/json,.json"></section></div><section class="card section-gap"><div class="card-heading"><h2>Equipos y horas de uso</h2>${writable() ? action("newEquipment", "＋ Agregar equipo") : ""}</div><p class="subhead">Registrá cada motor por separado, además del generador y otros equipos. Cada uno mantiene sus propias horas y tareas.</p>${state.boat.equipment.map((e) => `<div class="row-item"><div><h3>${esc(e.name)}</h3><p>${esc(e.system)} · ${esc(e.model || "Modelo sin cargar")}</p></div><strong>${e.hours} h</strong>${writable() ? action("editEquipment", "Actualizar", e.id) : ""}</div>`).join("") || empty("No hay equipos cargados.")}</section>`;
+    `<div class="columns"><section class="card"><div class="card-heading"><h2>Ficha del barco</h2>${writable() ? action("editBoat", "Editar") : ""}</div><h3>${esc(state.boat.name)}</h3><p>${esc(state.boat.model || "Modelo sin cargar")}</p><p class="subhead">Moneda: ${esc(state.boat.currency)} · Acceso: ${esc(role)}</p>${session.admin ? action("newBoat", "＋ Agregar otro barco") : ""}</section><section class="card"><h2>Respaldo de este barco</h2><p class="subhead">Incluye inventario, fotos, tareas, historial y cámaras. Las cuentas de acceso se guardan por separado en el servidor.</p><div class="inline-actions">${action("export", "Descargar respaldo", "", "primary")}${writable() ? action("import", "Restaurar respaldo") : ""}</div><input hidden id="importFile" type="file" accept="application/json,.json"></section></div><section class="card section-gap"><div class="card-heading"><h2>Equipos y horas de uso</h2>${writable() ? action("newEquipment", "＋ Agregar equipo") : ""}</div><p class="subhead">Registrá cada motor por separado, además del generador y otros equipos. Cada uno mantiene sus propias horas y tareas.</p>${state.boat.equipment.map((e) => `<div class="row-item">${e.photo ? `<a href="${esc(e.photo)}" target="_blank" rel="noopener"><img class="photo" src="${esc(e.photo)}" alt="Foto de ${esc(e.name)}"></a>` : ""}<div><h3>${esc(e.name)}</h3><p>${esc(e.system)} · ${esc(e.model || "Modelo sin cargar")}</p>${e.location ? `<p>Ubicación: ${esc(e.location)}</p>` : ""}${e.identificationNote ? `<p>${esc(e.identificationNote)}</p>` : ""}</div><strong>${R.knownHours(e.hours) ? `${e.hours} h` : "Horas sin registrar"}</strong>${writable() ? action("editEquipment", "Actualizar", e.id) : ""}</div>`).join("") || empty("No hay equipos cargados.")}</section>`;
   if ($("#importFile")) $("#importFile").onchange = restore;
+  mountEquipmentSurvey();
 }
 async function renderCrew() {
   $("#content").innerHTML = '<div class="card">Cargando accesos…</div>';
@@ -598,6 +601,7 @@ function renderFood() {
     `<section class="hero"><div><h2>Gastronomía, por separado.</h2><p>El módulo original conserva productos, compras, recetas, pedidos y reservas. Sus movimientos no afectan los repuestos del barco.</p></div><span class="wave">▦</span></section><section class="card"><h2>Módulo gastronómico original</h2><p>Sus datos siguen guardados en el navegador donde se cargaron. Todavía no se sincronizan con las cuentas y los barcos de este módulo técnico.</p><p class="subhead">Si antes lo abrías como archivo local, abrí el archivo original para exportar tus datos: el navegador separa la información según la dirección de la página. No se borró ni reemplazó esa información.</p><a class="primary" href="gastronomia/index.html" target="_blank" rel="noopener">Abrir gastronomía ↗</a></section>`;
 }
 function openEditor(type, obj = {}) {
+  if (["product", "purchase", "movement", "task"].includes(type) && !session.admin) return;
   if (!writable() && !["detail", "logDetail"].includes(type)) return;
   editing = { type, id: obj.id || "", obj };
   $("#formError").textContent = "";
@@ -617,7 +621,7 @@ function openEditor(type, obj = {}) {
     const t = obj.taskId ? state.tasks.find((t) => t.id === obj.taskId) : null;
     title = t ? "Completar tarea" : "Registrar trabajo a bordo";
     editing.taskId = t?.id || "";
-    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systemOptions(t?.system), t?.system || "Motor babor")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", t?.equipmentId ? (eq(t.equipmentId)?.hours ?? "") : "", "number", 'min="0" step="0.1"')}${dayCycleField(t)}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label></div>`;
+    html = `<div class="form-grid">${field("Trabajo realizado", "title", t?.title || "", "text", "required")}${select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"])}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}${field("Realizado por", "responsible", session.name, "text", "required")}${select("Sistema", "system", systemOptions(t?.system), t?.system || "Motor babor")}${select("Equipo", "equipmentId", state.boat.equipment, t?.equipmentId, "Sin equipo específico")}${field("Horas del equipo al realizar el trabajo", "hours", "", "number", 'min="0" step="any" placeholder="Lectura al realizar el trabajo"')}${dayCycleField(t)}${area("Detalle de lo realizado", "notes", "", 'class="full"')}<label class="full">Fotos del trabajo / material utilizado<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. El material y su cantidad se confirman abajo.</small></label></div><h3>Material utilizado</h3><p class="subhead">Se descontará del stock al guardar. Podés registrar trabajos sin consumo.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}<div class="section-gap">${area("Observaciones o problemas detectados", "observation")}${session.admin ? '<label class="check"><input name="followup" type="checkbox">Crear una tarea pendiente con esta observación</label>' : ""}</div>`;
   }
   if (type === "purchase") {
     title = "Registrar compra";
@@ -637,7 +641,7 @@ function openEditor(type, obj = {}) {
   }
   if (type === "equipment") {
     title = obj.id ? "Actualizar equipo" : "Agregar equipo";
-    html = `<div class="form-grid">${field("Nombre del equipo", "name", obj.name, "text", 'required placeholder="Ej.: motor de babor"')}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Marca y modelo", "model", obj.model)}${field("Horas actuales", "hours", obj.hours ?? 0, "number", 'required min="0" step="0.1"')}</div><p class="hint">Motor babor y motor estribor se registran por separado. Las horas no pueden disminuir.</p>`;
+    html = `<div class="form-grid">${field("Nombre del equipo", "name", obj.name, "text", 'required placeholder="Ej.: motor de babor"')}${select("Sistema", "system", systemOptions(obj.system), obj.system || "Motor babor")}${field("Marca y modelo", "model", obj.model)}${field("Ubicación a bordo", "location", obj.location, "text", 'maxlength="240"')}${field("Nota de identificación", "identificationNote", obj.identificationNote, "text", 'maxlength="1000"')}${field("Horas del contador", "hours", obj.hours ?? "", "number", 'min="0" step="any" placeholder="Pendiente de lectura"')}<label>Foto de identificación<input name="equipmentPhoto" type="file" accept="image/*"></label></div><p class="hint">Registrá cada motor por separado. Dejá las horas en blanco hasta leer el contador.</p>`;
   }
   if (type === "boat") {
     title = "Ficha del barco";
@@ -864,8 +868,9 @@ $("#editorForm").onsubmit = async (event) => {
         throw new Error("Seleccioná el equipo para programar por horas.");
       if (intervalDays && !Number.isInteger(intervalDays))
         throw new Error("El intervalo de días debe ser entero.");
-      if (nextHours === "" && intervalHours)
-        nextHours = R.round(Number(eq(d.equipmentId).hours) + intervalHours);
+      const reading = eq(d.equipmentId)?.hours;
+      if (nextHours === "" && intervalHours && R.knownHours(reading))
+        nextHours = R.round(reading + intervalHours);
       let nextDate = d.nextDate;
       const task = {
         ...obj,
@@ -913,7 +918,7 @@ $("#editorForm").onsubmit = async (event) => {
           "Indicá las horas del equipo asignado para reprogramar esta rutina.",
         );
       if (equipment && hours !== "")
-        equipment.hours = Math.max(equipment.hours, hours);
+        equipment.hours = Math.max(equipment.hours ?? hours, hours);
       const files = [...form.elements.photos.files];
       if (files.length > 3)
         throw new Error("Podés adjuntar hasta 3 fotos por trabajo.");
@@ -1025,17 +1030,20 @@ $("#editorForm").onsubmit = async (event) => {
         (d.kind === "recuento" ? "Recuento: " : "") + d.reason,
       );
     } else if (type === "equipment") {
-      const hours = R.number(d.hours, "Horas");
-      if (id && hours < obj.hours)
-        throw new Error("Las horas no pueden disminuir.");
+      const hours = R.editedHours(d.hours, obj.hours);
       if (!d.name) throw new Error("Completá el nombre del equipo.");
       const item = {
+        ...obj,
         id: id || uid(),
         name: d.name,
         system: d.system,
         model: d.model,
+        location: d.location,
+        identificationNote: d.identificationNote,
         hours,
       };
+      const file = form.elements.equipmentPhoto.files[0];
+      if (file) item.photo = await photo(file);
       const i = next.boat.equipment.findIndex((e) => e.id === id);
       if (i >= 0) next.boat.equipment[i] = item;
       else next.boat.equipment.push(item);
@@ -1134,7 +1142,8 @@ function validateBackup(s) {
     s?.schema !== 1 ||
     !s.boat?.name ||
     !["USD", "ARS", "EUR"].includes(s.boat.currency) ||
-    !Array.isArray(s.boat.equipment)
+    !R.validEquipmentList(s.boat.equipment, value =>
+      safePhoto(value) && (value.startsWith("data:image/") || value.startsWith("/api/boat/photos?boat=" + boatId + "&id=")))
   )
     throw new Error("No es un respaldo válido de A bordo.");
   for (const k of [
@@ -1251,6 +1260,7 @@ document.addEventListener("click", async (event) => {
         openEditor("task");
         break;
       case "addTemplates": {
+        if (!session.admin) return;
         const next = structuredClone(state);
         const existing = new Set(
           next.tasks.map((t) => `${t.system}\n${t.title}`.toLocaleLowerCase()),

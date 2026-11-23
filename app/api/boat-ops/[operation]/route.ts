@@ -12,7 +12,7 @@ const amount=z.number().finite().positive().max(1e9);
 const common={boat:z.string().regex(/^[a-f0-9-]{32,36}$/),key:id};
 const finite=z.number().finite().nonnegative().max(1e12);
 const rows=z.array(z.object({id:z.string().min(1)}).passthrough()).max(20000);
-const backupSchema=z.object({version:z.literal(1),boat:common.boat,revision:z.number().int().nonnegative(),state:z.object({schema:z.literal(1),boat:z.object({name:text,currency:z.enum(['USD','EUR','ARS']),equipment:rows}),products:z.array(z.object({id:z.string().min(1),name:text,unit:text,current:finite,min:finite,cost:finite}).passthrough()),tasks:rows,logs:rows,movements:rows,purchases:rows,cameras:rows}).passthrough(),requests:z.array(z.record(z.unknown())),transfers:z.array(z.record(z.unknown())),reservations:z.array(z.record(z.unknown())),instructions:z.array(z.record(z.unknown())),collections:z.array(z.record(z.unknown())),photos:z.array(z.record(z.unknown())),intakes:z.array(z.record(z.unknown())).default([]),expenseControls:z.array(z.record(z.unknown())).default([]),expensePayments:z.array(z.record(z.unknown())).default([]),expenseHistory:z.array(z.record(z.unknown())).default([])});
+const backupSchema=z.object({version:z.literal(1),boat:common.boat,revision:z.number().int().nonnegative(),state:z.object({schema:z.literal(1),boat:z.object({name:text,currency:z.enum(['USD','EUR','ARS']),equipment:rows}).passthrough(),products:z.array(z.object({id:z.string().min(1),name:text,unit:text,current:finite,min:finite,cost:finite}).passthrough()),tasks:rows,logs:rows,movements:rows,purchases:rows,cameras:rows}).passthrough(),requests:z.array(z.record(z.unknown())),transfers:z.array(z.record(z.unknown())),reservations:z.array(z.record(z.unknown())),instructions:z.array(z.record(z.unknown())),collections:z.array(z.record(z.unknown())),photos:z.array(z.record(z.unknown())),intakes:z.array(z.record(z.unknown())).default([]),expenseControls:z.array(z.record(z.unknown())).default([]),expensePayments:z.array(z.record(z.unknown())).default([]),expenseHistory:z.array(z.record(z.unknown())).default([])});
 const schemas:Record<string,z.ZodTypeAny>={
  backup_restore:z.object({...common,revision:z.number().int().nonnegative(),backup:backupSchema}),
  request_create:z.object({...common,area:z.enum(['tecnica','gastronomia']),name:text,unit:text.max(20),quantity:amount,urgent:z.boolean(),notes:z.string().max(5000),photo:z.string().max(500).default('')}),
@@ -50,7 +50,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const operation=params.operation;
   let payload:any;
   if(req.method==='GET') {
-   if(!['overview','reservations','agenda','reservation_candidates','external_templates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
+   if(!['overview','fleet_stock','reservations','agenda','reservation_candidates','external_templates','backup'].includes(operation))return json({error:'Recurso inexistente'},404);
    payload=z.object({boat:common.boat}).parse({boat:req.nextUrl.searchParams.get('boat')});
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
@@ -58,12 +58,19 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    const raw=await req.text();if(Buffer.byteLength(raw)>(operation==='backup_restore'?3500000:30000))return json({error:'Registro demasiado grande'},413);
    if(!schemas[operation])return json({error:'Operación desconocida'},404);
    payload=schemas[operation].parse(JSON.parse(raw));
-   if(operation==='backup_restore')validateRestoredBoatState(payload.backup.state,payload.boat);
+   if(operation==='backup_restore') {
+    try { validateRestoredBoatState(payload.backup.state,payload.boat); }
+    catch(error) { return json({error:(error as Error).message},400); }
+    const photoIds=new Set(payload.backup.photos.filter((photo:any)=>photo.boat_id===payload.boat).map((photo:any)=>photo.id));
+    for(const entry of payload.backup.state.boat.equipment) {
+     if(entry.photo&&!photoIds.has(entry.photo.split('&id=')[1]))return json({error:'Falta una foto de equipo en el respaldo de este barco.'},400);
+    }
+   }
    if(operation==='push_subscribe'&&!validPushEndpoint(payload.subscription.endpoint))return json({error:'Proveedor de notificaciones no admitido'},400);
    if(payload.photo&&!new RegExp('^/api/boat/photos\\?boat='+payload.boat+'&id=[a-f0-9-]{36}$').test(payload.photo))return json({error:'Foto inválida'},400);
   }
   payload.session=createHash('sha256').update(req.cookies.get('boat_session')?.value||'').digest('hex');
-  const rpc=operation.startsWith('brief_')||['reservations','agenda','external_templates'].includes(operation)?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const rpc=operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||['reservations','agenda','external_templates'].includes(operation)?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
   const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:error.code==='23505'?409: /^(P0001|22|23)/.test(error.code||'')?400:503;
