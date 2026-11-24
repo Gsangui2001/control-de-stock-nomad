@@ -43,7 +43,9 @@ const id='10000000-0000-4000-8000-000000000001';
      assert.equal(await page.locator('.brief-form, [data-brief-action=payment]').count(),0);
     }
    }else{
-    assert.equal(await agenda.count(),0);
+    await agenda.click();
+    await page.getByText("No hay fichas de huéspedes publicadas para este mes.").waitFor();
+    assert.equal(await page.getByText("Familia ficticia · QA").count(),0);
     assert.equal(await page.getByText('Ficha operativa de la reserva',{exact:true}).count(),0);
    }
    assert.deepEqual(live,[]);assert.deepEqual(faults,[]);await ctx.close();
