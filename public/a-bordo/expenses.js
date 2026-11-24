@@ -9,6 +9,7 @@ function expenseRows(){return ExpenseRules.rows(expenseData,today());}
 function expenseAmount(cents,currency){return (cents/100).toFixed(2)+' '+esc(currency);}
 function expenseOptions(values,selected){return Object.entries(values).map(([k,v])=>`<option value="${esc(k)}" ${k===selected?'selected':''}>${esc(v)}</option>`).join('');}
 function intakeExpenses(){
+ if(role==='capitan')return empty('Los gastos propios están en tu Caja.');
  if(expenseBoat!==boatId){expenseBoat=boatId;expenseData=null;expenseLoading=false;expenseLoadToken++;expenseError='';expenseSelected='';expenseForm='';expenseFilters={from:'',to:'',category:'all',status:'all',query:''};}
  if(!expenseData&&!expenseLoading&&!expenseError)expenseReload();
  if(expenseSelected&&expenseData)return expenseDetail();

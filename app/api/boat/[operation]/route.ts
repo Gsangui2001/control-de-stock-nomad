@@ -4,7 +4,7 @@ import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypt
 import { NextRequest, NextResponse } from 'next/server';
 
 import { flushBoatPush } from '@/lib/boat-push';
-import { canReadBoatCash, isOperationalStatePhoto, protectCrewHistory } from '@/lib/boat-crew-state';
+import { canReadBoatSuppliers, crewProduct, isOperationalStatePhoto, protectCrewHistory, restoreCrewProductCosts } from '@/lib/boat-crew-state';
 import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
 import { clearManualGrant, issueManualGrant } from '@/lib/boat-manual-grant';
 
@@ -34,7 +34,8 @@ function validateState(s:any,boat:string) {
 }
 function stateForRole(result:any, user:any, role=result.role) {
  const visible=structuredClone(result);
- if(!user.admin&&!canReadBoatCash(role)) visible.state.purchases=[];
+ if(!user.admin)visible.state.products=visible.state.products.map(crewProduct);
+ if(!user.admin&&!canReadBoatSuppliers(role)) visible.state.purchases=[];
  if(!user.admin&&role!=='encargado'){
   visible.state.cameras=[];
   visible.state.tasks=visible.state.tasks.filter((t:any)=>canUseBoatTask(t,user,role));
@@ -103,7 +104,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    };
    if(body.key){if(!/^[a-f0-9-]{36}$/.test(body.key))throw new ApiError(400,'Identificador inválido.');const previous=await commitRpc(true);if(previous)return json(stateForRole(previous,auth.user,before.role));}
    if(!body.state||typeof body.state!=='object')throw new ApiError(400,'Estado inválido.');
-   if(!auth.user.admin&&!canReadBoatCash(before.role)){
+   if(!auth.user.admin&&!canReadBoatSuppliers(before.role)){
     // A current client sends the empty projection. A pending save from an older
     // version may still carry the original receipts; neither may alter them.
     const purchases=body.state.purchases;
@@ -114,6 +115,9 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    if(!auth.user.admin&&before.role!=='encargado'){
     body.state.cameras=before.state.cameras;
     body.state.manual=before.state.manual??{content:'',updatedAt:'',updatedBy:''};
+   }
+   if(!auth.user.admin){
+    try{body.state.products=restoreCrewProductCosts(before.state.products,body.state.products);}catch(error){throw new ApiError(403,(error as Error).message);}
    }
    validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
    // Inventory and receipt uploads belong exclusively to the administrator.
@@ -145,7 +149,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    const id=req.nextUrl.searchParams.get('id');if(!id||!/^[a-f0-9-]{36}$/.test(id))throw new ApiError(400,'Foto inválida.');
    if(!auth.user.admin){
     const snapshot=await rpc('state_get',{boat});
-    if(!canReadBoatCash(snapshot.role)){
+    if(!canReadBoatSuppliers(snapshot.role)){
      const url='/api/boat/photos?boat='+boat+'&id='+id;
      const visible=stateForRole(snapshot,auth.user).state;
      if(!isOperationalStatePhoto(visible,url)){

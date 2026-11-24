@@ -19,18 +19,20 @@ const cashPages = new Set(["ops-cash", "ops-collections", "ops-expenses"]);
 const dayButton = (page, label, id = "", style = "day-secondary") =>
   `<button type="button" class="${style}" data-day="${page}" data-id="${esc(id)}">${label}</button>`;
 let dayIntakeParent = "ops-stock";
+let dayGuestCashOwner = null;
 function dayBack() {
   let parent = "home", label = "Inicio";
   if (dayPage === "task" || dayPage === "blocked") {
     parent = "tasks"; label = "Mis tareas";
   } else if (["tasks","work","problem","manual","updates"].includes(dayPage)) {
     parent = "maintenance"; label = "Mantenimiento";
-  } else if (["ops-requests","ops-fleet","ops-transfers"].includes(dayPage) || (dayPage === "ops-intake" && dayIntakeParent !== "ops-cash")) {
+  } else if (["ops-requests","ops-fleet","ops-admin-stock","ops-transfers"].includes(dayPage) || (dayPage === "ops-intake" && dayIntakeParent !== "ops-cash")) {
     parent = "ops-stock"; label = "Stock";
   } else if (["ops-collections","ops-expenses","ops-intake"].includes(dayPage)) {
     parent = "ops-cash"; label = "Caja";
   } else if (dayPage === "ops-reservations") {
-    parent = "ops-agenda"; label = "Agenda del mes";
+    const fromCash = dayGuestCashOwner && dayGuestCashOwner.boat === boatId && dayGuestCashOwner.user === session && canViewCash();
+    parent = fromCash ? "ops-cash" : "ops-agenda"; label = fromCash ? "Caja" : "Agenda del mes";
   }
   return dayButton(parent, "← " + label, "", "day-back");
 }
@@ -135,13 +137,15 @@ function dayManualChapterRole(section) {
   return dayRoles.find(r => title.includes("responsabilidades del " + r.id))?.id || null;
 }
 function dayManualAppGuide(selected) {
+  if (session.admin && selected === "all") return '<section class="day-note"><h2>Cómo usar A bordo · Administración</h2><ul><li>En Stock abrí Stock de barcos y depósito. Elegí un barco o el depósito para consultar sus existencias. En cada barco, Gastos y consumo del barco muestra lo comprado y lo consumido.</li><li>En Caja registrá el conteo inicial de efectivo de cada capitán, por moneda. Los cobros de huéspedes se consultan también en la reserva del CRM.</li><li>En Agenda del mes elegí la salida para abrir la ficha del huésped. En Mantenimiento consultá las tareas, los trabajos y el manual.</li></ul></section>';
   const steps = {
     capitan: [
       "En Agenda del mes abrí la ficha y revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
       "En Mantenimiento → Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
       "Coordiná el trabajo de la tripulación y solicitá a administración las asignaciones o cambios de programación. Tu acceso no permite crear usuarios ni reasignar tareas.",
       "En Stock y pedidos revisá faltantes y descargá el pedido consolidado. Entregá a administración el conteo, los comprobantes y el detalle de la mercadería recibida. Si la compra ya se registró por recepción, indicá que el comprobante corresponde a un gasto sin entrada de stock.",
-      "En Caja abrí Cobros de huéspedes. Cuando recibas en efectivo el importe completo autorizado, confirmá el cobro una sola vez. Si recibiste otro importe, consultá a administración."
+      "En Caja buscá al huésped en Cobros pendientes y abrí su ficha. Cuando recibas en efectivo el importe autorizado, confirmá el cobro. Queda registrado en tu caja y en la reserva del CRM. Si el importe es distinto, consultá a administración antes de confirmarlo.",
+      "En Mi efectivo podés consultar tu saldo por moneda. Usá Registrar un gasto propio para anotar qué pagaste de tu caja y cuánto."
     ],
     chef: [
       "En Agenda del mes consultá alimentación, alergias, bebidas y celebraciones antes de planificar el menú. Consultá a administración los datos pendientes.",
@@ -261,7 +265,8 @@ document.addEventListener("click", async event => {
       render(); return;
     }
     if (page === "ops-intake") dayIntakeParent = ["ops-cash","ops-expenses"].includes(dayPage) ? "ops-cash" : "ops-stock";
-    if (page === "home" && location.search) {
+    if (page === "ops-reservations" || dayPage === "ops-reservations") dayGuestCashOwner = null;
+    if ((page === "home" || dayPage === "ops-reservations" && page !== dayPage) && location.search) {
       const url = new URL(location.href);
       url.searchParams.delete("reservation"); url.searchParams.delete("notifications");
       history.replaceState(null, "", url);

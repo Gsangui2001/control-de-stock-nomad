@@ -168,8 +168,10 @@ const run = source=>vm.runInContext(source,sandbox);
   const body={boat,key:imageId,revision:1,backup:{version:1,boat,revision:0,state:structuredClone(state),
     requests:[],transfers:[],reservations:[],instructions:[],collections:[],photos:[{boat_id:boat,id:imageId,data:portablePhoto}]}};
   body.backup.state.boat.model='Modelo anterior';
-  const http=()=>restore.POST({method:'POST',nextUrl:new URL('https://fixture.test/api/boat-ops/backup_restore'),
-    headers:{get:key=>key==='content-type'?'application/json':null},text:async()=>JSON.stringify(body),cookies:{get:()=>undefined}},{params:{operation:'backup_restore'}});
+  const http=(signedIn=true)=>restore.POST({method:'POST',nextUrl:new URL('https://fixture.test/api/boat-ops/backup_restore'),
+    headers:{get:key=>key==='content-type'?'application/json':null},text:async()=>JSON.stringify(body),cookies:{get:()=>signedIn?{value:'local-fixture'}:undefined}},{params:{operation:'backup_restore'}});
+  assert.equal((await http(false)).status,401);
+  assert.equal(captured.length,0);
   assert.equal((await http()).status,200);
   assert.equal(captured[0].backup.state.boat.model,'Modelo anterior');
   assert.equal(captured[0].backup.state.boat.equipment[0].photo,photoUrl);
