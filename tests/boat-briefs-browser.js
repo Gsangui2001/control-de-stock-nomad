@@ -35,6 +35,16 @@ async (page) => {
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(result)});
  });
  const noOverflow=async label=>{if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error(label+' mobile overflow');};
+ const openFixtureAgenda=async()=>{
+  await page.getByRole('navigation',{name:'Secciones del barco'}).getByRole('button',{name:/^Agenda del mes/}).click();
+  const month=page.locator('.agenda-nav h3');
+  await month.waitFor();
+  const ahead=(await page.evaluate(()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Panama'}).slice(0,7)))<'2026-11';
+  for(let i=0;i<36&&await month.innerText()!=='Noviembre 2026';i++){
+   await page.getByRole('button',{name:ahead?'Mes siguiente':'Mes anterior'}).click();
+  }
+  if(await month.innerText()!=='Noviembre 2026')throw Error('Did not reach fixture month');
+ };
  await page.setViewportSize({width:390,height:844});
  // Administration: draft only. Approval and publication happen in the CRM.
  await page.goto('http://127.0.0.1:5199/a-bordo/index.html?boat='+boat+'&reservation='+id);
@@ -56,20 +66,14 @@ async (page) => {
  published={...draft,country:'BRASIL',airConditioning:'no',transport:'Llega con Judy',disembarkationTime:'Late check out',drinks:'coca zero y jugo de naranja'};version=1;
  // Captain: card in the owner's format, monthly agenda and the "yes, I was paid" answer.
  currentRole='capitan';await page.goto('http://127.0.0.1:5199/a-bordo/index.html?boat='+boat);
- await page.getByRole('button',{name:'Agenda del mes',exact:true}).first().click();
- await page.locator('.agenda-nav h3').waitFor();
- // The agenda opens on the current month in Panama; move to the fixture month.
- for(let i=0;i<36&&(await page.locator('.agenda-nav h3').innerText())!=='Noviembre 2026';i++){
-  const ahead=(await page.evaluate(()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Panama'}).slice(0,7)))<'2026-11';
-  await page.getByRole('button',{name:ahead?'Mes siguiente':'Mes anterior'}).click();
- }
+ await openFixtureAgenda();
  await page.getByText('Cobrar USD 2.016,00',{exact:true}).waitFor();
  await page.getByText('Ficha en preparación',{exact:true}).waitFor();
  await noOverflow('Agenda');
  await page.screenshot({path:'output/playwright/briefs-agenda-mobile.png',fullPage:true});
  await page.getByRole('button',{name:/Familia de prueba \(41\)/}).click();
  await page.getByText('10/11 - 14/11 LATE CHECK OUT',{exact:true}).waitFor();
- await page.getByText('Acompañante de prueba (9)',{exact:true}).waitFor();
+ await page.getByText('Acompañante de prueba (9) · 1 más con nombre pendiente',{exact:true}).waitFor();
  if(await page.getByText(/fixture@example|\+0000000|Datos ficticios/).count())throw Error('Captain sees contact or internal notes');
  let confirmation='';page.once('dialog',d=>{confirmation=d.message();d.accept();});
  await page.getByRole('button',{name:'Sí, me pagaron USD 2.016,00',exact:true}).click();
@@ -80,11 +84,13 @@ async (page) => {
  await page.getByText('Revisaste la versión 1',{exact:false}).waitFor();
  await noOverflow('Captain');
  await page.screenshot({path:'output/playwright/briefs-captain-mobile.png',fullPage:true});
- // Crew without amounts or agenda.
- currentRole='chef';reviewed=false;await page.goto('http://127.0.0.1:5199/a-bordo/index.html?boat='+boat+'&reservation='+id);
+ // Crew gets a monthly view of published guest cards only.
+ currentRole='chef';reviewed=false;await page.goto('http://127.0.0.1:5199/a-bordo/index.html?boat='+boat);
+ await openFixtureAgenda();
+ if(await page.getByText(/Otra familia de prueba|Ficha en preparación|USD/).count())throw Error('Crew agenda exposed an unpublished charter or payment');
+ await page.getByRole('button',{name:/Familia de prueba/}).click();
  await page.getByRole('button',{name:'Ya la revisé · versión 1',exact:true}).waitFor();
  if(await page.getByRole('button',{name:'Plantillas para otros capitanes'}).count())throw Error('Crew sees admin templates');
- if(await page.getByRole('button',{name:'Agenda del mes'}).count())throw Error('Chef sees the captain agenda');
  if(await page.getByText(/USD|A pagar/).count())throw Error('Chef sees amounts');
  await noOverflow('Crew');
  if(errors.length)throw Error(errors.join('; '));

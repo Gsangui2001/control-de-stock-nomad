@@ -194,17 +194,20 @@ function briefAgendaRow(item){
  return sent&&item.id?`<button type="button" class="agenda-row" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
 }
 function briefAgendaView(){
- if(!briefAgendaAllowed())return empty('La agenda del mes está disponible para el capitán del Nomade.');
+ const full = briefAgendaAllowed();
  if(briefAgendaBoat!==boatId){briefAgenda=null;briefAgendaError='';briefAgendaBoat=boatId;}
- if(briefAgenda===null&&!briefAgendaLoading&&!briefAgendaError)briefAgendaLoad();
+ if(full && briefAgenda===null && !briefAgendaLoading && !briefAgendaError)briefAgendaLoad();
+ const rows = full ? briefAgenda : opsReservations.filter(r => r.brief?.version > 0).map(r => ({
+   id:r.id, name:r.name, start:r.start, end:r.end, guests:r.guests, briefVersion:r.brief.version, reviewedAt:r.brief.reviewedAt
+ }));
  const month=briefAgendaMonth||briefCurrentMonth();
  let body;
- if(briefAgendaError)body=`<p class="form-error" role="alert">${esc(briefAgendaError)}</p>`;
- else if(briefAgenda===null)body='<p class="day-muted">Cargando agenda…</p>';
- else body=briefAgenda.filter(item=>item&&briefInMonth(item,month)).sort((a,b)=>String(a.start).localeCompare(String(b.start))).map(briefAgendaRow).join('')||empty('No hay charters confirmados este mes.');
- return `<h2>Agenda de ${esc(state.boat.name)}</h2><p class="day-muted">Charters confirmados en el CRM. Tocá uno con la ficha enviada para abrirla.</p>
+ if(full && briefAgendaError)body=`<p class="form-error" role="alert">${esc(briefAgendaError)}</p>`;
+ else if(rows===null)body='<p class="day-muted">Cargando agenda…</p>';
+ else body=rows.filter(item=>item&&briefInMonth(item,month)).sort((a,b)=>String(a.start).localeCompare(String(b.start))).map(briefAgendaRow).join('')||empty(full?'No hay charters confirmados este mes.':'No hay fichas de huéspedes publicadas para este mes.');
+ return `<h1>Agenda del mes</h1><p class="day-muted">${full ? 'Salidas confirmadas de ' + esc(state.boat.name) + '.' : 'Salidas con ficha publicada para tu tripulación.'}</p>
  <div class="agenda-nav"><button type="button" class="day-secondary" data-agenda-month="${briefShiftMonth(month,-1)}" aria-label="Mes anterior">‹</button><h3 aria-live="polite">${briefMonthName(month)}</h3><button type="button" class="day-secondary" data-agenda-month="${briefShiftMonth(month,1)}" aria-label="Mes siguiente">›</button></div>
- <div class="agenda-list">${body}</div>`;
+ <div class="agenda-list">${body}</div><div class="area-actions"><button type="button" class="day-secondary" data-day="ops-reservations">Fichas de huéspedes</button></div>`;
 }
 document.addEventListener('click',event=>{
  const month=event.target.closest('[data-agenda-month]');

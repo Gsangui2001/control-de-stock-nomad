@@ -249,13 +249,13 @@ async function commit(next, context=boatWriteContext()) {
   const key = 'pending-state:'+context.user+':'+context.boat;
   const formKey = draftKey($("#dayForm")||$("#editorForm"));
   const previous = await draftRead(key);
-  if(previous) throw Error('Hay un guardado anterior sin confirmar. Volvé a Mi día y usá Revisar guardado pendiente antes de registrar otro trabajo.');
+  if(previous) throw Error('Hay un guardado anterior sin confirmar. Volvé al inicio y usá Revisar guardado pendiente antes de registrar otro trabajo.');
   verifyBoatWrite(context);
   await uploadPhotos(next,context);
   verifyBoatWrite(context);
   const pending={state:next,revision:context.revision,key:uid(),draftKey:formKey};
   const claimed=await editStoredDraft(key,existing=>existing||pending);
-  if(claimed.key!==pending.key)throw Error('Hay un guardado anterior sin confirmar. Volvé a Mi día para revisarlo.');
+  if(claimed.key!==pending.key)throw Error('Hay un guardado anterior sin confirmar. Volvé al inicio para revisarlo.');
   try { verifyBoatWrite(context); }
   catch (error) {
     await editStoredDraft(key,existing=>existing?.key===pending.key?null:existing);
@@ -380,6 +380,7 @@ async function startup() {
 }
 function authScreen(setup) {
   state = null;
+  document.body.classList.add("access-mode");
   document.body.classList.remove("daily-mode");
   $("#dayHeader").hidden = true;
   $("#boatLabel").textContent = "Control del barco";
@@ -392,7 +393,7 @@ function authScreen(setup) {
     : "Entrar al barco";
   $("#todayLabel").textContent = "Inventario · mantenimiento · tripulación";
   $("#content").innerHTML =
-    `<div class="hero"><div><h2>La historia de tu barco, al día.</h2><p>Repuestos localizados, trabajos con fotos y una tripulación coordinada.</p></div><span class="wave">${dayIcon("anchor")}</span></div><section class="card" style="max-width:480px"><h2>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h2><p class="subhead">${setup ? "Este primer acceso queda a tu nombre. Después podés sumar al capitán y a la tripulación." : "Usá la cuenta que te asignó el administrador."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}${field("Contraseña", "password", "", "password", `required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}"`)}<p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
+    `<section class="access-card"><div class="access-brand">${dayIcon("anchor")} A bordo</div><h1>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h1><p class="subhead">${setup ? "Creá la cuenta para preparar tu barco." : "Entrá con tu usuario del barco."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}${field("Contraseña", "password", "", "password", `required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}"`)}<p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
     const button = e.target.querySelector("button");
@@ -413,6 +414,7 @@ function authScreen(setup) {
 }
 function render() {
   if (!state) return;
+  document.body.classList.remove("access-mode");
   document.body.classList.toggle("daily-mode", view === "day");
   $("#dayHeader").hidden = view !== "day";
   if (view === "day") return renderDay();
