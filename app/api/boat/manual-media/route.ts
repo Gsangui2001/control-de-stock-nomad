@@ -1,7 +1,6 @@
-import { createHash } from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { manualGrantCookie, verifyManualGrant } from '@/lib/boat-manual-grant';
 import { manualOrigin, signedManualUrl } from '@/lib/boat-manual-signature';
 
 export const runtime = 'nodejs';
@@ -30,26 +29,12 @@ function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status, headers: privateHeaders });
 }
 
-async function authorizeBoat(cookie: string, boat: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const secret = process.env.BOAT_CONTROL_SERVER_SECRET;
-  if (!url || !key || !secret) throw new Error('Boat authorization unavailable');
-  const session = createHash('sha256').update(cookie).digest('hex');
-  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await client.rpc('boat_control_rpc', {
-    server_key: secret, operation: 'boats', payload: { session },
-  }).abortSignal(AbortSignal.timeout(10000));
-  if (error?.code === '28000') return json({ error: 'Iniciá sesión para ver el manual.' }, 401);
-  if (error && error.code !== '42501') throw new Error('Boat authorization unavailable');
-  if (!error && !Array.isArray(data)) throw new Error('Invalid boat list');
-  if (error || !data.some((entry: { id?: string } | null) => entry?.id === boat)) {
-    return json({ error: 'Tu cuenta no tiene acceso a este barco.' }, 403);
-  }
+function refreshRequired() {
+  return json({ code: 'manual_boat_refresh', error: 'Volvé a entrar al barco para ver el manual.' }, 428);
 }
 
-async function readManifest(origin: string, prefix: string) {
-  const response = await fetch(signedManualUrl(origin, prefix + '/manifest.json'), {
+async function readManifest(origin: string, prefix: string, grantExpires: number) {
+  const response = await fetch(signedManualUrl(origin, prefix + '/manifest.json', grantExpires), {
     cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(9000),
   });
   if (response.status === 404) return [];
@@ -89,10 +74,12 @@ export async function GET(req: NextRequest) {
     }
     const origin = manualOrigin();
     if (!origin) return asset ? json({ error: 'No se encontró el archivo.' }, 404) : json({ items: [] });
-    const denied = await authorizeBoat(cookie, boat);
-    if (denied) return denied;
+    const grant = verifyManualGrant(req.cookies.get(manualGrantCookie)?.value, cookie, boat);
+    if (grant.status === 'refresh') return refreshRequired();
+    if (grant.status === 'denied') return json({ error: 'Tu cuenta no tiene acceso a este barco.' }, 403);
     const prefix = '/a-bordo-media/manual/' + boat;
-    const items = await readManifest(origin, prefix);
+    const items = await readManifest(origin, prefix, grant.exp);
+    if (grant.exp <= Math.floor(Date.now() / 1000)) return refreshRequired();
     if (asset === null) {
       return json({ items: items.map(entry => ({
         id: entry.id, title: entry.title, area: entry.area, description: entry.description,
@@ -105,7 +92,7 @@ export async function GET(req: NextRequest) {
     if (!media) return json({ error: 'No se encontró el archivo en el manual.' }, 404);
     const filename = media.sha256 + (asset === 'video' ? '.mp4' : '.jpg');
     // The device retrieves byte ranges directly from the vessel's private media origin.
-    return NextResponse.redirect(signedManualUrl(origin, prefix + '/assets/' + filename), { status: 307, headers: privateHeaders });
+    return NextResponse.redirect(signedManualUrl(origin, prefix + '/assets/' + filename, grant.exp), { status: 307, headers: privateHeaders });
   } catch {
     return json({ error: 'No se pudo abrir el manual. Volvé a intentar.' }, 503);
   }

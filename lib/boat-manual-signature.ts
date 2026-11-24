@@ -24,8 +24,8 @@ export function manualOrigin() {
   return origin.origin;
 }
 
-export function signedManualUrl(origin: string, pathname: string) {
-  const exp = String(Math.floor(Date.now() / 1000) + 300);
+export function signedManualUrl(origin: string, pathname: string, grantExpires: number) {
+  const exp = String(Math.min(Math.floor(Date.now() / 1000) + 300, grantExpires));
   const message = Buffer.from('nomad-manual-v1\n' + pathname + '\n' + exp, 'utf8');
   const url = new URL(pathname, origin);
   url.searchParams.set('exp', exp);
