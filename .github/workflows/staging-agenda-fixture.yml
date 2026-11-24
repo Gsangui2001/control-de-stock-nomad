@@ -1,0 +1,16 @@
+name: A bordo Agenda fixture
+on:
+  pull_request:
+    branches: [codex/boat-control-vercel]
+permissions:
+  contents: read
+jobs:
+  agenda-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node --check public/a-bordo/briefs.js
+      - run: node --test tests/boat-guest-card.cjs tests/boat-agenda-authorized-preview.cjs
