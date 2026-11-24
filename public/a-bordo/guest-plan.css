@@ -1,0 +1,22 @@
+.guest-plan { margin: 1rem 0; padding: 1rem; border: 1px solid #d4e2df; border-radius: 14px; background: #fff; color: #183b43; }
+.guest-plan h3 { margin: 0 0 .75rem; font-size: 1.06rem; }
+.guest-plan-note, .guest-plan-summary dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.guest-plan-note { margin: .6rem 0 1rem; }
+.guest-plan-summary { margin: .4rem 0 .85rem; }
+.guest-plan-summary div { padding: .45rem 0; border-bottom: 1px solid #edf2f1; }
+.guest-plan-summary dt { color: #48665f; font-size: .82rem; }
+.guest-plan-summary dd { margin: .15rem 0 0; }
+.guest-plan fieldset { padding: 0; border: 0; min-width: 0; margin: 0; }
+.guest-plan .guest-plan-inputs > fieldset + fieldset { margin-top: 1.2rem; }
+.guest-plan legend { padding: 0 0 .5rem; font-weight: 700; }
+.guest-plan label { display: grid; gap: .25rem; margin: .55rem 0; color: #364e53; font-weight: 600; }
+.guest-plan input, .guest-plan textarea { min-width: 0; width: 100%; padding: .55rem .65rem; border: 1px solid #b6c9c4; border-radius: 8px; background: #fff; color: #163a3f; font: inherit; font-size: 1rem; font-weight: 400; }
+.guest-plan textarea { min-height: 3.4rem; resize: vertical; }
+.guest-plan input:focus-visible, .guest-plan textarea:focus-visible { outline: 2px solid #227c70; outline-offset: 1px; }
+.guest-plan .area-actions { margin-top: 1rem; }
+.guest-plan [role="alert"] { overflow-wrap: anywhere; }
+
+.guest-plan-heading { display: flex; gap: .65rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.guest-plan-heading h3 { margin: 0; }
+.guest-plan-heading button { min-height: 44px; width: auto; margin: 0; padding: .5rem .9rem; }
+.guest-plan-heading + form { margin-top: 1rem; }

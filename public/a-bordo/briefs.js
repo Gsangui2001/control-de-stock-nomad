@@ -31,7 +31,7 @@ function briefCompanions(res,passengers){
  if((total!=null&&total<=1)||(total==null&&passengers.length&&!others.length))return '-';
  return '';
 }
-function briefContent(res){
+function briefContent(res,focused=false){
  const details=res.details||res.brief?.draft||{},legacy=res.legacyPreferences||{},passengers=Array.isArray(res.passengers)?res.passengers:[];
  // Never summarize internal notes into the crew card. Only explicitly structured
  // fields from the approved snapshot belong in the arrival briefing.
@@ -49,8 +49,8 @@ function briefContent(res){
  const age=briefAge(res.primaryAge)??briefAge(primaryPassenger?.age),principal=value(res.name)?value(res.name)+(age==null?'':` (${age})`):'';
  const experience=joined([details.activities,legacy.activities,...(res.interests||[]).map(briefInterest)]);
  return `<article class="guest-sheet" aria-label="Información del huésped">
- <h3>Información del huésped</h3>
- <dl class="guest-facts">${facts('Fecha del charter',briefCharterDates(res,details))}${facts('Nombre del cliente principal',principal)}${facts('Acompañantes',briefCompanions(res,passengers))}${facts('País de procedencia',value(details.country))}</dl>
+ <h3>${focused?'Grupo a bordo':'Información del huésped'}</h3>
+ <dl class="guest-facts">${focused?'':facts('Fecha del charter',briefCharterDates(res,details))+facts('Nombre del cliente principal',principal)}${facts('Acompañantes',briefCompanions(res,passengers))}${facts('País de procedencia',value(details.country))}</dl>
  <div class="guest-block">${row('Aire acondicionado',value(details.airConditioning))}${row('Llegada',joined([details.transport,details.embarkation,details.embarkationTime]))}${row('Salida',joined([details.disembarkation,details.disembarkationTime]))}</div>
  <div class="guest-block"><h4>Información de comidas</h4>${row('A evitar',avoid,Boolean(avoid))}${row('Prefieren',prefer)}${row('Dieta específica',diet)}</div>
  ${briefPayment(res)}
@@ -80,25 +80,61 @@ function briefPayment(res){
  }else if(known>0&&balance.reportedCount)head='Pago informado · pendiente de registro';
  return `<div class="guest-block guest-pay"><p class="guest-line guest-pay-line"><strong>A pagar</strong><span>${esc(head)}</span></p>${extra}</div>`;
 }
+function guestDateLabel(value){
+ const iso=/^\d{4}-\d{2}-\d{2}/.exec(String(value||''));
+ if(!iso)return 'Por confirmar';
+ const day=new Date(iso[0]+'T12:00:00Z');
+ if(!Number.isFinite(day.getTime()))return 'Por confirmar';
+ return day.toLocaleDateString('es',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'});
+}
+function guestFocusHeader(res){
+ const guests=Number.isInteger(res.guests)&&res.guests>0?res.guests+' '+(res.guests===1?'pasajero':'pasajeros'):'Pasajeros por confirmar';
+ const status=res.brief?.version?'Ficha publicada':'Ficha en preparación';
+ const age=briefAge(res.primaryAge);
+ return `<header class="guest-focus-header"><h1>${esc(res.name||'Cliente por confirmar')}</h1>
+ <p class="guest-focus-meta">${esc(guests)}${age==null?'':' · Titular de '+age+' años'}<span>${status}</span></p>
+ <dl class="guest-itinerary"><div><dt>Embarque</dt><dd>${esc(guestDateLabel(res.start))}</dd></div>
+ <div><dt>Desembarque</dt><dd>${esc(guestDateLabel(res.end))}</dd></div></dl></header>`;
+}
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
- return `<h2>Huéspedes de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota completa la ficha en el CRM y toca Listo para enviarla a la tripulación.':'Abrí la ficha para preparar la llegada y confirmá que la revisaste.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}${briefAgendaAllowed()?'<div class="ops-actions"><button type="button" class="day-secondary" data-day="ops-agenda">Agenda del mes</button></div>':''}
- ${isAdmin?'<div class="ops-actions"><button type="button" class="day-secondary" data-brief-action="external">Plantillas para otros capitanes</button></div><div id="briefExternal"></div>':''}
- ${opsReservations.map(res=>{
+ const selected=new URLSearchParams(location.search).get('reservation');
+ let rows=selected?opsReservations.filter(r=>r.id===selected):opsReservations;
+ const agenda=(!selected||!rows.length)&&typeof briefAgendaEnsure==='function'&&briefAgendaAllowed()?briefAgendaEnsure():null;
+ let agendaOnly=false;
+ if(selected&&!rows.length){
+  if(agenda?.loading)return '<p role="status">Cargando la ficha del huésped…</p>';
+  if(agenda?.error)return `<p class="form-error" role="alert">${esc(agenda.error)}</p><button class="day-secondary" type="button" data-agenda-retry>Reintentar</button>`;
+  const item=agenda?.rows?.find(r=>r.id===selected);
+  if(!item)return '<h1>Ficha no disponible</h1><p>Volvé a la agenda para consultar las salidas de este barco.</p>';
+  if(item.briefVersion>0)return '<h1>Ficha publicada</h1><p>Actualizá para cargar la información de este huésped.</p>';
+  agendaOnly=true;
+  rows=[{id:item.id,name:item.name,start:item.start,end:item.end,guests:item.guests,primaryAge:item.primaryAge,brief:{version:0},onboardPlan:item.onboardPlan}];
+ }
+ const extra=(selected?[]:agenda?.rows||[]).filter(r=>r.id&&!rows.some(known=>known.id===r.id));
+ const extrasHtml=extra.map(r=>`<button type="button" class="guest-directory-row" data-agenda-open="${esc(r.id)}"><strong>${esc(r.name||'Cliente por confirmar')}</strong><small>${esc(guestDateLabel(r.start))} · ${r.briefVersion?'Ficha publicada':'Ficha en preparación'}</small></button>`).join('');
+ const directoryState=selected?'':agenda?.error?`<p role="alert">${esc(agenda.error)}</p><button type="button" class="day-secondary" data-agenda-retry>Reintentar</button>`:agenda?.loading?'<p role="status">Buscando las salidas del barco…</p>':'';
+ const intro=selected?'':`<h2>Huéspedes de ${esc(state.boat.name)}</h2><p>${isAdmin?'Carlota completa la ficha en el CRM y toca Listo para enviarla a la tripulación.':'Elegí un huésped para consultar su salida.'}</p>${!isAdmin&&pending?`<div class="day-note">${pending} ficha(s) pendientes de tu revisión.</div>`:''}${briefAgendaAllowed()?'<div class="ops-actions"><button type="button" class="day-secondary" data-day="ops-agenda">Agenda del mes</button></div>':''}
+ ${isAdmin?'<div class="ops-actions"><button type="button" class="day-secondary" data-brief-action="external">Plantillas para otros capitanes</button></div><div id="briefExternal"></div>':''}`;
+ return intro+rows.map(res=>{
   const b=res.brief||{},changed=b.sourceChanged||b.draftChanged;
-  return `<details class="day-disclosure brief-card" id="brief-${esc(res.id)}" ${new URLSearchParams(location.search).get('reservation')===res.id?'open':''}><summary>${date(res.start)} · ${esc(res.name||'Cliente pendiente')} · ${res.guests??'—'} pasajeros · ${b.version?'Versión '+b.version:'Borrador'}</summary>
-  ${b.version?`<p class="day-muted">Publicada: ${briefTime(b.publishedAt)}</p>`:'<div class="day-note">Todavía no está publicada para la tripulación.</div>'}
+  const wrapper=selected?'article':'details';
+  const heading=selected?guestFocusHeader(res):`<summary>${date(res.start)} · ${esc(res.name||'Cliente pendiente')} · ${res.guests??'—'} pasajeros · ${b.version?'Versión '+b.version:'Borrador'}</summary>`;
+  return `<${wrapper} class="${selected?'guest-focused':'day-disclosure'} brief-card" id="brief-${esc(res.id)}">${heading}
+  ${selected&&typeof guestPlanPanel==='function'?guestPlanPanel(res):''}
+  ${!selected?`<button type="button" class="day-secondary" data-agenda-open="${esc(res.id)}">Abrir ficha del huésped</button>`:''}
+  ${!selected?(b.version?`<p class="day-muted">Publicada: ${briefTime(b.publishedAt)}</p>`:'<div class="day-note">Todavía no está publicada para la tripulación.</div>'):''}
   ${changed?`<div class="ops-critical">${isAdmin?'Hay cambios sin publicar. Revisá y publicá una nueva versión para solicitar otra revisión.':'El CRM cambió desde esta publicación. Administración debe actualizar la ficha; esta es la última versión publicada.'}</div>`:''}
-  ${briefContent(res)}
-  ${isAdmin?`<details class="day-disclosure guest-admin"><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
+  ${!selected||b.version||(isAdmin&&!agendaOnly)?briefContent(res,Boolean(selected)):''}
+  ${isAdmin&&!agendaOnly?`<details class="day-disclosure guest-admin"><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
    <p>${['confirmed','in_progress'].includes(res.status)?'La reserva está confirmada en el CRM.':'La reserva debe confirmarse en el CRM antes de publicar la ficha.'}</p>
    <p>La publicación requiere la aprobación de Carlota en la ficha de la reserva.</p><a class="day-primary" href="https://crm.nomadsailors.com/operaciones" target="_blank" rel="noopener">Abrir reservas en el CRM</a>
    <h3>Revisión de la versión ${b.version||'pendiente'}</h3>${(b.reviews||[]).map(rv=>`<p>${esc(rv.name)} · ${esc(rv.role)}: <strong>${rv.reviewedAt?'Revisado · '+briefTime(rv.reviewedAt):'Pendiente'}</strong></p>`).join('')||'<p>No hay tripulantes asignados.</p>'}</details>`:
    b.reviewedAt?`<div class="day-note">Revisaste la versión ${b.version} el ${briefTime(b.reviewedAt)}.</div>`:
-   ['capitan','chef','marinero','encargado'].includes(role)?`<button type="button" class="day-primary" data-brief-action="review" data-id="${esc(res.id)}" ${b.sourceChanged?'disabled':''}>Ya la revisé · versión ${b.version}</button>`:''}
-  </details>`;
- }).join('')||empty('No hay fichas disponibles para este barco.')}
- ${isAdmin&&opsReservations.length?`<details class="day-disclosure"><summary>Asignación de capitán e instrucciones de cobro</summary>${briefLegacyReservations()}</details>`:''}`;
+   b.version&&['capitan','chef','marinero','encargado'].includes(role)?`<button type="button" class="day-primary" data-brief-action="review" data-id="${esc(res.id)}" ${b.sourceChanged?'disabled':''}>Ya la revisé · versión ${b.version}</button>`:''}
+  </${wrapper}>`;
+ }).join('')+extrasHtml+directoryState+(rows.length||extra.length||directoryState?'':empty('No hay fichas disponibles para este barco.'))+
+ (!selected&&isAdmin&&opsReservations.length?`<details class="day-disclosure"><summary>Asignación de capitán e instrucciones de cobro</summary>${briefLegacyReservations()}</details>`:'');
 }
 const briefLegacyReservations=opsReservationsView;
 opsReservationsView=briefReservationsView;
@@ -158,8 +194,10 @@ document.addEventListener('input',event=>{if(event.target.form?.matches('.brief-
 // Monthly agenda of the Nomade: every charter the CRM confirms, so the captain
 // sees the month ahead and opens each guest card from the same place.
 let briefAgenda=null,briefAgendaBoat=null,briefAgendaLoading=false,briefAgendaError='',briefAgendaMonth='';
+let briefAgendaSession=null,briefAgendaRole=null,briefAgendaRequest=0,briefAgendaDate='';
 const briefMonths=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const briefCurrentMonth=()=>new Date().toLocaleDateString('en-CA',{timeZone:'America/Panama'}).slice(0,7);
+const briefToday=()=>new Date().toLocaleDateString('sv-SE',{timeZone:'America/Panama'});
+const briefCurrentMonth=()=>briefToday().slice(0,7);
 const briefMonthKey=v=>/^\d{4}-\d{2}/.test(String(v??''))?String(v).slice(0,7):'';
 const briefShiftMonth=(key,delta)=>{const [y,m]=key.split('-').map(Number);return new Date(Date.UTC(y,m-1+delta,1)).toISOString().slice(0,7);};
 const briefMonthName=key=>{const [y,m]=key.split('-').map(Number);return `${briefMonths[m-1]} ${y}`;};
@@ -171,12 +209,34 @@ function briefAgendaAllowed(){
  return briefNorm(state?.boat?.name).includes('nomade')||(Array.isArray(opsReservations)&&opsReservations.length>0);
 }
 async function briefAgendaLoad(){
- const boat=boatId;briefAgendaLoading=true;briefAgendaError='';
- try{const data=await opsFetch('agenda');if(boat===boatId)briefAgenda=Array.isArray(data)?data:[];}
- catch(e){if(boat===boatId)briefAgendaError=e.message||'No se pudo leer la agenda.';}
- finally{briefAgendaLoading=false;if(boat===boatId&&dayPage==='ops-agenda')render();}
+ const boat=boatId,user=session,access=role,request=++briefAgendaRequest;
+ const current=()=>request===briefAgendaRequest&&boat===boatId&&user===session&&access===role;
+ briefAgendaLoading=true;briefAgendaError='';
+ try{
+  const data=await opsFetch('agenda',null,boat);
+  if(!Array.isArray(data))throw Error('No se pudo leer la agenda.');
+  if(current())briefAgenda=data;
+ }catch(e){if(current())briefAgendaError=e.message||'No se pudo leer la agenda.';}
+ finally{
+  if(current()){
+   briefAgendaLoading=false;
+   const selected=new URLSearchParams(location.search).get('reservation');
+   if(dayPage==='ops-agenda'||(dayPage==='ops-reservations'&&selected&&!opsReservations.some(row=>row.id===selected)))render();
+  }
+ }
 }
-function briefAgendaRow(item){
+function briefAgendaForCurrentBoat(){
+ return briefAgendaAllowed()&&briefAgendaBoat===boatId&&briefAgendaSession===session&&briefAgendaRole===role&&Array.isArray(briefAgenda)?briefAgenda:[];
+}
+function briefBookingColors(rows){
+ const colors=['lagoon','copper','iris','blue','olive','rose'];
+ const ordered=rows.filter(Boolean).slice().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))||String(a.id).localeCompare(String(b.id)));
+ return new Map(ordered.map((row,index)=>[row,colors[index%colors.length]]));
+}
+const briefGuestName=item=>String(item.name||'').trim()||'Cliente por confirmar';
+const briefBookingDay=value=>String(value||'').slice(0,10);
+const briefBookingCovers=(item,day)=>briefBookingDay(item.start)<=day&&briefBookingDay(item.end||item.start)>=day;
+function briefAgendaRow(item,color){
  const age=briefAge(item.primaryAge),sent=Number(item.briefVersion)>0;
  const guests=Number.isInteger(item.guests)?`${item.guests} pasajero${item.guests===1?'':'s'}`:'Pasajeros por confirmar';
  const tag=(text,kind='')=>`<span class="agenda-tag${kind?' agenda-'+kind:''}">${esc(text)}</span>`;
@@ -191,27 +251,87 @@ function briefAgendaRow(item){
  }
  const dates=`${briefDay(item.start)||'Pendiente'} - ${briefDay(item.end)||'Pendiente'}`;
  const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(typeof item.name==='string'&&item.name.trim()?item.name.trim():'Cliente por confirmar')}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
- return sent&&item.id?`<button type="button" class="agenda-row" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
+ return item.id?`<button type="button" class="agenda-row booking-${color}" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
+}
+function briefMonthGrid(month,rows,colors){
+ const [year,m]=month.split('-').map(Number);
+ const offset=(new Date(Date.UTC(year,m-1,1)).getUTCDay()+6)%7;
+ const last=new Date(Date.UTC(year,m,0)).getUTCDate(),today=briefToday();
+ const key=n=>month+'-'+String(n).padStart(2,'0');
+ const cells=[];
+ for(let first=1-offset;first<=last;first+=7){
+  const begin=Math.max(1,first),end=Math.min(last,first+6);
+  const lanes=[],days=[];
+  for(let n=first;n<first+7;n++){
+   if(n<1||n>last){days.push('<span class="agenda-blank" aria-hidden="true"></span>');continue;}
+   const day=key(n),count=rows.filter(r=>briefBookingCovers(r,day)).length;
+   const label=n+' de '+briefMonthName(month)+', '+count+(count===1?' reserva':' reservas');
+   days.push(`<button type="button" class="agenda-day" data-agenda-day="${day}" aria-label="${esc(label)}" aria-pressed="${day===briefAgendaDate}"${day===today?' aria-current="date"':''}><span>${n}</span></button>`);
+  }
+  const stays=rows.filter(item=>briefBookingDay(item.start)<=key(end)&&briefBookingDay(item.end||item.start)>=key(begin)).map(item=>{
+   const start=briefBookingDay(item.start),finish=briefBookingDay(item.end||item.start);
+   const from=start<key(begin)?begin:Number(start.slice(8)),to=finish>key(end)?end:Number(finish.slice(8));
+   const name=briefGuestName(item),label=name+' · '+(briefDay(item.start)||'Pendiente')+' – '+(briefDay(item.end)||'Pendiente');
+   let lane=lanes.findIndex(previous=>previous<from);if(lane<0)lane=lanes.length;
+   lanes[lane]=to;
+   const style='grid-column:'+(from-first+1)+' / span '+(to-from+1)+';grid-row:'+(lane+1);
+   const cls='agenda-stay booking-'+colors.get(item),span=to-from+1;
+   const words=name.split(/\s+/),initials=words[0].slice(0,1)+(words.length>1?words[words.length-1].slice(0,1):'');
+   const compact=span===1?initials.toLocaleUpperCase('es'):span===2?words[0]:name;
+   return item.id?`<button type="button" class="${cls}" style="${style}" data-agenda-open="${esc(item.id)}" aria-label="${esc('Abrir ficha de '+label)}" title="${esc(label)}">${esc(compact)}</button>`:`<span class="${cls}" style="${style}" title="${esc(label)}">${esc(compact)}</span>`;
+  });
+  cells.push('<div class="agenda-week"><div class="agenda-days">'+days.join('')+'</div>'+(stays.length?'<div class="agenda-ranges">'+stays.join('')+'</div>':'')+'</div>');
+ }
+ const weekdays=['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+ return '<div class="agenda-board" role="group" aria-label="Calendario de '+esc(briefMonthName(month))+'"><div class="agenda-weekdays" aria-hidden="true">'+weekdays.map(d=>'<span>'+d+'</span>').join('')+'</div>'+cells.join('')+'</div>';
+}
+function briefAgendaEnsure(){
+ const full=briefAgendaAllowed();
+ if(briefAgendaBoat!==boatId||briefAgendaSession!==session||briefAgendaRole!==role){
+  briefAgendaRequest++;briefAgenda=null;briefAgendaError='';briefAgendaLoading=false;briefAgendaDate='';
+  briefAgendaBoat=boatId;briefAgendaSession=session;briefAgendaRole=role;
+ }
+ if(full && briefAgenda===null && !briefAgendaLoading && !briefAgendaError)briefAgendaLoad();
+ return {rows:briefAgendaForCurrentBoat(),loading:full&&briefAgendaLoading,error:full?briefAgendaError:''};
 }
 function briefAgendaView(){
- const full = briefAgendaAllowed();
- if(briefAgendaBoat!==boatId){briefAgenda=null;briefAgendaError='';briefAgendaBoat=boatId;}
- if(full && briefAgenda===null && !briefAgendaLoading && !briefAgendaError)briefAgendaLoad();
+ const full=briefAgendaAllowed();
+ briefAgendaEnsure();
  const rows = full ? briefAgenda : opsReservations.filter(r => r.brief?.version > 0).map(r => ({
    id:r.id, name:r.name, start:r.start, end:r.end, guests:r.guests, briefVersion:r.brief.version, reviewedAt:r.brief.reviewedAt
  }));
  const month=briefAgendaMonth||briefCurrentMonth();
  let body;
- if(full && briefAgendaError)body=`<p class="form-error" role="alert">${esc(briefAgendaError)}</p>`;
- else if(rows===null)body='<p class="day-muted">Cargando agenda…</p>';
- else body=rows.filter(item=>item&&briefInMonth(item,month)).sort((a,b)=>String(a.start).localeCompare(String(b.start))).map(briefAgendaRow).join('')||empty(full?'No hay charters confirmados este mes.':'No hay fichas de huéspedes publicadas para este mes.');
- return `<h1>Agenda del mes</h1><p class="day-muted">${full ? 'Salidas confirmadas de ' + esc(state.boat.name) + '.' : 'Salidas con ficha publicada para tu tripulación.'}</p>
- <div class="agenda-nav"><button type="button" class="day-secondary" data-agenda-month="${briefShiftMonth(month,-1)}" aria-label="Mes anterior">‹</button><h3 aria-live="polite">${briefMonthName(month)}</h3><button type="button" class="day-secondary" data-agenda-month="${briefShiftMonth(month,1)}" aria-label="Mes siguiente">›</button></div>
- <div class="agenda-list">${body}</div><div class="area-actions"><button type="button" class="day-secondary" data-day="ops-reservations">Fichas de huéspedes</button></div>`;
+ if(full&&briefAgendaError)body=`<p class="form-error" role="alert">${esc(briefAgendaError)}</p><button type="button" class="day-secondary" data-agenda-retry>Reintentar</button>`;
+ else if(rows===null)body='<p class="day-muted" role="status">Cargando agenda…</p>';
+ else{
+  const monthRows=rows.filter(item=>item&&briefInMonth(item,month)).sort((a,b)=>String(a.start).localeCompare(String(b.start))||briefGuestName(a).localeCompare(briefGuestName(b),'es'));
+  const selected=briefAgendaDate.slice(0,7)===month?briefAgendaDate:'';
+  const list=selected?monthRows.filter(item=>briefBookingCovers(item,selected)):monthRows;
+  const label=selected?'Reservas del '+Number(selected.slice(8))+' de '+briefMonths[Number(month.slice(5))-1].toLowerCase():'Reservas del mes';
+  const undated=rows.filter(item=>item&&!briefMonthKey(item.start));
+  const colors=briefBookingColors(rows);
+  const card=item=>briefAgendaRow(item,colors.get(item));
+  body=briefMonthGrid(month,monthRows,colors)+`<section class="agenda-results" aria-labelledby="agenda-results-title"><div class="agenda-section-head"><h2 id="agenda-results-title" tabindex="-1">${esc(label)} <span>(${list.length})</span></h2>${selected?'<button type="button" class="agenda-text" data-agenda-all>Ver todo el mes</button>':''}</div><div class="agenda-list">${list.map(card).join('')||empty(selected?'No hay reservas para ese día.':full?'No hay charters confirmados este mes.':'No hay fichas de huéspedes publicadas para este mes.')}</div></section>`;
+  if(undated.length)body+='<details class="day-disclosure"><summary>Reservas sin fecha ('+undated.length+')</summary><div class="agenda-list">'+undated.map(card).join('')+'</div></details>';
+ }
+ return `<h1>Agenda del mes</h1><section class="agenda-calendar"><div class="agenda-nav"><h2 aria-live="polite">${briefMonthName(month)}</h2><div><button type="button" class="agenda-today" data-agenda-today>Hoy</button><button type="button" data-agenda-month="${briefShiftMonth(month,-1)}" aria-label="Mes anterior">‹</button><button type="button" data-agenda-month="${briefShiftMonth(month,1)}" aria-label="Mes siguiente">›</button></div></div>${body}</section><div class="area-actions"><button type="button" class="day-secondary" data-day="ops-reservations">Fichas de huéspedes</button></div>`;
 }
 document.addEventListener('click',event=>{
  const month=event.target.closest('[data-agenda-month]');
- if(month){briefAgendaMonth=month.dataset.agendaMonth;render();return;}
+ if(month){
+  const direction=month.dataset.agendaMonth<(briefAgendaMonth||briefCurrentMonth())?-1:1;
+  briefAgendaDate='';briefAgendaMonth=month.dataset.agendaMonth;render();
+  document.querySelector('[data-agenda-month="'+briefShiftMonth(briefAgendaMonth,direction)+'"]')?.focus({preventScroll:true});
+  return;
+ }
+ if(event.target.closest('[data-agenda-retry]')){briefAgendaError='';render();return;}
+ if(event.target.closest('[data-agenda-all]')){briefAgendaDate='';render();document.querySelector('#agenda-results-title')?.focus();return;}
+ const day=event.target.closest('[data-agenda-day]'),today=event.target.closest('[data-agenda-today]');
+ if(day||today){
+  briefAgendaDate=day?day.dataset.agendaDay:briefToday();briefAgendaMonth=briefAgendaDate.slice(0,7);
+  render();document.querySelector('#agenda-results-title')?.focus();return;
+ }
  const open=event.target.closest('[data-agenda-open]');if(!open)return;
  dayGuestCashOwner=dayPage==='ops-cash' && canViewCash() ? {boat:boatId,user:session} : null;
  const id=open.dataset.agendaOpen,params=new URLSearchParams(location.search);params.set('reservation',id);
@@ -221,4 +341,4 @@ document.addEventListener('click',event=>{
 });
 // Refreshing the operations data also refreshes the agenda (a payment or a new
 // confirmation changes it). Guarded so the card renders in isolated tests.
-if(typeof opsReload==='function'){const briefOpsReload=opsReload;opsReload=function(){briefAgenda=null;briefAgendaError='';return briefOpsReload.apply(this,arguments);};}
+if(typeof opsReload==='function'){const briefOpsReload=opsReload;opsReload=function(){briefAgendaRequest++;briefAgendaLoading=false;briefAgenda=null;briefAgendaError='';return briefOpsReload.apply(this,arguments);};}

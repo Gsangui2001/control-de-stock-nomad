@@ -20,6 +20,7 @@ const dayButton = (page, label, id = "", style = "day-secondary") =>
   `<button type="button" class="${style}" data-day="${page}" data-id="${esc(id)}">${label}</button>`;
 let dayIntakeParent = "ops-stock";
 let dayGuestCashOwner = null;
+let dayNoticeStockOwner = null;
 function dayBack() {
   let parent = "home", label = "Inicio";
   if (dayPage === "task" || dayPage === "blocked") {
@@ -30,6 +31,8 @@ function dayBack() {
     parent = "ops-stock"; label = "Stock";
   } else if (["ops-collections","ops-expenses","ops-intake"].includes(dayPage)) {
     parent = "ops-cash"; label = "Caja";
+  } else if (dayPage === "ops-notifications" && dayNoticeStockOwner && dayNoticeStockOwner.boat === boatId && dayNoticeStockOwner.user === session) {
+    parent = "ops-stock"; label = "Stock";
   } else if (dayPage === "ops-reservations") {
     const fromCash = dayGuestCashOwner && dayGuestCashOwner.boat === boatId && dayGuestCashOwner.user === session && canViewCash();
     parent = fromCash ? "ops-cash" : "ops-agenda"; label = fromCash ? "Caja" : "Agenda del mes";
@@ -101,7 +104,7 @@ function dayWorkForm(kind) {
     ${!task && !product ? `<label>¿Dónde?<select name="system" required>${options(systemOptions(), "", "Elegí el lugar o equipo")}</select></label>` : ""}
     <label>${kind === "blocked" ? "¿Qué te impidió hacerlo?" : report ? "Contanos qué hace falta o qué encontraste" : "Observaciones (opcional)"}<textarea name="notes" maxlength="5000" ${report ? "required" : ""} placeholder="${report ? "Escribí brevemente qué pasó." : "¿Algo para avisar o recordar?"}">${product ? `Hace falta reponer ${esc(product.name)}.` : ""}</textarea></label>
     ${dayPhotoFields()}
-    ${report ? '<label class="check"><input type="checkbox" name="urgent">Necesita atención urgente</label>' : `<details class="day-disclosure"><summary>¿Usaste algún material?</summary><p class="day-muted">Se descontará del inventario al guardar.</p><div id="materialLines"></div>${action("addMaterial", "＋ Agregar material")}</details>${task?.equipmentId ? `<div class="day-note">${esc(eq(task.equipmentId)?.name || "Equipo asignado")}${field("Horas del equipo al realizar el trabajo", "hours", "", "number", `${task.intervalHours ? "required" : ""} min="0" step="0.1" placeholder="Lectura del contador"`)}</div>` : ""}${dayCycleField(task)}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}`}
+    ${report ? '<label class="check"><input type="checkbox" name="urgent">Necesita atención urgente</label>' : `<details class="day-disclosure"><summary>¿Usaste algún material?</summary><p class="day-muted">${state.products.length ? "Se descontará del inventario al guardar." : "Todavía no hay materiales registrados en Stock. Podés guardar el trabajo sin materiales."}</p><div id="materialLines"></div>${state.products.length ? action("addMaterial", "＋ Agregar material") : ""}</details>${task?.equipmentId ? `<div class="day-note">${esc(eq(task.equipmentId)?.name || "Equipo asignado")}${field("Horas del equipo al realizar el trabajo", "hours", "", "number", `${task.intervalHours ? "required" : ""} min="0" step="0.1" placeholder="Lectura del contador"`)}</div>` : ""}${dayCycleField(task)}${field("Fecha del trabajo", "date", today(), "date", `required max="${today()}"`)}`}
     <p class="day-muted">Se registra con tu nombre: ${esc(session.name)}.</p><p id="dayError" class="form-error" role="alert"></p><button type="button" class="day-secondary" data-day="reloadDraft" id="dayReload" hidden>Actualizar datos y revisar el formulario</button>${writable() ? `<button type="submit" class="day-primary">${report ? "Enviar aviso" : "Guardar trabajo"}</button>` : '<p class="day-note">Tu acceso es de lectura.</p>'}${task && !report && writable() ? dayButton("blocked", "No pude hacer esta tarea", task.id, "day-text") : ""}</form>`;
 }
 function dayStock() {
@@ -264,6 +267,7 @@ document.addEventListener("click", async event => {
       else if (dayManager()) { dayTaskRole = button.dataset.id; dayEquipmentGroup = ""; }
       render(); return;
     }
+    if (page === "ops-notifications" && dayPage !== page) dayNoticeStockOwner = dayPage === "ops-stock" ? {boat:boatId, user:session} : null;
     if (page === "ops-intake") dayIntakeParent = ["ops-cash","ops-expenses"].includes(dayPage) ? "ops-cash" : "ops-stock";
     if (page === "ops-reservations" || dayPage === "ops-reservations") dayGuestCashOwner = null;
     if ((page === "home" || dayPage === "ops-reservations" && page !== dayPage) && location.search) {
@@ -305,6 +309,7 @@ function dayTaskGroup(t) {
 }
 function dayGroupedTasks() {
   const tasks = dayTasks();
+  if (!tasks.length && !dayEquipmentGroup) return empty('No tenés tareas pendientes.');
   const present = [...new Set(tasks.map(dayTaskGroup))];
   const order = ['Diarias','Semanales','Mensuales','Por servicio o actividad','Ciclo de 14 días'];
   const groups = [...order.filter(g=>present.includes(g)),...present.filter(g=>!order.includes(g))];

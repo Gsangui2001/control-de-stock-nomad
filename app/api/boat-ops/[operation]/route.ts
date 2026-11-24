@@ -13,9 +13,11 @@ const common={boat:z.string().regex(/^[a-f0-9-]{32,36}$/),key:id};
 const finite=z.number().finite().nonnegative().max(1e12);
 const cashAmount=z.number().finite().min(0).max(1e9).refine(n=>Math.abs(n*100-Math.round(n*100))<0.00001);
 const cashCurrency=z.enum(['USD','EUR','ARS','PAB']);
+const planKeys=z.enum(['embarkation','embarkationTime','disembarkation','disembarkationTime','transport','activities','food','allergies','drinks','requests','onboardNotes']);
 const rows=z.array(z.object({id:z.string().min(1)}).passthrough()).max(20000);
 const backupSchema=z.object({version:z.literal(1),boat:common.boat,revision:z.number().int().nonnegative(),state:z.object({schema:z.literal(1),boat:z.object({name:text,currency:z.enum(['USD','EUR','ARS']),equipment:rows}).passthrough(),products:z.array(z.object({id:z.string().min(1),name:text,unit:text,current:finite,min:finite,cost:finite}).passthrough()),tasks:rows,logs:rows,movements:rows,purchases:rows,cameras:rows}).passthrough(),requests:z.array(z.record(z.unknown())),transfers:z.array(z.record(z.unknown())),reservations:z.array(z.record(z.unknown())),instructions:z.array(z.record(z.unknown())),collections:z.array(z.record(z.unknown())),photos:z.array(z.record(z.unknown())),intakes:z.array(z.record(z.unknown())).default([]),expenseControls:z.array(z.record(z.unknown())).default([]),expensePayments:z.array(z.record(z.unknown())).default([]),expenseHistory:z.array(z.record(z.unknown())).default([])});
 const schemas:Record<string,z.ZodTypeAny>={
+ guest_plan_save:z.object({...common,id,revision:z.number().int().nonnegative(),version:z.number().int().nonnegative(),changes:z.record(planKeys,z.string().trim().max(2000)).refine(changes=>Object.keys(changes).length>0)}).strict(),
  captain_opening:z.object({...common,captainId:text,amount:cashAmount,currency:cashCurrency}).strict(),
  captain_expense:z.object({...common,amount:cashAmount.refine(n=>n>0),currency:cashCurrency,concept:text}).strict(),
  warehouse_count:z.object({...common,name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.max(999999999.9999),revision:z.coerce.number().int().nonnegative(),
@@ -31,7 +33,7 @@ const schemas:Record<string,z.ZodTypeAny>={
  transfer_receive:z.object({...common,id,quantity:amount,productId:z.string().max(100).optional(),location:text}),
  transfer_cancel:z.object({...common,id}),
  reservation_link:z.object({...common,id}),
- brief_save:z.object({...common,id,revision:z.number().int().nonnegative(),details:z.object(Object.fromEntries(['embarkation','embarkationTime','disembarkation','disembarkationTime','food','allergies','drinks','activities','transport','requests'].map(k=>[k,z.string().trim().max(2000)])))}),
+ brief_save:z.object({...common,id,revision:z.number().int().nonnegative(),details:z.object(Object.fromEntries(['embarkation','embarkationTime','disembarkation','disembarkationTime','food','allergies','drinks','activities','transport','requests'].map(k=>[k,z.string().trim().max(2000)]))).extend({country:z.string().trim().max(2000).optional(),airConditioning:z.string().trim().max(2000).optional()})}),
  brief_publish:z.object({...common,id,revision:z.number().int().nonnegative(),sourceHash:z.string().regex(/^[a-f0-9]{64}$/)}),
  brief_payment:z.object({...common,id,version:z.number().int().positive()}).strict(),
  brief_review:z.object({...common,id,version:z.number().int().positive()}),
@@ -57,13 +59,15 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const operation=params.operation;
   let payload:any;
   if(req.method==='GET') {
-   if(!['overview','fleet_stock','warehouse_dashboard','reservations','agenda','reservation_candidates','external_templates','backup','captain_wallet'].includes(operation))return json({error:'Recurso inexistente'},404);
+   if(!['overview','fleet_stock','warehouse_dashboard','reservations','agenda','guest_plan','reservation_candidates','external_templates','backup','captain_wallet'].includes(operation))return json({error:'Recurso inexistente'},404);
    payload=z.object({boat:common.boat}).parse({boat:req.nextUrl.searchParams.get('boat')});
+   if(operation==='guest_plan')payload.id=id.parse(req.nextUrl.searchParams.get('id'));
    if(operation==='warehouse_dashboard')payload.scope=z.union([common.boat,z.literal('depot')]).parse(req.nextUrl.searchParams.get('scope')||payload.boat);
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
    if(!req.headers.get('content-type')?.startsWith('application/json'))return json({error:'Se requiere JSON'},415);
-   const raw=await req.text();if(Buffer.byteLength(raw)>(operation==='backup_restore'?3500000:30000))return json({error:'Registro demasiado grande'},413);
+   const maxBytes=operation==='backup_restore'?3500000:['brief_save','guest_plan_save'].includes(operation)?150000:30000;
+   const raw=await req.text();if(Buffer.byteLength(raw)>maxBytes)return json({error:'Registro demasiado grande'},413);
    if(!schemas[operation])return json({error:'Operación desconocida'},404);
    payload=schemas[operation].parse(JSON.parse(raw));
    if(operation==='backup_restore') {
@@ -80,14 +84,15 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const sessionCookie=req.cookies.get('boat_session')?.value;
   if(!sessionCookie)return json({error:'Iniciá sesión para abrir el barco.'},401);
   payload.session=createHash('sha256').update(sessionCookie).digest('hex');
-  const cash=operation.startsWith('captain_')||['collection_report','brief_payment','reservations','agenda'].includes(operation);
-  const rpc=cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const cash=operation.startsWith('captain_')||['collection_report','brief_payment'].includes(operation);
+  const guestPlan=['agenda','reservations','guest_plan','guest_plan_save'].includes(operation);
+  const rpc=guestPlan?'boat_guest_plan_rpc':cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
   const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:['23505','40001','PT409','PFR01'].includes(error.code||'')?409: /^(P0001|22|23)/.test(error.code||'')?400:503;
    return json({error:error.code==='23505'?'Ese registro ya existe. Actualizá la vista.':error.message},status);
   }
-  if(req.method==='POST'&&!operation.startsWith('warehouse_'))await flushBoatPush(5).catch(()=>{}); // Records already committed; delivery retries are durable.
+  if(req.method==='POST'&&!guestPlan&&!operation.startsWith('warehouse_'))await flushBoatPush(5).catch(()=>{}); // Records already committed; delivery retries are durable.
   return json(operation==='overview'?{...data,pushPublicKey:process.env.BOAT_PUSH_PUBLIC_KEY||''}:data);
  }catch(error){return json({error:error instanceof z.ZodError?'Revisá los campos requeridos y las cantidades.':'No se pudo confirmar. Conservá el formulario y reintentá.'},error instanceof z.ZodError||error instanceof SyntaxError?400:503);}
 }
