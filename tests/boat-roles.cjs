@@ -115,7 +115,8 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
     'next/server':{NextResponse:TestResponse},
     '@/lib/boat-task-access':exportsObject,
     '@/lib/boat-push':{flushBoatPush:async()=>({})},
-    '@/lib/boat-crew-state':crewExports
+    '@/lib/boat-crew-state':crewExports,
+    '@/lib/boat-manual-grant':{issueManualGrant(){},clearManualGrant(){}}
   };
   const mockRequire=name=>modules[name]??require(name);
   function loadHandler(name){

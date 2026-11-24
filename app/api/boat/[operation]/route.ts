@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { flushBoatPush } from '@/lib/boat-push';
 import { canReadBoatCash, isOperationalStatePhoto, protectCrewHistory } from '@/lib/boat-crew-state';
 import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
+import { clearManualGrant, issueManualGrant } from '@/lib/boat-manual-grant';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -70,11 +71,11 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    const account=await rpc('account',{username});
    const candidate=passwordHash(password,account?.password.split(':')[0]||'00000000000000000000000000000000');
    if(!account||candidate.length!==account.password.length||!timingSafeEqual(Buffer.from(candidate),Buffer.from(account.password))){await rpc('login_failure',{username});throw new ApiError(401,'Usuario o contraseña incorrectos.');}
-   const token=randomBytes(32).toString('base64url');await rpc('session_create',{token:hash(token),user_id:account.id});
-   const res=json({ok:true});res.cookies.set('boat_session',token,{httpOnly:true,secure:req.nextUrl.protocol==='https:',sameSite:'strict',path:'/',maxAge:86400});return res;
+   const token=randomBytes(32).toString('base64url')+'.'+(Math.floor(Date.now()/1000)+86400);await rpc('session_create',{token:hash(token),user_id:account.id});
+   const res=json({ok:true});res.cookies.set('boat_session',token,{httpOnly:true,secure:req.nextUrl.protocol==='https:',sameSite:'strict',path:'/',maxAge:86400});clearManualGrant(res);return res;
   }
   const auth=await rpc('session');if(!auth.user)throw new ApiError(401,'Iniciá sesión para continuar.');
-  if(op==='logout'&&method==='POST'){await rpc('logout');const res=json({ok:true});res.cookies.set('boat_session','',{httpOnly:true,sameSite:'strict',path:'/',maxAge:0});return res;}
+  if(op==='logout'&&method==='POST'){await rpc('logout');const res=json({ok:true});res.cookies.set('boat_session','',{httpOnly:true,sameSite:'strict',path:'/',maxAge:0});clearManualGrant(res);return res;}
   if(op==='boats'&&method==='GET')return json(await rpc('boats'));
   if(op==='boats'&&method==='POST'){const name=required(body.name);return json(await rpc('boat_create',{id:randomBytes(16).toString('hex'),name,state:emptyState(name)}),201);}
   if(op==='users'&&method==='GET')return json(await rpc('users'));
@@ -85,7 +86,13 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    return json(await rpc('user_create',{boat,id:randomBytes(16).toString('hex'),name,username,password:passwordHash(password),role:body.role}),201);
   }
   if(op==='access'&&method==='POST'){if(![...roles,'sin_acceso'].includes(body.role))throw new ApiError(400,'Rol inválido.');return json(await rpc('access',{boat,user:required(body.user),role:body.role}));}
-  if(op==='state'&&method==='GET')return json(stateForRole(await rpc('state_get',{boat}),auth.user));
+  if(op==='state'&&method==='GET'){
+   const snapshot=await rpc('state_get',{boat});
+   const res=json(stateForRole(snapshot,auth.user));
+   if(snapshot?.state?.boat && snapshot.role && boat)issueManualGrant(res,req.cookies.get('boat_session')?.value||'',boat);
+   else clearManualGrant(res);
+   return res;
+  }
   if(op==='state'&&method==='PUT'){
    const before=await rpc('state_get',{boat});
    const requestHash=hash(JSON.stringify({boat,state:body.state,revision:body.revision}));
@@ -151,6 +158,10 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    return new NextResponse(Buffer.from(data,'base64'),{headers:{'Content-Type':prefix.slice(5).split(';')[0],'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
   }
   throw new ApiError(404,'Recurso no encontrado.');
- }catch(error){return json({error:error instanceof ApiError?error.message:'No se pudo completar la acción.'},error instanceof ApiError?error.status:500);}
+ }catch(error){
+  const res=json({error:error instanceof ApiError?error.message:'No se pudo completar la acción.'},error instanceof ApiError?error.status:500);
+  if((params.operation==='state'&&req.method==='GET')||(params.operation==='logout'&&req.method==='POST'))clearManualGrant(res);
+  return res;
+ }
 }
 export const GET=handle;export const POST=handle;export const PUT=handle;

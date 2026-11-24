@@ -5,14 +5,14 @@ const { createServer } = require('node:http');
 const Module = require('node:module');
 const path = require('node:path');
 const { beforeEach, after, test } = require('node:test');
-const { NextRequest } = require('next/server');
+const { NextRequest, NextResponse } = require('next/server');
 const ts = require('typescript');
 
 const boat = '1'.repeat(32);
 const otherBoat = '2'.repeat(32);
 const origin = 'https://nomad-media.test';
 const prefix = '/a-bordo-media/manual/' + boat;
-const cookie = 'manual-test-session';
+const cookie = 'x'.repeat(43) + '.' + (Math.floor(Date.now() / 1000) + 86400);
 const secret = 'server-test-only';
 const item = {
   id: 'proa', title: 'Proa', area: 'Cubierta', description: 'Acceso por proa.',
@@ -21,7 +21,7 @@ const item = {
 const envKeys = ['BOAT_CONTROL_SERVER_SECRET', 'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'BOAT_MANUAL_MEDIA_ORIGIN'];
 const oldEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
 const originalFetch = globalThis.fetch;
-let rpc, rpcCalls, storageCalls, manifestResponse;
+let rpc, rpcCalls, storageCalls, manifestResponse, access;
 
 function loadTS(file, requires = {}) {
   const filename = path.resolve(__dirname, '..', file);
@@ -34,13 +34,20 @@ function loadTS(file, requires = {}) {
   return compiled.exports;
 }
 const signer = loadTS('lib/boat-manual-signature.ts');
+const grants = loadTS('lib/boat-manual-grant.ts');
 const keyRoute = loadTS('app/api/boat/manual-media/key/route.ts', { '@/lib/boat-manual-signature': signer });
 const route = loadTS('app/api/boat/manual-media/route.ts', {
   '@/lib/boat-manual-signature': signer,
+  '@/lib/boat-manual-grant': grants,
+  '@supabase/supabase-js': { createClient() { throw new Error('Manual playback must never use Supabase'); } },
+});
+const stateRoute = loadTS('app/api/boat/[operation]/route.ts', {
+  '@/lib/boat-manual-grant': grants, '@/public/a-bordo/boat-rules.js': {}, '@/lib/boat-push': {},
+  '@/lib/boat-crew-state': {}, '@/lib/boat-task-access': {},
   '@supabase/supabase-js': { createClient: () => ({
     rpc(name, args) {
       rpcCalls.push({ name, args });
-      return { abortSignal: async () => rpc };
+      return { abortSignal: async () => rpc(args.operation) };
     },
   }) },
 });
@@ -53,10 +60,23 @@ function valid(url, publicKey) {
   if (!exp || !sig || !/^\d+$/.test(exp) || Number(exp) < now || Number(exp) > now + 300) return false;
   return verify(null, Buffer.from(['nomad-manual-v1', url.pathname, exp].join('\n')), publicKey, Buffer.from(sig, 'base64url'));
 }
-function request(query = '', authenticated = true, method = 'GET') {
+function request(query = '', authenticated = true, method = 'GET', session = cookie, value = access) {
   return route.GET(new NextRequest('https://app.test/api/boat/manual-media?boat=' + boat + query, {
-    method, headers: authenticated ? { cookie: 'boat_session=' + cookie } : {},
+    method, headers: authenticated ? { cookie: 'boat_session=' + session + (value ? '; ' + grants.manualGrantCookie + '=' + value : '') } : {},
   }));
+}
+
+function stateRequest(operation = 'state', selectedBoat = boat, method = 'GET') {
+  const req = new NextRequest('https://app.test/api/boat/' + operation + '?boat=' + selectedBoat, {
+    method, headers: { cookie: 'boat_session=' + cookie, 'content-type': 'application/json' },
+    body: method === 'GET' ? undefined : '{}',
+  });
+  return stateRoute[method](req, { params: { operation } });
+}
+function makeGrant(session = cookie, selectedBoat = boat) {
+  const res = NextResponse.json({});
+  grants.issueManualGrant(res, session, selectedBoat);
+  return res.cookies.get(grants.manualGrantCookie).value;
 }
 
 beforeEach(() => {
@@ -64,7 +84,8 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://rpc.test';
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-only';
   process.env.BOAT_MANUAL_MEDIA_ORIGIN = origin;
-  rpc = { data: [{ id: boat }], error: null };
+  rpc = op => ({ data: op === 'session' ? { user: { id: 'crew', admin: true } } : { state: { boat: {} }, role: 'administrador' }, error: null });
+  access = makeGrant();
   rpcCalls = [];
   storageCalls = [];
   manifestResponse = () => Response.json({ version: 1, items: [structuredClone(item)] });
@@ -114,20 +135,70 @@ test('disabled or malformed origins cannot initiate any catalog or auth request'
   assert.deepEqual(rpcCalls, []);
 });
 
-test('checks boat session and membership for both catalog and single-file requests', async () => {
+test('boat state issues the session-only, path-scoped grant after the two existing RPC calls only', async () => {
+  const res = await stateRequest();
+  const token = res.cookies.get(grants.manualGrantCookie);
+  assert.equal(res.status, 200);
+  assert.equal(token.httpOnly, true);
+  assert.equal(token.secure, true);
+  assert.equal(token.sameSite, 'strict');
+  assert.equal(token.path, '/api/boat/manual-media');
+  assert.equal(token.maxAge, undefined);
+  assert.equal(token.expires, undefined);
+  assert.equal(grants.verifyManualGrant(token.value, cookie, boat).status, 'ok');
+  assert.deepEqual(rpcCalls.map(call => call.args.operation), ['session', 'state_get']);
+  assert.equal(rpcCalls[1].args.payload.session, createHash('sha256').update(cookie).digest('hex'));
+  rpc = op => op === 'session' ? { data: { user: { id: 'crew', admin: true } } } : { error: { code: '42501', message: 'Denied' } };
+  const denied = await stateRequest();
+  assert.equal(denied.status, 403);
+  assert.equal(denied.cookies.get(grants.manualGrantCookie).maxAge, 0);
+});
+
+test('logout removes the session and the path-scoped manual cookie; a boat switch replaces access', async () => {
+  const original = (await stateRequest()).cookies.get(grants.manualGrantCookie);
+  const switched = (await stateRequest('state', otherBoat)).cookies.get(grants.manualGrantCookie);
+  assert.equal(original.name, switched.name);
+  assert.equal(original.path, switched.path);
+  assert.equal(grants.verifyManualGrant(switched.value, cookie, boat).status, 'denied');
+  assert.equal(grants.verifyManualGrant(switched.value, cookie, otherBoat).status, 'ok');
+  const logout = await stateRequest('logout', boat, 'POST');
+  assert.equal(logout.cookies.get('boat_session').maxAge, 0);
+  assert.equal(logout.cookies.get(grants.manualGrantCookie).maxAge, 0);
+  assert.equal(logout.cookies.get(grants.manualGrantCookie).path, original.path);
+});
+
+test('missing, expired, altered and wrong-user grants cannot access the catalog or a single file', async t => {
   for (const q of ['', '&item=proa&asset=video']) assert.equal((await request(q, false)).status, 401);
-  assert.deepEqual(rpcCalls, []);
-  for (const [data, error, expected] of [
-    [null, { code: '28000' }, 401], [null, { code: '42501' }, 403], [[{ id: otherBoat }], null, 403],
-    [null, { code: 'network_error' }, 503], [null, null, 503],
-  ]) {
-    rpc = { data, error };
-    for (const q of ['', '&item=proa&asset=video']) assert.equal((await request(q)).status, expected);
+  const altered = access.slice(0, -1) + (access.endsWith('A') ? 'B' : 'A');
+  for (const q of ['', '&item=proa&asset=video']) {
+    const missing = await request(q, true, 'GET', cookie, '');
+    assert.equal(missing.status, 428);
+    assert.equal((await missing.json()).code, 'manual_boat_refresh');
+    for (const [session, token] of [[cookie, altered], [cookie, makeGrant(cookie, otherBoat)], ['other-user-session', access]]) {
+      assert.equal((await request(q, true, 'GET', session, token)).status, 403);
+    }
   }
-  assert.deepEqual(rpcCalls[0], {
-    name: 'boat_control_rpc', args: { server_key: secret, operation: 'boats', payload: { session: createHash('sha256').update(cookie).digest('hex') } },
-  });
+  const future = Date.now() + 901000;
+  t.mock.method(Date, 'now', () => future);
+  assert.equal((await request()).status, 428);
+  assert.equal((await request('&item=proa&asset=video')).status, 428);
   assert.deepEqual(storageCalls, []);
+  assert.deepEqual(rpcCalls, []);
+});
+
+test('signed media cannot outlive the current grant or a known session expiry; legacy sessions still work', async () => {
+  const remaining = Math.floor(Date.now() / 1000) + 45;
+  const session = 'x'.repeat(43) + '.' + remaining;
+  const short = makeGrant(session);
+  const res = await request('&item=proa&asset=video', true, 'GET', session, short);
+  assert.equal(res.status, 307);
+  assert.equal(Number(new URL(res.headers.get('location')).searchParams.get('exp')), remaining);
+  assert.equal(Number(storageCalls[0].url.searchParams.get('exp')), remaining);
+  const old = 'x'.repeat(43);
+  const legacy = makeGrant(old);
+  assert.ok(grants.verifyManualGrant(legacy, old, boat).exp <= Math.floor(Date.now() / 1000) + 300);
+  assert.equal((await request('', true, 'GET', old, legacy)).status, 200);
+  assert.deepEqual(rpcCalls, []);
 });
 
 test('authenticated catalog contains app-only links and never forwards the boat cookie', async () => {
@@ -139,6 +210,7 @@ test('authenticated catalog contains app-only links and never forwards the boat 
   }] });
   assert.match(response.headers.get('cache-control'), /private, no-store/);
   assert.equal(storageCalls.length, 1);
+  assert.deepEqual(rpcCalls, []);
   manifestResponse = () => new Response(null, { status: 404 });
   assert.deepEqual(await (await request()).json(), { items: [] });
 });

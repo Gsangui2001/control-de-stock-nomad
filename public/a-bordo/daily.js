@@ -75,9 +75,7 @@ function dayMaintenance() {
   return `${dayBack()}<h1>Mantenimiento</h1><div class="area-actions">
     ${dayButton("tasks", "Mis tareas" + (tasks.length ? " · " + tasks.length : ""), "", "day-primary")}
     ${writable() ? dayButton("work", "Registrar trabajo") + dayButton("problem", "Avisar un problema") : ""}
-    ${dayButton("equipment", "Equipos del barco")}
     ${dayButton("manual", "Manual de instrucciones")}
-    ${session.admin ? action("newTask", "Nueva tarea", "", "day-secondary") : ""}
   </div><details class="day-disclosure"><summary>Avisos e historial</summary>
     ${dayButton("updates", "Avisos y novedades")}
     <h2>Mis últimos registros</h2>${records.map(log => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(log.id)}"><strong>${esc(log.title)}</strong><small>${date(log.date)}</small></button>`).join("") || empty("Todavía no registraste trabajos.")}</details>`;

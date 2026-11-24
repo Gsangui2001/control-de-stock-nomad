@@ -57,6 +57,10 @@ class BoatManualMedia extends HTMLElement {
       const response = await fetch("/api/boat/manual-media?" + new URLSearchParams({boat: owner}), {
         cache: "no-store", credentials: "same-origin", signal: request.signal
       });
+      if (response.status === 428) {
+        if (active()) this.showRenewal(owner, message);
+        return;
+      }
       if (response.status === 401 || response.status === 403) {
         if (active()) this.replaceChildren();
         return;
@@ -100,6 +104,59 @@ class BoatManualMedia extends HTMLElement {
       retry.onclick = () => this.load();
       this.append(retry);
       if (local) this.append(this.filePicker(owner, request.signal));
+    }
+  }
+
+  showRenewal(owner, message) {
+    if (this.querySelector("[data-manual-reopen]")) return;
+    message.textContent = "Volvé a entrar al barco para ver las fotos y los videos.";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "day-secondary";
+    button.textContent = "Volver a entrar al barco";
+    button.dataset.manualReopen = "";
+    button.onclick = async () => {
+      if (boatId !== owner || !session) return;
+      const user = session.id;
+      const wasDayManual = view === "day" && dayPage === "manual";
+      button.disabled = true;
+      try {
+        await loadBoat(owner);
+        if (session?.id === user && boatId === owner && wasDayManual && view === "day" && dayPage === "home") {
+          dayPage = "manual";
+          render();
+        }
+      } catch {
+        if (this.isConnected) {
+          message.textContent = "No se pudo volver a entrar. Revisá la conexión o iniciá sesión nuevamente.";
+          button.disabled = false;
+        }
+      }
+    };
+    message.after(button);
+  }
+
+  async checkAccessAfterError(asset) {
+    const url = new URL(asset, location.origin);
+    const request = this.request;
+    if (url.origin !== location.origin || url.pathname !== "/api/boat/manual-media" ||
+        this.checkingAccess || this.querySelector("[data-manual-reopen]") || !request) return;
+    this.checkingAccess = true;
+    try {
+      const response = await fetch(url, {
+        method: "HEAD", redirect: "manual", cache: "no-store", credentials: "same-origin", signal: request.signal
+      });
+      if (response.status === 428 && request === this.request && this.isConnected && boatId === url.searchParams.get("boat")) {
+        const message = document.createElement("p");
+        message.className = "day-muted";
+        message.setAttribute("role", "status");
+        this.querySelector("h2").after(message);
+        this.showRenewal(boatId, message);
+      }
+    } catch {
+      // Each media element already offers a retry if the network is unavailable.
+    } finally {
+      this.checkingAccess = false;
     }
   }
 
@@ -207,6 +264,7 @@ class BoatManualMedia extends HTMLElement {
       card.append(video);
       video.addEventListener("error", () => {
         if (!card.isConnected || card.querySelector(".manual-video-error")) return;
+        this.checkAccessAfterError(videoUrl);
         const recovery = document.createElement("div");
         recovery.className = "manual-video-error";
         recovery.setAttribute("role", "status");
@@ -241,6 +299,7 @@ class BoatManualMedia extends HTMLElement {
         caption.textContent = photo.caption;
         image.onerror = () => {
           if (figure.querySelector(".manual-photo-retry")) return;
+          this.checkAccessAfterError(photo.url);
           const retry = document.createElement("button");
           retry.type = "button";
           retry.className = "day-secondary manual-photo-retry";
