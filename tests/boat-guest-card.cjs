@@ -8,6 +8,25 @@ function app(admin=false){
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('public/a-bordo/briefs.js','utf8'),ctx);return ctx;
 }
 const text=html=>html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ');
+test('an unpublished guest opens alone from the calendar or a direct link',()=>{
+ const a=app();a.role='capitan';a.location.search='?reservation=pending';
+ const rows=[{id:'pending',name:'Grupo de prueba',start:'2026-11-29',end:'2026-12-02',guests:3,briefVersion:0,onboardPlan:{canEdit:true},internalNotes:'PRIVATE'}, {id:'other',name:'Otro huésped'}];
+ a.briefAgendaEnsure=()=>({rows,loading:false,error:''});
+ a.guestPlanPanel=r=>r.onboardPlan?.canEdit?'Editar datos del viaje':'';
+ let view=a.briefReservationsView();
+ assert.match(view,/<h1>Grupo de prueba<\/h1>/);assert.match(view,/Editar datos del viaje/);assert.match(view,/3 pasajeros/);
+ assert.doesNotMatch(view,/PRIVATE|Otro huésped|data-brief-action="review"|data-brief-action="payment"/);
+ a.location.search='?reservation=unknown';assert.match(a.briefReservationsView(),/Ficha no disponible/);
+ a.location.search='';view=a.briefReservationsView();assert.match(view,/data-agenda-open="pending"/);
+ assert.doesNotMatch(view,/No hay fichas disponibles/);
+});
+test('a selected published guest excludes the other reservations and retains its actions',()=>{
+ const a=app();a.role='capitan';a.location.search='?reservation=chosen';
+ a.opsReservations=[{id:'chosen',name:'Huésped elegido',guests:2,brief:{version:1},details:{captainCollection:'collect'},captainBalance:{status:'known',amountUsd:50}}, {id:'other',name:'Otro huésped',brief:{version:1}}];
+ const view=a.briefReservationsView();
+ assert.match(view,/<h1>Huésped elegido<\/h1>/);assert.doesNotMatch(view,/Otro huésped/);
+ assert.match(view,/data-brief-action="payment"/);assert.match(view,/data-brief-action="review"/);
+});
 test('compact card excludes internal notes, finance and technical metadata',()=>{
  const a=app();const out=a.briefContent({name:'Guest',notes:'SECRET_INTERNAL_MAIL',crmBalance:999,guests:2,details:{country:'Brasil',airConditioning:'No',drinks:'Coca Zero'},passengers:[],brief:{revision:9}});
  assert.match(out,/Información del huésped/);assert.match(out,/Brasil/);assert.match(out,/Coca Zero/);assert.match(out,/1 acompañante · nombres pendientes/);assert.doesNotMatch(out,/SECRET_INTERNAL_MAIL|999|revision|Observaciones operativas/);
@@ -103,7 +122,7 @@ test('cleared payment is paid only when nothing is left',()=>{
 
 function agendaApp(rows,roleName='capitan'){
  const a=app(roleName==='admin');a.role=roleName==='admin'?'':roleName;
- vm.runInContext(`briefAgenda=${JSON.stringify(rows)};briefAgendaBoat=boatId;briefAgendaMonth='2026-11';`,a);
+ vm.runInContext(`briefAgenda=${JSON.stringify(rows)};briefAgendaBoat=boatId;briefAgendaSession=session;briefAgendaRole=role;briefAgendaMonth='2026-11';`,a);
  return a;
 }
 const agendaRows=[
@@ -115,11 +134,12 @@ const agendaRows=[
 test('agenda groups by month, sorts by date and shows the captain what to collect',()=>{
  const a=agendaApp(agendaRows);const out=a.briefAgendaView(),flat=text(out);
  assert.match(flat,/Noviembre 2026/);assert.doesNotMatch(flat,/Fuera de mes/);
- assert.ok(flat.indexOf('Pedro Gil')<flat.indexOf('Ana Paz')&&flat.indexOf('Ana Paz')<flat.indexOf('Clara Núñez'));
+ const list=text(out.slice(out.indexOf('<div class="agenda-list">')));
+ assert.ok(list.indexOf('Pedro Gil')<list.indexOf('Ana Paz')&&list.indexOf('Ana Paz')<list.indexOf('Clara Núñez'));
  assert.match(flat,/30\/10 - 02\/11 Pedro Gil \(45\) 4 pasajeros Navegando Ficha enviada Revisada Cobrar USD 1\.500,00/);
  assert.match(flat,/Ana Paz \(30\) 1 pasajero Terminado Ficha enviada Pagado/);
  assert.match(flat,/Clara Núñez 2 pasajeros Ficha en preparación/);assert.doesNotMatch(flat,/Clara Núñez \(/);
- assert.match(out,/data-agenda-open="a"/);assert.match(out,/data-agenda-open="c"/);assert.doesNotMatch(out,/data-agenda-open="b"/);
+ assert.match(out,/data-agenda-open="a"/);assert.match(out,/data-agenda-open="c"/);assert.match(out,/data-agenda-open="b"/);
  assert.match(out,/data-agenda-month="2026-10"/);assert.match(out,/data-agenda-month="2026-12"/);
 });
 test('agenda hides amounts from roles other than captain and handles an empty month',()=>{
@@ -156,4 +176,29 @@ test('agenda loads once through the read operation and keeps unknown data unknow
  await new Promise(r=>setImmediate(r));
  assert.deepEqual(calls,['agenda']);
  const flat=text(a.briefAgendaView());assert.match(flat,/Sin Datos Pasajeros por confirmar Ficha enviada/);assert.doesNotMatch(flat,/Cobrar|Pagado|\(n\/a\)|0 pasajeros/);
+});
+
+test('calendar places overlapping guests in separate lanes and includes the last leap day',()=>{
+ const a=agendaApp([
+  {id:'one',name:'Primera reserva',start:'2028-02-26',end:'2028-03-02'},
+  {id:'two',name:'Segunda reserva',start:'2028-02-29',end:'2028-02-29'}
+ ]);
+ vm.runInContext("briefAgendaMonth='2028-02';briefAgendaDate='2028-02-29';",a);
+ const markup=a.briefAgendaView();
+ assert.match(markup,/data-agenda-day="2028-02-29"[^>]+aria-pressed="true"/);
+ assert.doesNotMatch(markup,/data-agenda-day="2028-02-30"/);
+ assert.match(markup,/grid-column:2 \/ span 1;grid-row:2" data-agenda-open="two"/);
+ assert.equal((markup.match(/class="agenda-row /g)||[]).length,2);
+ assert.match(markup,/data-agenda-all/);
+});
+
+test('agenda discards a late response from another session on the same boat',async()=>{
+ const a=app();a.role='capitan';let resolveOld,reads=0;
+ a.opsFetch=()=>++reads===1?new Promise(resolve=>{resolveOld=resolve;}):Promise.resolve([{id:'new',name:'Otra reserva'}]);
+ assert.equal(a.briefAgendaEnsure().loading,true);
+ a.session={admin:false};assert.equal(a.briefAgendaEnsure().loading,true);
+ await new Promise(r=>setImmediate(r));resolveOld([{id:'old',name:'No mostrar'}]);
+ await new Promise(r=>setImmediate(r));
+ assert.deepEqual(Array.from(a.briefAgendaForCurrentBoat(),r=>r.id),['new']);
+ a.role='chef';assert.equal(a.briefAgendaForCurrentBoat().length,0);
 });

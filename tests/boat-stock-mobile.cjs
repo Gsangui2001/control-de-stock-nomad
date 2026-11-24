@@ -10,6 +10,7 @@ async function run(){
  const errors=[];const runCase=async(name,test)=>{if(process.env.STOCK_CASE&&!name.includes(process.env.STOCK_CASE))return;try{await test();console.log('PASS '+name)}catch(e){errors.push(name);console.error('FAIL '+name+' '+e.message.split('\n').slice(0,18).join(' '));}};
  const boats={[A]:empty('Barco A',[item('filtro','Filtro',7)]),[B]:empty('Barco B',[item('cabo','Cabo',3)])},requests={[A]:[],[B]:[]},docs={[A]:[],[B]:[]},rev={[A]:1,[B]:1},applied=new Set();
  let admin=true,role='encargado',lost=false,refuseB=false,changes=[],outbound=0,ctx,page;
+ const notices={[A]:[],[B]:[]};
  async function login(userRole){
   if(ctx)await ctx.close();admin=userRole==='admin';role=admin?'encargado':userRole;
   ctx=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,serviceWorkers:'block'});page=await ctx.newPage();page.setDefaultTimeout(9000);
@@ -24,10 +25,11 @@ async function run(){
     if(op==='activity')return json([]);return json({});
    }
    if(pp.startsWith('/api/boat-ops/')){
-    if(op==='overview')return json({requests:requests[boat],fleet:[],transfers:[],notifications:[],reservations:[]});
+    if(op==='overview')return json({requests:requests[boat],fleet:[],transfers:[],notifications:notices[boat],reservations:[]});
     if(op==='reservations')return json([]);
     if(op==='captain_wallet')return json({wallets:[{captainId:'user-capitan',name:'Capitán de prueba',balances:[{currency:'USD',opening:0,incoming:0,spent:0,balance:0}],expenses:[],receipts:[]}]});
     if(m!=='POST')return json([]);
+    if(op==='notification_read'){const notice=notices[boat].find(n=>n.id===data.id);assert.ok(notice);notice.read_at=new Date().toISOString();return json({ok:true});}
     const key=boat+':'+data.key;changes.push({op,boat,key,quantity:data.quantity});if(applied.has(key))return json({ok:true,alreadyApplied:true});
     const products=boats[boat].products,p=products.find(x=>x.id===data.productId);
     if(op==='request_create')requests[boat].push({...data,id:'req'+requests[boat].length,status:'borrador',received:0,created_by:'user-'+userRole});
@@ -104,6 +106,32 @@ async function run(){
    assert.equal(await page.getByRole('link',{name:/Abrir caja en Finanzas/}).count(),Number(userRole==='admin'));
    assert.equal(await page.getByRole('button',{name:/[Gg]astos y pagos/}).count(),Number(userRole!=='capitan'));
   }
+ });
+ await runCase('mantenimiento vacío, trabajo sin materiales y retorno desde avisos de reposición',async()=>{
+  const original=boats[A];boats[A]=empty('Barco A',[]);
+  notices[A]=[{id:17,kind:'stock_agotado',created_at:'2026-11-24',detail:{name:'Cabo',unit:'un',current:0}}];
+  try{
+   await login('capitan');await openSection('Mantenimiento');
+   await tap('[data-day=tasks]');await page.getByText('No tenés tareas pendientes.',{exact:true}).waitFor();
+   await tap('#content .day-back');await tap('[data-day=work]');
+   await page.getByText('¿Usaste algún material?',{exact:true}).tap();
+   await page.getByText(/Todavía no hay materiales registrados/).waitFor();
+   assert.equal(await page.locator('[data-action=addMaterial]').count(),0);
+   const work=page.locator('#dayForm');await work.locator('[name=title]').fill('Revisar cabos');
+   await work.locator('[name=system]').selectOption({index:1});await submit(work);
+   await waitFor(()=>boats[A].logs.some(log=>log.title==='Revisar cabos'));
+   assert.deepEqual(boats[A].logs.find(log=>log.title==='Revisar cabos').lines,[]);
+   await tap('[data-day=maintenance]');await tap('#content .day-back');await stock();
+   await detail('Más opciones de stock');await page.getByRole('button',{name:'Avisos de reposición',exact:true}).tap();
+   await page.getByRole('button',{name:'Marcar leída',exact:true}).tap();
+   await waitFor(()=>Boolean(notices[A][0].read_at));
+   await page.getByRole('button',{name:'← Stock',exact:true}).tap();
+   await page.getByRole('heading',{name:'Stock y pedidos',exact:true}).waitFor();
+   await tap('#content .day-back');await page.locator('#dayHeader .area-account summary').tap();
+   await page.getByRole('button',{name:'Notificaciones',exact:true}).tap();
+   await page.getByRole('button',{name:'← Inicio',exact:true}).tap();
+   await page.getByRole('navigation',{name:'Secciones del barco'}).waitFor();
+  }finally{boats[A]=original;notices[A]=[];}
  });
  await runCase('lector consulta, sin controles de escritura',async()=>{await login('lector');await stock();assert.equal(await page.locator('[data-op=request_product],[data-operation=stock_consume],[data-intake=ticket]').count(),0);await tap('[data-day=ops-requests]');await page.getByRole('heading',{name:'Pedidos y faltantes'}).waitFor();assert.equal(await page.locator('[data-operation=request_create]').count(),0);});
  await runCase('tripulante solicita reposición y conserva la cantidad',async()=>{await login('chef');await stock();assert.equal(await page.locator('[data-intake=ticket],[data-operation=stock_add]').count(),0);await tap('[data-op=request_product]');const f=page.locator('[data-operation=request_create]');assert.equal(await f.locator('[name=name]').inputValue(),'Filtro');await fill(f,{quantity:4});await submit(f);await tap('[data-op=request_status][data-status=solicitado]');await page.getByText(/4 un · solicitado/).waitFor();assert.equal(boats[A].products[0].current,7);assert.equal(await receipt().count(),0);});
