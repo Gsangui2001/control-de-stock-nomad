@@ -14,6 +14,8 @@ function dayRolePicker(kind, selected) {
   return `<div class="day-role-picker" role="group" aria-label="${kind === "manualRole" ? "Secciones del manual" : "Filtrar tareas por rol"}">${[{id:"all",name:"Todos"},...dayRoles].map(r => `<button type="button" data-day="${kind}" data-id="${r.id}" aria-pressed="${selected === r.id}">${r.name}</button>`).join("")}</div>`;
 }
 const dayManager = () => Boolean(session?.admin || role === "encargado");
+const canViewCash = () => Boolean(session?.admin || ["capitan","encargado","lector"].includes(role));
+const cashPages = new Set(["ops-cash", "ops-collections", "ops-expenses"]);
 const dayButton = (page, label, id = "", style = "day-secondary") =>
   `<button type="button" class="${style}" data-day="${page}" data-id="${esc(id)}">${label}</button>`;
 let dayIntakeParent = "ops-stock";
@@ -60,9 +62,9 @@ function dayHome() {
   const sections = [
     ["ops-stock", "stock", "Stock", "Existencias, compras y pedidos", shortages ? shortages + " para reponer" : ""],
     ["maintenance", "tools", "Mantenimiento", "Tareas, equipos y trabajos", overdue ? overdue + (overdue === 1 ? " tarea vencida" : " tareas vencidas") : ""],
-    ["ops-agenda", "calendar", "Agenda del mes", "Salidas y fichas de huéspedes", ""],
-    ["ops-cash", "wallet", "Caja", role === "capitan" || session.admin ? "Cobros y gastos del barco" : "Gastos y pagos del barco", ""]
+    ["ops-agenda", "calendar", "Agenda del mes", "Salidas y fichas de huéspedes", ""]
   ];
+  if (canViewCash()) sections.push(["ops-cash", "wallet", "Caja", role === "capitan" || session.admin ? "Cobros y gastos del barco" : "Gastos y pagos del barco", ""]);
   return `<h1>Inicio</h1><nav class="area-grid" aria-label="Secciones del barco">${sections.map(([page, icon, title, detail, status]) =>
     `<button type="button" data-day="${page}" class="area-tile area-${icon}"><span class="area-icon" aria-hidden="true">${dayIcon(icon)}</span><span class="area-copy"><strong>${title}</strong><small>${detail}</small>${status ? `<span class="area-status">${status}</span>` : ""}</span><span class="area-arrow" aria-hidden="true">›</span></button>`
   ).join("")}</nav>`;

@@ -2,6 +2,7 @@ import {NextRequest,NextResponse} from 'next/server';
 import {createClient} from '@supabase/supabase-js';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
+import {canReadBoatCash} from '@/lib/boat-crew-state';
 export const runtime='nodejs';export const dynamic='force-dynamic';
 const boat=z.string().regex(/^[a-f0-9-]{32,36}$/),short=z.string().trim().max(140);
 const common={boat,key:z.string().uuid(),expenseId:z.string().min(1).max(100),version:z.number().int().nonnegative()};
@@ -25,6 +26,9 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}){
   }
   payload.session=createHash('sha256').update(req.cookies.get('boat_session')?.value||'').digest('hex');
   const client=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{auth:{persistSession:false}});
+  const {data:access,error:accessError}=await client.rpc('boat_control_rpc',{server_key:secret,operation:'state_get',payload:{boat:payload.boat,session:payload.session}}).abortSignal(AbortSignal.timeout(15000));
+  if(accessError)return reply({error:accessError.message},accessError.code==='28000'?401:accessError.code==='42501'?403:accessError.code==='P0002'?404:503);
+  if(!canReadBoatCash(access?.role))return reply({error:'Caja no está disponible para tu rol.'},403);
   const {data,error}=await client.rpc('boat_expenses_rpc',{server_key:secret,operation:params.operation,payload}).abortSignal(AbortSignal.timeout(15000));
   if(error)return reply({error:error.message},error.code==='28000'?401:error.code==='42501'?403:['PT409','23505'].includes(error.code)?409:/^(P0001|22|23)/.test(error.code||'')?400:503);
   return reply(data);

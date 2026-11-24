@@ -65,11 +65,14 @@ async function run(){
  async function consumeForm(){const box=page.locator('article.day-inventory').filter({has:page.getByRole('heading',{name:'Filtro',exact:true})});await box.getByText('Registrar consumo',{exact:true}).tap();return box.locator('[data-operation=stock_consume]')}
  async function waitFor(fn){for(let i=0;i<90;i++){if(fn())return;await new Promise(r=>setTimeout(r,75))}assert.ok(fn())}
  try{
- await runCase('cuatro secciones y permisos de mantenimiento y caja',async()=>{
+ await runCase('secciones por rol y permisos de mantenimiento y caja',async()=>{
   for(const userRole of ['admin','capitan','chef','marinero','lector']){
    await login(userRole);
    const sections=page.getByRole('navigation',{name:'Secciones del barco'});
-   assert.deepEqual(await sections.locator('button strong').allTextContents(),['Stock','Mantenimiento','Agenda del mes','Caja']);
+   const seesCash=!['chef','marinero'].includes(userRole);
+   const areas=['Stock','Mantenimiento','Agenda del mes'];
+   if(seesCash)areas.push('Caja');
+   assert.deepEqual(await sections.locator('button strong').allTextContents(),areas);
    assert.equal(await page.locator('#content [data-day="ops-requests"], #content [data-day="ops-intake"], #content [data-day="ops-expenses"], #content [data-day="ops-reservations"]').count(),0);
    await openSection('Mantenimiento');
    await page.getByRole('heading',{name:'Mantenimiento',exact:true}).waitFor();
@@ -79,6 +82,16 @@ async function run(){
    await page.getByRole('heading',{name:'Mis tareas'}).waitFor();
    await page.getByRole('button',{name:'← Mantenimiento'}).tap();
    await page.getByRole('button',{name:'← Inicio'}).tap();
+   if(!seesCash){
+    const financeRequests=[];
+    page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/boat-expenses/'))financeRequests.push(request.url());});
+    for(const oldView of ['ops-cash','ops-expenses','ops-collections']){
+     await page.evaluate(view=>{dayPage=view;render();},oldView);
+     assert.equal(await page.locator('#content [data-expense], #content [data-expense-filter], #content [data-brief-action=payment], #content a[href*="/finanzas"], #content [data-day=ops-expenses], #content [data-day=ops-collections]').count(),0);
+    }
+    assert.deepEqual(financeRequests,[]);
+    continue;
+   }
    await openSection('Caja');
    await page.getByRole('heading',{name:'Caja',exact:true}).waitFor();
    assert.equal(await page.getByRole('button',{name:'Cobros de huéspedes',exact:true}).count(),Number(userRole==='capitan'));

@@ -4,7 +4,7 @@ import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypt
 import { NextRequest, NextResponse } from 'next/server';
 
 import { flushBoatPush } from '@/lib/boat-push';
-import { protectCrewHistory } from '@/lib/boat-crew-state';
+import { canReadBoatCash, isOperationalStatePhoto, protectCrewHistory } from '@/lib/boat-crew-state';
 import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
 
 export const runtime = 'nodejs';
@@ -33,6 +33,7 @@ function validateState(s:any,boat:string) {
 }
 function stateForRole(result:any, user:any, role=result.role) {
  const visible=structuredClone(result);
+ if(!user.admin&&!canReadBoatCash(role)) visible.state.purchases=[];
  if(!user.admin&&role!=='encargado'){
   visible.state.cameras=[];
   visible.state.tasks=visible.state.tasks.filter((t:any)=>canUseBoatTask(t,user,role));
@@ -95,6 +96,14 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    };
    if(body.key){if(!/^[a-f0-9-]{36}$/.test(body.key))throw new ApiError(400,'Identificador inválido.');const previous=await commitRpc(true);if(previous)return json(stateForRole(previous,auth.user,before.role));}
    if(!body.state||typeof body.state!=='object')throw new ApiError(400,'Estado inválido.');
+   if(!auth.user.admin&&!canReadBoatCash(before.role)){
+    // A current client sends the empty projection. A pending save from an older
+    // version may still carry the original receipts; neither may alter them.
+    const purchases=body.state.purchases;
+    if(!Array.isArray(purchases)||(purchases.length&&JSON.stringify(purchases)!==JSON.stringify(before.state.purchases)))
+     throw new ApiError(403,'Tu cuenta no puede modificar los gastos del barco.');
+    body.state.purchases=before.state.purchases;
+   }
    if(!auth.user.admin&&before.role!=='encargado'){
     body.state.cameras=before.state.cameras;
     body.state.manual=before.state.manual??{content:'',updatedAt:'',updatedBy:''};
@@ -127,6 +136,17 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   }
   if(op==='photos'&&method==='GET'){
    const id=req.nextUrl.searchParams.get('id');if(!id||!/^[a-f0-9-]{36}$/.test(id))throw new ApiError(400,'Foto inválida.');
+   if(!auth.user.admin){
+    const snapshot=await rpc('state_get',{boat});
+    if(!canReadBoatCash(snapshot.role)){
+     const url='/api/boat/photos?boat='+boat+'&id='+id;
+     const visible=stateForRole(snapshot,auth.user).state;
+     if(!isOperationalStatePhoto(visible,url)){
+      const {data:overview,error}=await client.rpc('boat_operations_rpc',{server_key:secret,operation:'overview',payload:{boat,session}}).abortSignal(AbortSignal.timeout(15000));
+      if(error||!overview?.requests?.some((request:any)=>request.photo===url))throw new ApiError(403,'Esta foto no está disponible para tu rol.');
+     }
+    }
+   }
    const photo=await rpc('photo_get',{boat,id});const [prefix,data]=photo.data.split(',');
    return new NextResponse(Buffer.from(data,'base64'),{headers:{'Content-Type':prefix.slice(5).split(';')[0],'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
   }

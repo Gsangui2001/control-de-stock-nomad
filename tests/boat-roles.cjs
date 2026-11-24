@@ -73,9 +73,26 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
 (async()=>{
   let account={...user,admin:false}, currentRole='chef', revision=1;
   let saved={schema:1,boat:{name:'Fixture',currency:'USD',equipment:[]},tasks:structuredClone(tasks),logs:[],products:[],purchases:[],movements:[],cameras:[{id:'private-camera'}],manual:{content:'Original'}};
-  const rpc=async(op,payload)=>{
+  const receipts=new Map();
+  let expenseReads=0;
+  let requestPhoto='';
+  const rpc=async(op,payload,fn,requestHash,lookupOnly)=>{
+    if(fn==='boat_state_commit_rpc'){
+      const previous=receipts.get(payload.key);
+      if(previous){
+        if(previous.hash!==requestHash)throw {code:'PT409',message:'Clave reutilizada'};
+        return previous.result;
+      }
+      if(lookupOnly)return null;
+      const result=await rpc('state_put',payload);
+      receipts.set(payload.key,{hash:requestHash,result});
+      return result;
+    }
+    if(fn==='boat_expenses_rpc'&&op==='list'){expenseReads++;return {expenses:saved.purchases};}
+    if(fn==='boat_operations_rpc'&&op==='overview')return {requests:[{photo:requestPhoto}]};
     if(op==='session')return {user:account};
     if(op==='state_get')return {state:structuredClone(saved),revision,role:currentRole};
+    if(op==='photo_get')return {data:'data:image/jpeg;base64,cGhvdG8='};
     if(op==='state_put') {
       if(currentRole==='lector')throw {code:'42501',message:'Solo lectura'};
       if(payload.revision!==revision)throw {code:'40001',message:'Conflicto'};
@@ -85,10 +102,31 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
     if(op==='user_create')return {ok:true};
     throw Error('Unexpected RPC '+op);
   };
-  const routeExports={};
-  const mockRequire=name=>name==='@/public/a-bordo/boat-rules.js'?require('../public/a-bordo/boat-rules.js'):name==='@supabase/supabase-js'?{createClient:()=>({rpc:(_fn,{operation,payload})=>({abortSignal:async()=>{try{return {data:await rpc(operation,payload),error:null};}catch(error){return {data:null,error};}}})})}:name==='next/server'?{NextResponse:{json:(data,opts)=>({data,status:opts.status})}}:name==='@/lib/boat-task-access'?exportsObject:name==='@/lib/boat-push'?{flushBoatPush:async()=>({})}:name==='@/lib/boat-crew-state'?crewExports:require(name);
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'app/api/boat/[operation]/route.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:routeExports,require:mockRequire,process:{env:{BOAT_CONTROL_SERVER_SECRET:'test-only'}},Buffer,URL,structuredClone,AbortSignal});
-  const call=async(method,body,operation='state')=>routeExports[method]({method,nextUrl:new URL('https://fixture/api/boat/'+operation+'?boat=00000000000000000000000000000001'),cookies:{get:()=>undefined},headers:{get:k=>k==='content-type'?'application/json':null},text:async()=>JSON.stringify(body)},{params:{operation}});
+  const TestResponse=class{static json(data,opts){return {data,status:opts.status};} constructor(data,opts){this.data=data;this.status=opts.status||200;}};
+  const client={rpc(fn,{operation,payload,request_hash,lookup_only}){
+    const promise=rpc(operation,payload,fn,request_hash,lookup_only).then(
+      data=>({data,error:null}),error=>({data:null,error})
+    );
+    return Object.assign(promise,{abortSignal:()=>promise});
+  }};
+  const modules={
+    '@/public/a-bordo/boat-rules.js':require('../public/a-bordo/boat-rules.js'),
+    '@supabase/supabase-js':{createClient:()=>client},
+    'next/server':{NextResponse:TestResponse},
+    '@/lib/boat-task-access':exportsObject,
+    '@/lib/boat-push':{flushBoatPush:async()=>({})},
+    '@/lib/boat-crew-state':crewExports
+  };
+  const mockRequire=name=>modules[name]??require(name);
+  function loadHandler(name){
+    const handler={};
+    const source=fs.readFileSync(path.join(root,'app/api',name,'[operation]/route.ts'),'utf8');
+    vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports:handler,require:mockRequire,process:{env:{BOAT_CONTROL_SERVER_SECRET:'test-only'}},Buffer,URL,structuredClone,AbortSignal});
+    return handler;
+  }
+  const boatHandler=loadHandler('boat'), expenseHandler=loadHandler('boat-expenses');
+  const boat='00000000000000000000000000000001';
+  const call=async(method,body,operation='state',query='',handler=boatHandler)=>handler[method]({method,nextUrl:new URL('https://fixture/api/boat/'+operation+'?boat='+boat+query),cookies:{get:()=>undefined},headers:{get:k=>k==='content-type'?'application/json':null},text:async()=>JSON.stringify(body)},{params:{operation}});
   let response=await call('GET');
   assert.equal(response.status,200);
   assert.equal(response.data.state.tasks.map(t=>t.id).join(','),'shared,chef');
@@ -153,6 +191,44 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   const report=changed.logs.find(l=>l.id==='report');
   report.resolvedAt='2026-10-25T12:00:00Z'; report.resolvedBy=user.name;
   assert.equal((await call('PUT',{state:changed,revision})).status,200,'manager can resolve a notice');
+  const photoId=(n)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+  const photoUrl=(n)=>'/api/boat/photos?boat='+boat+'&id='+photoId(n);
+  const expense={id:'invoice',date:'2026-11-24',total:34,lines:[],photos:[photoUrl(1)]};
+  saved.purchases=[expense];
+  saved.products[0].photo=photoUrl(2);
+  saved.boat.equipment=[{id:'gear',name:'Equipo',hours:3,photo:photoUrl(3)}];
+  saved.tasks.find(t=>t.id==='shared').photo=photoUrl(4);
+  saved.logs[0].photos=[photoUrl(5)];
+  requestPhoto=photoUrl(6);
+  for(const role of ['chef','marinero']){
+    currentRole=role;
+    const visible=(await call('GET')).data.state;
+    assert.equal(visible.purchases.length,0);
+    assert.equal((await call('GET',null,'list','',expenseHandler)).status,403);
+    assert.equal((await call('GET',null,'photos','&id='+photoId(1))).status,403);
+    for(const n of [2,3,4,5,6])assert.equal((await call('GET',null,'photos','&id='+photoId(n))).status,200);
+    for(const legacy of [false,true]){
+      const work=structuredClone((await call('GET')).data.state);
+      if(legacy)work.purchases=structuredClone(saved.purchases);
+      const key=photoId(10+receipts.size);
+      const input={state:work,revision,key};
+      for(let retry=0;retry<2;retry++){
+        const response=await call('PUT',input);
+        assert.equal(response.status,200,role+' can save work and recover it: '+JSON.stringify(response.data?.error));
+        assert.equal(response.data.state.purchases.length,0,role+' receives a projected receipt');
+        assert.deepEqual(saved.purchases,[expense]);
+        assert.equal(revision,input.revision+1);
+      }
+    }
+  }
+  assert.equal(expenseReads,0,'blocked roles never fetch the expenses list');
+  for(const role of ['capitan','encargado','lector','administrador']){
+    currentRole=role;account.admin=role==='administrador';
+    assert.equal((await call('GET')).data.state.purchases[0].id,expense.id);
+    assert.equal((await call('GET',null,'list','',expenseHandler)).data.expenses[0].id,expense.id);
+    assert.equal((await call('GET',null,'photos','&id='+photoId(1))).status,200);
+  }
+  console.log('PASS: cash access by role, operational photos, preserved expenses on current/legacy saves and receipt retries');
   console.log('PASS: technical inventory protected across roles, work consumption and notice resolution');
   console.log('PASS: API role filtering, save/merge, hidden tasks, manual/camera protection, actor stamping, conflicts and Chef validation');
 })().catch(error=>{console.error(error);process.exitCode=1;});
