@@ -1,0 +1,35 @@
+name: a-bordo-manual
+services:
+  media:
+    image: node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
+    command: ["node", "/app/server.mjs"]
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    restart: unless-stopped
+    volumes:
+      - ./server.mjs:/app/server.mjs:ro
+      - ./public.pem:/run/manual/public.pem:ro
+      - ../data:/data:ro
+    networks:
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: n8n_default
+      traefik.http.routers.nomad-manual.rule: "Host(`n8n.srv1954522.hstgr.cloud`) && PathPrefix(`/a-bordo-media/`)"
+      traefik.http.routers.nomad-manual.entrypoints: websecure
+      traefik.http.routers.nomad-manual.tls: "true"
+      traefik.http.routers.nomad-manual.tls.certresolver: mytlschallenge
+      traefik.http.routers.nomad-manual.service: nomad-manual
+      traefik.http.services.nomad-manual.loadbalancer.server.port: "8080"
+
+networks:
+  proxy:
+    name: n8n_default
+    external: true

@@ -76,9 +76,10 @@ function dayMaintenance() {
     ${dayButton("tasks", "Mis tareas" + (tasks.length ? " · " + tasks.length : ""), "", "day-primary")}
     ${writable() ? dayButton("work", "Registrar trabajo") + dayButton("problem", "Avisar un problema") : ""}
     ${dayButton("equipment", "Equipos del barco")}
+    ${dayButton("manual", "Manual de instrucciones")}
     ${session.admin ? action("newTask", "Nueva tarea", "", "day-secondary") : ""}
-  </div><details class="day-disclosure"><summary>Manual e historial</summary>
-    ${dayButton("manual", "Manual de instrucciones")}${dayButton("updates", "Avisos y novedades")}
+  </div><details class="day-disclosure"><summary>Avisos e historial</summary>
+    ${dayButton("updates", "Avisos y novedades")}
     <h2>Mis últimos registros</h2>${records.map(log => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(log.id)}"><strong>${esc(log.title)}</strong><small>${date(log.date)}</small></button>`).join("") || empty("Todavía no registraste trabajos.")}</details>`;
 }
 function dayEquipment() {
@@ -171,7 +172,7 @@ function dayManualBody() {
     return selected === "all" || !chapterRole || chapterRole === selected || (selected === "capitan" && /^AP[ÉE]NDICE /i.test(section));
   });
   if (selected !== "all") sections.sort((a,b) => Number(dayManualChapterRole(b) === selected) - Number(dayManualChapterRole(a) === selected));
-  return `${dayRolePicker("manualRole", selected)}<p class="day-muted">${selected === "all" ? "Instrucciones comunes y responsabilidades de cada rol." : `Manual de ${dayRoleName(selected)}: responsabilidades, procedimientos comunes y anexos aplicables. En Todos podés consultar el manual completo.`}</p>${dayManualAppGuide(selected)}${sections.map((section, i) => { const lines = section.split("\n"); let title = lines.shift().toLocaleUpperCase("es"); if (/^AP[ÉE]NDICE /i.test(title)) { const subtitle = lines.find(line => line.trim()); if (subtitle) title += " · " + subtitle.trim(); } return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Manual de referencia actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
+  return `<boat-manual-media></boat-manual-media>${dayRolePicker("manualRole", selected)}<p class="day-muted">${selected === "all" ? "Instrucciones comunes y responsabilidades de cada rol." : `Manual de ${dayRoleName(selected)}: responsabilidades, procedimientos comunes y anexos aplicables. En Todos podés consultar el manual completo.`}</p>${dayManualAppGuide(selected)}${sections.map((section, i) => { const lines = section.split("\n"); let title = lines.shift().toLocaleUpperCase("es"); if (/^AP[ÉE]NDICE /i.test(title)) { const subtitle = lines.find(line => line.trim()); if (subtitle) title += " · " + subtitle.trim(); } return `<details class="day-disclosure" ${i === 0 ? "open" : ""}><summary>${esc(title)}</summary><div class="manual-content">${esc(lines.join("\n"))}</div></details>`; }).join("")}${state.manual?.updatedAt ? `<p class="day-muted">Manual de referencia actualizado ${date(state.manual.updatedAt)}</p>` : ""}`;
 }
 function dayManual() {
   return `${dayBack()}<p class="day-eyebrow">PARA CONSULTAR</p><h1>Manual de instrucciones</h1>${dayManualBody()}`;

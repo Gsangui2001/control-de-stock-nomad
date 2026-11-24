@@ -68,6 +68,21 @@
 .day-success { text-align:center; padding:35px 0; }
 .day-success>span { display:grid; place-items:center; margin:0 auto 22px; border-radius:50%; width:65px; height:65px; color:#24796a; background:#deeee6; font-size:30px; }
 .day-reference { max-height:240px; max-width:100%; object-fit:contain; border-radius:12px; }
+boat-manual-media { display:block; margin:22px 0 25px; }
+boat-manual-media:empty { display:none; }
+boat-manual-media h2 { margin:0 0 12px; }
+.manual-media-card { margin:8px 0; }
+.manual-media-card > summary { min-height:44px; align-content:center; }
+.manual-media-card > summary small { display:block; margin:3px 0 0 15px; color:#526761; font-weight:400; }
+.manual-media-card video { display:block; width:100%; max-height:64vh; background:#10252a; border-radius:10px; margin:12px 0; }
+.manual-media-photos { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(165px,100%),1fr)); gap:12px; }
+.manual-media-photos figure { min-width:0; margin:4px 0; }
+.manual-media-photos figure > button:first-child { display:block; width:100%; padding:0; border:0; border-radius:8px; overflow:hidden; }
+.manual-photo-dialog { box-sizing:border-box; max-width:min(92vw,800px); max-height:92vh; padding:14px; border:0; border-radius:12px; }
+.manual-photo-dialog img { display:block; max-width:100%; max-height:67vh; object-fit:contain; margin:10px auto; }
+.manual-photo-dialog p { margin:8px 0 0; }
+.manual-media-photos img { display:block; width:100%; height:160px; object-fit:contain; background:#edf2f1; }
+.manual-media-photos figcaption { margin-top:5px; overflow-wrap:anywhere; font-size:14px; }
 .daily-mode button:focus-visible,.daily-mode summary:focus-visible { outline:3px solid #368d7d; outline-offset:3px; }
 @media(max-width:420px) { .day-content{padding:21px 16px 12px} .day-top{padding:17px} .day-tile{padding:16px 12px;font-size:15px;min-height:137px} .day-content h1{font-size:25px} }
 
