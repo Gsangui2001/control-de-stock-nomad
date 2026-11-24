@@ -1,3 +1,12 @@
+export function canReadBoatCash(role: string): boolean {
+ return ['administrador','capitan','encargado','lector'].includes(role);
+}
+
+export function isOperationalStatePhoto(state: any, url: string): boolean {
+ return [...state.boat.equipment, ...state.products, ...state.tasks].some(row => row.photo === url)
+  || state.logs.some((log: any) => log.photos?.includes(url));
+}
+
 // A crew member may append work and its stock consumption, never rewrite history.
 export function protectCrewHistory(before:any, incoming:any, managerName?:string) {
  for(const key of ['logs','movements','purchases']){

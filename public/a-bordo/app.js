@@ -414,6 +414,10 @@ function authScreen(setup) {
 }
 function render() {
   if (!state) return;
+  if ((view === "purchases" || (view === "day" && cashPages.has(dayPage))) && !canViewCash()) {
+    view = "day";
+    dayPage = "home";
+  }
   document.body.classList.remove("access-mode");
   document.body.classList.toggle("daily-mode", view === "day");
   $("#dayHeader").hidden = view !== "day";
@@ -448,6 +452,7 @@ function render() {
       b.classList.toggle("active", b.dataset.view === view);
       b.hidden =
         (b.dataset.view === "crew" && !session.admin) ||
+        (b.dataset.view === "purchases" && !canViewCash()) ||
         (b.hasAttribute("data-private") && !privateAccess());
     });
   $("#quickLog").hidden = !writable();
