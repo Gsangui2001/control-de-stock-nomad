@@ -7,7 +7,8 @@ export const intakeData=z.object({
 });
 export type IntakeData=z.infer<typeof intakeData>;
 export function validateIntakeApply(kind:z.infer<typeof intakeKind>,data:IntakeData){
- if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||new Date(data.date+'T12:00:00Z').toISOString().slice(0,10)!==data.date)throw Error('Completá una fecha válida.');
+ const day = new Date(data.date + 'T12:00:00Z');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(data.date)||!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==data.date)throw Error('Completá una fecha válida.');
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  if(data.date>today)throw Error('La fecha no puede ser futura.');
  if(kind!=='expense'&&!data.items.length)throw Error('Agregá al menos un producto.');
@@ -18,28 +19,66 @@ export function validateIntakeApply(kind:z.infer<typeof intakeKind>,data:IntakeD
  if(['purchase','expense'].includes(kind)&&(!data.currency||data.total===null||!data.supplier))throw Error('Para registrar un gasto, confirmá proveedor, moneda e importe total.');
  return data;
 }
-// Conservative fallback for lists. Only explicit quantities/units are extracted.
-// Ambiguous lines stay visible and incomplete for review, never silently dropped.
-export function parseIntakeList(text:string):IntakeData{
+export class IntakeListError extends Error {}
+
+function listCells(line: string, separator: string): string[] | undefined {
+ const cells: string[] = [];
+ let cell = '', quoted = false;
+ for (let i = 0; i < line.length; i++) {
+  const char = line[i];
+  if (quoted && char === '"' && line[i + 1] === '"') { cell += '"'; i++; }
+  else if (char === '"' && (quoted || !cell.trim())) quoted = !quoted;
+  else if (!quoted && char === separator) { cells.push(cell.trim()); cell = ''; }
+  else cell += char;
+ }
+ if (!quoted) return [...cells, cell.trim()];
+}
+
+// Keep the source row intact when reading CSV fields containing a delimiter.
+export function readIntakeList(text:string){
  const result:IntakeData={date:'',supplier:'',reference:'',currency:'',total:null,notes:'',items:[]};
- const number=(s:string)=>{const n=s.replace(/\s/g,'');if(/^\d+(?:[.,]\d{1,2})?$/.test(n))return Number(n.replace(',','.'));return null;};
+ const number=(s:string)=>{const n=s.trim();if(/^\d+(?:[.,]\d{1,2})?$/.test(n))return Number(n.replace(',','.'));return null;};
  const unit='(kg|g|gr|L|ml|litros?|un|unidades?|uds?|cajas?|bolsas?|botellas?|paquetes?|latas?|rollos?)';
- for(const raw of text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).slice(0,100)){
-  const line=raw.replace(/^[-•]\s*/,'');let m;
+ let tabular = true;
+ let headerSeparator = '';
+ const field = (s:string, limit:number, label:string, line:number) => {
+  if(s.length>limit) throw new IntakeListError('Fila '+line+': '+label+' supera '+limit+' caracteres. Acortá ese campo y volvé a cargar la lista.');
+  return s;
+ };
+ let lineNo=0;
+ for(const source of text.split(/\r?\n/)){
+  lineNo++;
+  const raw=source.trim();
+  if(!raw)continue;
+  const line=raw.replace(/^(?:-\s+|•\s*)/,'');let m;
   if((m=line.match(/^fecha\s*[:;]\s*(\d{4}-\d{2}-\d{2})$/i))){result.date=m[1];continue;}
-  if((m=line.match(/^proveedor\s*[:;]\s*(.+)$/i))){result.supplier=m[1].slice(0,140);continue;}
-  if((m=line.match(/^(?:factura|referencia)\s*[:;]\s*(.+)$/i))){result.reference=m[1].slice(0,140);continue;}
+  if((m=line.match(/^proveedor\s*:\s*(.+)$/i))){result.supplier=field(m[1],140,'el proveedor',lineNo);continue;}
+  if((m=line.match(/^(?:factura|referencia)\s*:\s*(.+)$/i))){result.reference=field(m[1],140,'la referencia',lineNo);continue;}
   if((m=line.match(/^moneda\s*[:;]\s*(USD|EUR|ARS|PAB)$/i))){result.currency=m[1].toUpperCase() as IntakeData['currency'];continue;}
   if((m=line.match(/^total\s*[:;]?\s*(USD|EUR|ARS|PAB)?\s*([\d.,]+)\s*(USD|EUR|ARS|PAB)?$/i))){result.total=number(m[2]);if(m[1]||m[3])result.currency=(m[1]||m[3]).toUpperCase() as IntakeData['currency'];continue;}
-  if(/^producto\s*[;,\t|]/i.test(line))continue;
-  const separator=/[;\t|]/.test(line)?(line.match(/[;\t|]/)![0]):',';
-  const cells:string[]=[];let cell='',quoted=false;
-  for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(quoted&&line[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===separator&&!quoted){cells.push(cell.trim());cell='';}else cell+=c;}cells.push(cell.trim());
-  let row:IntakeData['items'][number]={name:line.slice(0,140),quantity:null,unit:'',location:'',area:'',unitCost:null,productId:''};
-  if(cells.length>=3){row={...row,name:cells[0].slice(0,140),quantity:number(cells[1]),unit:cells[2].slice(0,20),location:(cells[3]||'').slice(0,140),unitCost:cells[4]?number(cells[4]):null};}
-  else if((m=line.match(new RegExp('^(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'\\s+(?:de\\s+)?(.+)$','i')))){row.name=m[3].slice(0,140);row.quantity=number(m[1]);row.unit=m[2];}
-  else if((m=line.match(new RegExp('^(.+?)\\s*[:=]\\s*(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'$','i')))){row.name=m[1].slice(0,140);row.quantity=number(m[2]);row.unit=m[3];}
+  // Maintain the two-column metadata format accepted by previous exports.
+  if((m=line.match(/^(proveedor|factura|referencia)\s*;\s*([^;]+)$/i))){
+   result[m[1].toLowerCase()==='proveedor'?'supplier':'reference']=field(m[2],140,'el dato de comprobante',lineNo);continue;
+  }
+  const formats=(headerSeparator?[headerSeparator]:['\t',';',',','|'])
+   .map(separator=>({separator,cells:listCells(line,separator)}))
+   .filter((format):format is {separator:string,cells:string[]}=>Boolean(format.cells && format.cells.length>=3));
+  const header=formats.find(f=>/^producto$/i.test(f.cells[0]) && /^cantidad$/i.test(f.cells[1]));
+  if(header){headerSeparator=header.separator;continue;}
+  const cells=(formats.find(f=>number(f.cells[1])!==null)||formats[0])?.cells;
+  if(result.items.length>=100)throw new IntakeListError('La lista supera los 100 productos. Dividila en dos cargas para conservar todas las filas.');
+  let row:IntakeData['items'][number]={name:'',quantity:null,unit:'',location:'',area:'',unitCost:null,productId:''};
+  if(cells){
+   if(cells.length>5)throw new IntakeListError('Fila '+lineNo+': hay más de cinco columnas. Revisá los separadores antes de cargarla.');
+   row={...row,name:field(cells[0],140,'el producto',lineNo),quantity:number(cells[1]),unit:field(cells[2],20,'la unidad',lineNo),location:field(cells[3]||'',140,'la ubicación',lineNo),unitCost:cells[4]?number(cells[4]):null};
+  }
+  else if(headerSeparator) throw new IntakeListError('Fila '+lineNo+': faltan columnas o hay comillas sin cerrar. Revisá la fila indicada.');
+  else if((m=line.match(new RegExp('^(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'\\s+(?:de\\s+)?(.+)$','i')))){row.name=field(m[3],140,'el producto',lineNo);row.quantity=number(m[1]);row.unit=m[2];}
+  else if((m=line.match(new RegExp('^(.+?)\\s*[:=]\\s*(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'$','i')))){row.name=field(m[1],140,'el producto',lineNo);row.quantity=number(m[2]);row.unit=m[3];}
+  else row.name=field(line,140,'la descripción',lineNo);
+  if(!cells)tabular=false;
   result.items.push(row);
  }
- return result;
+ return {data:result,tabular:tabular&&result.items.length>0};
 }
+export const parseIntakeList=(text:string):IntakeData=>readIntakeList(text).data;

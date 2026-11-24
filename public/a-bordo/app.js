@@ -202,10 +202,20 @@ async function api(path, method = "GET", body) {
   }
   return data;
 }
-async function uploadPhotos(next) {
+function boatWriteContext() {
+  return {boat:boatId,user:session?.id,source:state,revision};
+}
+function sameBoatOwner(context) {
+  return context.boat===boatId && context.user===session?.id;
+}
+function verifyBoatWrite(context) {
+  if(!sameBoatOwner(context)||context.source!==state) throw Error("El barco o sus datos cambiaron. Volvé a abrir el formulario.");
+}
+async function uploadPhotos(next, context) {
   const upload = async (value) => {
     if (!value?.startsWith("data:image/")) return value;
-    return (await api("photos", "POST", { boat: boatId, data: value })).url;
+    verifyBoatWrite(context);
+    return (await api("photos", "POST", { boat: context.boat, data: value })).url;
   };
   for (const p of next.products) if (p.photo) p.photo = await upload(p.photo);
   for (const e of next.boat.equipment) if (e.photo) e.photo = await upload(e.photo);
@@ -234,37 +244,82 @@ async function portableBackup() {
     for (let i = 0; i < l.photos.length; i++) l.photos[i] = await load(l.photos[i]);
   return copy;
 }
-async function commit(next) {
-  const key = `pending-state:${session.id}:${boatId}`;
-  let pending = await draftRead(key);
-  if(pending)throw new Error('Hay un guardado anterior sin confirmar. Volvé a Mi día y usá Revisar guardado pendiente antes de registrar otro trabajo.');
-  if(!pending){
-    await uploadPhotos(next);
-    pending={state:next,revision,key:uid(),draftKey:draftKey($("#dayForm")||$("#editorForm"))};
-    await draftWrite(key,pending);
+async function commit(next, context=boatWriteContext()) {
+  verifyBoatWrite(context);
+  const key = 'pending-state:'+context.user+':'+context.boat;
+  const formKey = draftKey($("#dayForm")||$("#editorForm"));
+  const previous = await draftRead(key);
+  if(previous) throw Error('Hay un guardado anterior sin confirmar. Volvé a Mi día y usá Revisar guardado pendiente antes de registrar otro trabajo.');
+  verifyBoatWrite(context);
+  await uploadPhotos(next,context);
+  verifyBoatWrite(context);
+  const pending={state:next,revision:context.revision,key:uid(),draftKey:formKey};
+  const claimed=await editStoredDraft(key,existing=>existing||pending);
+  if(claimed.key!==pending.key)throw Error('Hay un guardado anterior sin confirmar. Volvé a Mi día para revisarlo.');
+  try { verifyBoatWrite(context); }
+  catch (error) {
+    await editStoredDraft(key,existing=>existing?.key===pending.key?null:existing);
+    throw error;
   }
   try {
-    const saved = await api("state?boat=" + encodeURIComponent(boatId), "PUT", pending);
-    await draftWrite(key,null);
-    if(pending.draftKey)await draftWrite(pending.draftKey,null);
+    const saved=await api("state?boat="+encodeURIComponent(context.boat),"PUT",pending);
+    await editStoredDraft(key,existing=>existing?.key===pending.key?null:existing);
+    if(formKey)await draftWrite(formKey,null);
+    if(!sameBoatOwner(context))return false;
+    if(context.source!==state){await loadBoat(context.boat);return sameBoatOwner(context);}
     state=saved.state;revision=saved.revision;render();
+    return true;
   } catch(error) {
-    if(error.status && error.status<500)await draftWrite(key,null);
+    if(error.status && error.status<500)await editStoredDraft(key,existing=>existing?.key===pending.key?null:existing);
     throw error;
   }
 }
+
+let boatLoadSequence = 0;
 async function loadBoat(id) {
+  const sequence = ++boatLoadSequence;
+  const user = session?.id;
+  const previousState = state;
+  const switching = id !== boatId && Boolean(previousState);
+  if (switching) {
+    $("#content").innerHTML = '<p role="status">Cargando barco…</p>';
+    $("#navigation").inert = true;
+    $("#dayHeader").inert = true;
+    $("#quickLog").disabled = true;
+  }
+  const nextPage = switching && view === "day" && ["ops-stock","ops-requests"].includes(dayPage) ? dayPage : "home";
+  let r;
+  try {
+    r = await api("state?boat=" + encodeURIComponent(id));
+  } catch (error) {
+    if (sequence !== boatLoadSequence || user!==session?.id) return;
+    if (switching && state === previousState) render();
+    throw error;
+  } finally {
+    if (sequence === boatLoadSequence) {
+      $("#navigation").inert = false;
+      $("#dayHeader").inert = false;
+      $("#quickLog").disabled = false;
+    }
+  }
+  if (sequence !== boatLoadSequence || user!==session?.id) return;
   boatId = id;
-  dayPage = "home"; dayTaskRole = "all"; dayManualRole = null;
-  const r = await api("state?boat=" + encodeURIComponent(id));
+  dayPage = nextPage; dayTaskRole = "all"; dayManualRole = null;
   state = r.state;
   revision = r.revision;
   role = r.role;
   filter = { q: "", system: "", status: "", equipment: "" };
   panelTasksExpanded = false;
   panelLogsExpanded = false;
-  await refreshActivity();
-  render();
+  try {
+    await refreshActivity();
+  } catch {
+    if (sequence !== boatLoadSequence || user!==session?.id) return;
+    activity = [];
+    unseenActivity = [];
+    toast("No se pudieron actualizar los avisos del barco.");
+  }
+  if (sequence === boatLoadSequence && user===session?.id) render();
 }
 const activityStorageKey = () => `boat-activity-seen-${boatId}`;
 async function refreshActivity(showToast = false) {
@@ -274,7 +329,10 @@ async function refreshActivity(showToast = false) {
     return;
   }
   const previous = unseenActivity.length;
-  activity = await api("activity?boat=" + encodeURIComponent(boatId));
+  const owner = boatId;
+  const updated = await api("activity?boat=" + encodeURIComponent(owner));
+  if (owner !== boatId) return;
+  activity = updated;
   const seen = Number(localStorage.getItem(activityStorageKey()) || 0);
   unseenActivity = activity.filter((item) => Number(item.id) > seen);
   if (state && unseenActivity.length !== previous) {
@@ -804,6 +862,7 @@ $("#editorForm").onsubmit = async (event) => {
     const form = event.target;
     const d = Object.fromEntries(new FormData(form));
     for (const key in d) if (typeof d[key] === "string") d[key] = d[key].trim();
+    const owner = boatWriteContext();
     const next = structuredClone(state);
     const { type, id, obj } = editing;
     if (type === "product") {
@@ -1103,7 +1162,7 @@ $("#editorForm").onsubmit = async (event) => {
       toast("Acceso guardado.");
       return;
     } else return;
-    await commit(next);
+    if(!await commit(next,owner))return;
     if (type === "boat") {
       boats = await api("boats");
       render();
@@ -1184,12 +1243,14 @@ function validateBackup(s) {
   return s;
 }
 async function restore(event) {
+  const owner=boatWriteContext();
   const file = event.target.files[0];
   if (!file) return;
   try {
     if (file.size > 24 * 1024 * 1024)
       throw new Error("El respaldo supera el máximo de 24 MB.");
     const imported = validateBackup(JSON.parse(await file.text()));
+    verifyBoatWrite(owner);
     if (
       !confirm(
         `Restaurar el respaldo de ${imported.boat.name} sobre ${state.boat.name}? Se reemplazarán los datos de este barco. Primero se descargará una copia de los actuales.`,
@@ -1197,7 +1258,7 @@ async function restore(event) {
     )
       return;
     download(state, `antes-de-restaurar-${today()}.json`);
-    await commit(imported);
+    if(!await commit(imported,owner))return;
     boats = await api("boats");
     render();
     toast("Respaldo restaurado.");

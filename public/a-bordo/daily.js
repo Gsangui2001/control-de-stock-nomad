@@ -97,13 +97,13 @@ function dayManualAppGuide(selected) {
       "En Reservas revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
       "En Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
       "Coordiná el trabajo de la tripulación y solicitá a administración las asignaciones o cambios de programación. Tu acceso no permite crear usuarios ni reasignar tareas.",
-      "Usá Stock y pedidos → Cargar foto o lista para enviar conteos o comprobantes revisados. Administración confirma las existencias y los gastos. Si una compra ya se recibió desde Pedidos, cargá el comprobante como Gasto sin entrada de stock. Revisá Pedidos, descargá el pedido consolidado y coordiná suministros y lavandería. Administración aprueba y marca las compras; registrá la recepción únicamente cuando recibas la mercadería.",
+      "En Stock y pedidos revisá faltantes y descargá el pedido consolidado. Entregá a administración el conteo, los comprobantes y el detalle de la mercadería recibida. Si la compra ya se registró por recepción, indicá que el comprobante corresponde a un gasto sin entrada de stock.",
       "Informá cobros únicamente cuando aparezca una instrucción verificada en una reserva asignada a tu cuenta. Registrá el importe recibido y el medio o comprobante; administración confirma la recepción."
     ],
     chef: [
       "Antes de planificar el menú, revisá Reservas: alimentación, alimentos a evitar, bebidas y celebraciones. Un dato no informado debe consultarse; no significa ausencia de restricciones.",
       "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
-      "En Stock y pedidos consultá Cocina y bebidas. Usá Cargar foto o lista para preparar un conteo, compra recibida, gasto o faltantes; revisá lo leído y enviá la carga. Administración confirma existencias y gastos. Registrá el consumo real una sola vez: directamente en inventario o como material de un trabajo, evitando descontarlo dos veces.",
+      "En Stock y pedidos filtrá por Bebidas y mercadería para consultar cantidades y pedir reposición. Entregá los conteos y comprobantes a administración. Registrá cada consumo una sola vez, en inventario o como material del trabajo.",
       "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración gestiona la aprobación y compra, y el capitán o administración registra la recepción.",
       "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
     ],
@@ -164,6 +164,7 @@ async function saveDayForm(event) {
   for (const key in d) if (typeof d[key] === "string") d[key] = d[key].trim();
   const kind = form.dataset.kind, isReport = ["problem", "blocked", "missing"].includes(kind);
   const button = form.querySelector('[type="submit"]');
+  const owner=boatWriteContext();
   daySaving = true; button.disabled = true; $("#dayError").textContent = "";
   try {
     const next = structuredClone(state);
@@ -193,7 +194,7 @@ async function saveDayForm(event) {
       for (const [id, quantity] of grouped) movement(next, next.products.find(p => p.id === id), -quantity, "Trabajo: " + title, d.date);
       if (task) R.completeTask(task, d.date, hours, d.cycleDay);
     }
-    await commit(next);
+    if(!await commit(next,owner))return;
     dayResult = {title: isReport ? "Aviso registrado" : "Trabajo guardado", message: kind === "blocked" ? "El motivo quedó en Avisos. La tarea sigue pendiente." : isReport ? "Quedó guardado en los avisos del barco para su seguimiento." : task?.intervalDays || task?.intervalMonths || task?.intervalHours || task?.routineCycle ? `El trabajo quedó registrado y la próxima tarea se reprogramó${task.nextDate ? " para el " + date(task.nextDate) : " por horas"}.` : "Quedó guardado con tu nombre, fecha y los materiales utilizados."};
     dayPage = "success"; render(); window.scrollTo(0, 0);
   } catch (err) {

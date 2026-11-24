@@ -8,6 +8,13 @@ Una lectura de cero se registra cuando el contador marca cero. Para un equipo si
 
 Para incorporar repuestos, bebidas y demás insumos, contá lo disponible por ubicación. En **Tickets y listas**, elegí **Conteo** y revisá fecha, producto, cantidad, unidad, área y ubicación antes de confirmar. Una compra recibida se registra como compra; un repuesto usado se registra como consumo o como material de un trabajo.
 
+### Al recibir o corregir cantidades
+
+- En una entrega parcial, elegí el pedido, indicá lo que llegó y su ubicación. Al recibir la segunda entrega en ese mismo lugar, A bordo vuelve a usar la ficha correspondiente. Una ubicación distinta conserva su propio saldo.
+- Ante un corte después de confirmar, recuperá el guardado pendiente desde la misma cuenta y el mismo barco. Se recupera la solicitud original aunque el navegador haya perdido la respuesta.
+- Si otro integrante cambió las existencias durante la revisión, volvé a comprobar el stock antes de confirmar. Para corregir un producto que tuvo movimientos después de la fecha del conteo, hacé un nuevo conteo físico de ese producto.
+- Cada lista admite hasta 100 productos, además del encabezado y los datos del comprobante. Si supera el límite, dividila en cargas. Las fotos que el lector no logra interpretar se pueden revisar y completar manualmente.
+
 ## Tickets y stock compartido — cambio preparado el 26/10/2026
 
 Stock y pedidos incluye **Cargar ticket y sumar stock**. La lectura prepara los productos; el usuario revisa cantidad, unidad, área y ubicación y confirma que la compra fue recibida. Bebidas y mercadería usan el área gastronómica; materiales, repuestos y limpieza usan el área técnica. Un mismo ticket puede contener ambas áreas.
@@ -20,7 +27,7 @@ Los reintentos conservan la operación original; si se pierde la respuesta, **Ve
 
 El administrador conserva la asignación de tareas por rol, los filtros de pendientes/vencidas y el historial de trabajos con responsable y fotos. Las pruebas de tareas verifican que un tripulante no puede reasignar, eliminar o completar tareas de otro rol. La matriz de inventario se comprueba en `tests/boat-inventory-access.cjs` y en SQL, incluyendo los endpoints anteriores y la limpieza del stock compartido en caché al perder el permiso.
 
-Estado de entrega: cambio local, pendiente de publicación. Migración nueva `20261026161306_boat_inventory_tickets_fleet.sql`, validada junto con `tests/boat-inventory-tickets-fleet.sql` dentro de una transacción revertida; no está aplicada permanentemente. Nomade tiene cero productos registrados al verificar el 26/10/2026. El conector de Vercel rechazó la inspección del proyecto con HTTP 403 por falta de acceso al equipo.
+Al 26/10/2026 esta versión estaba preparada localmente y pendiente de publicación. Migración nueva `20261026161306_boat_inventory_tickets_fleet.sql`, validada junto con `tests/boat-inventory-tickets-fleet.sql` dentro de una transacción revertida; no está aplicada permanentemente. Nomade tiene cero productos registrados al verificar el 26/10/2026. El conector de Vercel rechazó la inspección del proyecto con HTTP 403 por falta de acceso al equipo.
 
 Validación: TypeScript, build, pruebas de lectura de listas, roles y alertas correctos; SQL verificó compra atómica, duplicados, consumo idempotente, exceso de consumo, consulta entre barcos, campos compartidos y permisos. La revisión móvil usa el frontend real con respuestas HTTP simuladas; no constituye una prueba de extracción de tickets reales ni un E2E de producción.
 

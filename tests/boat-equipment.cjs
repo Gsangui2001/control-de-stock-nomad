@@ -63,16 +63,33 @@ function section(start,end) {
   assert.ok(pos>=0 && next>pos,start);
   return app.slice(pos,next);
 }
-const elements = {};
+const elements = {}, drafts = new Map(), savedEquipment = [], uploaded = [];
+let serverRevision=1;
 const sandbox = {
-  R, boatId:boat, state:structuredClone(state), structuredClone,
+  R, boatId:boat, revision:serverRevision, state:structuredClone(state), structuredClone,
+  draftKey:()=> 'form:equipment', draftRead:async key=>drafts.get(key),
+  draftWrite:async(key,value)=>{if(value===null)drafts.delete(key);else drafts.set(key,value);},
+  editStoredDraft:async(key,update)=>{
+    const next=update(drafts.get(key)||null);
+    if(next===null)drafts.delete(key);else drafts.set(key,next);
+    return next;
+  },
+  render() {},
   $: selector => elements[selector] ??= {close(){}},
   esc: s=>String(s??'').replaceAll('<','&lt;'),
-  empty: String, action:()=>'', writable:()=>true, session:{admin:true}, role:'admin', restore(){},
+  empty: String, action:()=>'', writable:()=>true, session:{id:'equipment-admin',admin:true}, role:'admin', restore(){},
   api: async (op,method,body) => {
-    assert.equal(op,'photos'); assert.equal(method,'POST');
-    assert.equal(body.boat,boat); assert.equal(body.data,portablePhoto);
-    return {url:photoUrl};
+    if(op==='photos'){
+      assert.equal(method,'POST');assert.equal(body.boat,boat);assert.equal(body.data,portablePhoto);
+      uploaded.push(body.boat);return {url:photoUrl};
+    }
+    assert.equal(op,'state?boat='+boat);assert.equal(method,'PUT');
+    assert.equal(body.revision,serverRevision);assert.ok(body.key);
+    assert.equal(drafts.get('pending-state:equipment-admin:'+boat)?.key,body.key);
+    validateApi(body.state,boat);
+    const stored=structuredClone(body.state);
+    savedEquipment.push(stored.boat.equipment);
+    return {state:stored,revision:++serverRevision};
   },
   fetch: async value => {
     assert.equal(value,photoUrl); return {ok:true,blob:async()=>({})};
@@ -80,7 +97,7 @@ const sandbox = {
   FileReader:class {readAsDataURL() {this.result=portablePhoto;this.onload();}}
 };
 vm.createContext(sandbox);
-vm.runInContext(section('async function uploadPhotos','async function commit')+
+vm.runInContext(section('function boatWriteContext','let boatLoadSequence')+
     section('function safePhoto','function safeUrl')+
     section('function validateBackup','async function restore')+
     section('function renderSettings','async function renderCrew'),sandbox);
@@ -96,19 +113,19 @@ const run = source=>vm.runInContext(source,sandbox);
   assert.equal(sandbox.state.boat.equipment[0].photo,photoUrl);
   sandbox.downloaded = downloaded;
   run('validateBackup(downloaded)');
-  await run('uploadPhotos(downloaded)');
+  await run('uploadPhotos(downloaded,boatWriteContext())');
   assert.equal(downloaded.boat.equipment[0].photo,photoUrl);
   assert.equal(downloaded.boat.equipment[0].hours,null);
   sandbox.downloaded.boat.equipment[0].photo=photoUrl.replace(boat,'0'.repeat(32));
   assert.throws(()=>run('validateBackup(downloaded)'));
   // Submit the real equipment editor for new and legacy records.
   Object.assign(sandbox,{
-    editing:null, draftTimer:null, clearTimeout, uid:()=> 'new-gear',
+    editing:null, draftTimer:null, clearTimeout, uid:(()=>{let n=0;return ()=>n++===0?'new-gear':'request-'+n;})(),
     field:(label,name,value)=>`<input name="${name}" value="${value??''}">`,
     select:()=>'', systemOptions:()=>[], FormData:class {
       constructor(form){return Object.entries(form.fields);}
     },
-    photo:async()=>portablePhoto, toast(){}, commit:async value=>{sandbox.state=value;}
+    photo:async()=>portablePhoto, toast(){}
   });
   sandbox.$('#editor').showModal=()=>{};
   vm.runInContext(section('function openEditor','function addLine')+
@@ -118,17 +135,22 @@ const run = source=>vm.runInContext(source,sandbox);
   const form = {fields:{name:'Bomba',system:'Agua',model:'',location:'Bodega',identificationNote:'Etiqueta 7',hours:''},elements:{equipmentPhoto:{files:[{}]}}};
   await elements['#editorForm'].onsubmit({target:form,preventDefault(){}});
   let gear=sandbox.state.boat.equipment.find(e=>e.id==='new-gear');
-  assert.equal(gear.hours,null); assert.equal(gear.identificationNote,'Etiqueta 7'); assert.equal(gear.photo,portablePhoto);
+  assert.equal(gear.hours,null); assert.equal(gear.identificationNote,'Etiqueta 7'); assert.equal(gear.photo,photoUrl);
   run('openEditor("equipment",state.boat.equipment.find(e=>e.id==="new-gear"))');
   form.fields.hours='0'; form.fields.location='Bodega técnica'; form.elements.equipmentPhoto.files=[];
   await elements['#editorForm'].onsubmit({target:form,preventDefault(){}});
   gear=sandbox.state.boat.equipment.find(e=>e.id==='new-gear');
-  assert.equal(gear.hours,0); assert.equal(gear.location,'Bodega técnica'); assert.equal(gear.photo,portablePhoto);
+  assert.equal(gear.hours,0); assert.equal(gear.location,'Bodega técnica'); assert.equal(gear.photo,photoUrl);
   form.fields.hours='';
   run('openEditor("equipment",state.boat.equipment.find(e=>e.id==="new-gear"))');
   await elements['#editorForm'].onsubmit({target:form,preventDefault(){}});
   assert.equal(sandbox.state.boat.equipment.find(e=>e.id==='new-gear').hours,0);
   assert.match(elements['#formError'].textContent,/última lectura/);
+  assert.equal(savedEquipment.length,2);
+  assert.deepEqual(savedEquipment.map(list=>list.find(e=>e.id==='new-gear').hours),[null,0]);
+  assert.deepEqual(uploaded,[boat,boat]);
+  assert.equal(sandbox.revision,3);
+  assert.equal(drafts.size,0);
 
   // Exercise the full-backup endpoint with a local RPC fixture.
   const captured=[];
