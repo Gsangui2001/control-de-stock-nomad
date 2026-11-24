@@ -53,7 +53,11 @@ async function run(){
   await page.goto('http://localhost:32184/a-bordo/');await page.locator('#opsBoat').waitFor();
  }
  const tap=(sel)=>page.locator(sel).first().tap();
- async function stock(){await tap('[data-day="ops-stock"]');await page.getByRole('heading',{name:'Stock y pedidos',exact:true}).waitFor()}
+ async function openSection(label){
+  const sections=page.getByRole('navigation',{name:'Secciones del barco'});
+  await sections.getByRole('button',{name:new RegExp('^'+label+'(?: |$)')}).tap();
+ }
+ async function stock(){await openSection('Stock');await page.getByRole('heading',{name:'Stock y pedidos',exact:true}).waitFor()}
  async function submit(form){await form.locator('[type=submit]').tap()}
  const receipt=()=>page.locator('form[data-operation=request_receive]');
  async function fill(form,values){for(const [name,value] of Object.entries(values))await form.locator('[name='+name+']').fill(String(value))}
@@ -61,9 +65,30 @@ async function run(){
  async function consumeForm(){const box=page.locator('article.day-inventory').filter({has:page.getByRole('heading',{name:'Filtro',exact:true})});await box.getByText('Registrar consumo',{exact:true}).tap();return box.locator('[data-operation=stock_consume]')}
  async function waitFor(fn){for(let i=0;i<90;i++){if(fn())return;await new Promise(r=>setTimeout(r,75))}assert.ok(fn())}
  try{
+ await runCase('cuatro secciones y permisos de mantenimiento y caja',async()=>{
+  for(const userRole of ['admin','capitan','chef','marinero','lector']){
+   await login(userRole);
+   const sections=page.getByRole('navigation',{name:'Secciones del barco'});
+   assert.deepEqual(await sections.locator('button strong').allTextContents(),['Stock','Mantenimiento','Agenda del mes','Caja']);
+   assert.equal(await page.locator('#content [data-day="ops-requests"], #content [data-day="ops-intake"], #content [data-day="ops-expenses"], #content [data-day="ops-reservations"]').count(),0);
+   await openSection('Mantenimiento');
+   await page.getByRole('heading',{name:'Mantenimiento',exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Nueva tarea',exact:true}).count(),Number(userRole==='admin'));
+   assert.equal(await page.getByRole('button',{name:'Registrar trabajo',exact:true}).count(),Number(userRole!=='lector'));
+   await page.getByRole('button',{name:/^Mis tareas/}).tap();
+   await page.getByRole('heading',{name:'Mis tareas'}).waitFor();
+   await page.getByRole('button',{name:'← Mantenimiento'}).tap();
+   await page.getByRole('button',{name:'← Inicio'}).tap();
+   await openSection('Caja');
+   await page.getByRole('heading',{name:'Caja',exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Cobros de huéspedes',exact:true}).count(),Number(userRole==='capitan'));
+   assert.equal(await page.getByRole('link',{name:/Abrir caja en Finanzas/}).count(),Number(userRole==='admin'));
+   assert.equal(await page.getByRole('button',{name:/[Gg]astos y pagos/}).count(),1);
+  }
+ });
  await runCase('lector consulta, sin controles de escritura',async()=>{await login('lector');await stock();assert.equal(await page.locator('[data-op=request_product],[data-operation=stock_consume],[data-intake=ticket]').count(),0);await tap('[data-day=ops-requests]');await page.getByRole('heading',{name:'Pedidos y faltantes'}).waitFor();assert.equal(await page.locator('[data-operation=request_create]').count(),0);});
  await runCase('tripulante solicita reposición y conserva la cantidad',async()=>{await login('chef');await stock();assert.equal(await page.locator('[data-intake=ticket],[data-operation=stock_add]').count(),0);await tap('[data-op=request_product]');const f=page.locator('[data-operation=request_create]');assert.equal(await f.locator('[name=name]').inputValue(),'Filtro');await fill(f,{quantity:4});await submit(f);await tap('[data-op=request_status][data-status=solicitado]');await page.getByText(/4 un · solicitado/).waitFor();assert.equal(boats[A].products[0].current,7);assert.equal(await receipt().count(),0);});
- await runCase('compra, recepción parcial y recepción final',async()=>{await login('admin');await tap('[data-day=ops-requests]');await tap('[data-op=request_status][data-status=aprobado]');await tap('[data-op=request_status][data-status=comprado]');await detail('Recibir mercadería');await fill(receipt(),{quantity:1,location:'Pañol'});await receipt().locator('[name=productId]').selectOption('filtro');await submit(receipt());await page.getByText('Recibido: 1 · Pendiente: 3').waitFor();assert.equal(boats[A].products[0].current,8);await detail('Recibir mercadería');await fill(receipt(),{quantity:3,location:'Pañol'});await receipt().locator('[name=productId]').selectOption('filtro');await submit(receipt());await page.getByText('Recibido: 4 · Pendiente: 0').waitFor();assert.equal(boats[A].products[0].current,11);});
+ await runCase('compra, recepción parcial y recepción final',async()=>{await login('admin');await stock();await tap('[data-day=ops-requests]');await tap('[data-op=request_status][data-status=aprobado]');await tap('[data-op=request_status][data-status=comprado]');await detail('Recibir mercadería');await fill(receipt(),{quantity:1,location:'Pañol'});await receipt().locator('[name=productId]').selectOption('filtro');await submit(receipt());await page.getByText('Recibido: 1 · Pendiente: 3').waitFor();assert.equal(boats[A].products[0].current,8);await detail('Recibir mercadería');await fill(receipt(),{quantity:3,location:'Pañol'});await receipt().locator('[name=productId]').selectOption('filtro');await submit(receipt());await page.getByText('Recibido: 4 · Pendiente: 0').waitFor();assert.equal(boats[A].products[0].current,11);});
  await runCase('desconexión después de consumo, recuperación tras recarga sin duplicar',async()=>{await login('chef');await stock();let f=await consumeForm();await fill(f,{quantity:2,note:'Salida de prueba'});lost=true;await submit(f);await f.getByText(/No se pudo confirmar/).waitFor();assert.ok(await f.locator('[name=quantity]').isDisabled());assert.equal(boats[A].products[0].current,9);await page.reload();await stock();f=await consumeForm();await f.getByText('Verificar guardado pendiente',{exact:true}).waitFor();assert.equal(await f.locator('[name=quantity]').inputValue(),'2');assert.ok(await f.locator('[name=quantity]').isDisabled());await submit(f);await waitFor(()=>changes.filter(c=>c.op==='stock_consume').length===2);const attempts=changes.filter(c=>c.op==='stock_consume');assert.equal(attempts[0].key,attempts[1].key);assert.equal(boats[A].products[0].current,9);await page.getByText('9 un',{exact:true}).first().waitFor();});
  await runCase('selector de barco recupera fallo y conserva el barco visible',async()=>{await login('admin');await stock();refuseB=true;await page.locator('#opsBoat').selectOption(B);await page.getByText('Barco B sin conexión',{exact:true}).waitFor();assert.equal(await page.locator('#opsBoat').inputValue(),A);await page.getByRole('heading',{name:'Filtro'}).waitFor();refuseB=false;await page.locator('#opsBoat').selectOption(B);await page.getByRole('heading',{name:'Cabo',exact:true}).waitFor();assert.equal(await page.getByRole('heading',{name:'Filtro'}).count(),0);assert.equal(await page.locator('#opsBoat').inputValue(),B);});
  await runCase('conteo inicial cero y ticket recibido',async()=>{await login('admin');await stock();await detail('＋ Cargar cantidad contada');const f=page.locator('form[data-operation=stock_add]');await fill(f,{name:'Precinto',unit:'un',quantity:0,location:'Taller'});await submit(f);await page.getByRole('heading',{name:'Precinto'}).waitFor();assert.equal(boats[A].products.find(x=>x.name==='Precinto').current,0);await tap('[data-intake=ticket]');await page.locator('#intakeInput [name=text]').fill('Filtro;2;un;Pañol');await submit(page.locator('#intakeInput'));const form=page.locator('#intakeReview');await fill(form,{supplier:'Proveedor de prueba',total:12});await form.locator('[name=currency]').selectOption('USD');await form.locator('[name=confirmed]').check();await submit(form);await waitFor(()=>changes.some(c=>c.op==='ticket_confirm'));assert.equal(boats[A].products[0].current,11);});

@@ -16,13 +16,31 @@ function dayRolePicker(kind, selected) {
 const dayManager = () => Boolean(session?.admin || role === "encargado");
 const dayButton = (page, label, id = "", style = "day-secondary") =>
   `<button type="button" class="${style}" data-day="${page}" data-id="${esc(id)}">${label}</button>`;
-const dayBack = () => dayButton("home", "← Mi día", "", "day-back");
+let dayIntakeParent = "ops-stock";
+function dayBack() {
+  let parent = "home", label = "Inicio";
+  if (dayPage === "task" || dayPage === "blocked") {
+    parent = "tasks"; label = "Mis tareas";
+  } else if (["tasks","work","problem","manual","updates"].includes(dayPage)) {
+    parent = "maintenance"; label = "Mantenimiento";
+  } else if (["ops-requests","ops-fleet","ops-transfers"].includes(dayPage) || (dayPage === "ops-intake" && dayIntakeParent !== "ops-cash")) {
+    parent = "ops-stock"; label = "Stock";
+  } else if (["ops-collections","ops-expenses","ops-intake"].includes(dayPage)) {
+    parent = "ops-cash"; label = "Caja";
+  } else if (dayPage === "ops-reservations") {
+    parent = "ops-agenda"; label = "Agenda del mes";
+  }
+  return dayButton(parent, "← " + label, "", "day-back");
+}
 const dayIcon = (name) => {
   const paths = {
     anchor: '<circle cx="12" cy="4" r="2"/><path d="M12 6v15M8 10h8M3 13v2a9 6 0 0 0 18 0v-2M3 13l-2 3m2-3 3 2m15-2 2 3m-2-3-3 2"/>',
     tasks: '<path d="m4 6 2 2 3-4m-5 9 2 2 3-4m3-5h8m-8 8h8M4 20h16"/>',
     plus: '<circle cx="12" cy="12" r="9"/><path d="M12 8v8m-4-4h8"/>',
     problem: '<path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3ZM12 7v5m0 3h.01"/>',
+    tools: '<path d="M14 6a5 5 0 0 0-6.2 6.2l-5 5a2.1 2.1 0 0 0 3 3l5-5A5 5 0 0 0 17 9l-3 3-3-3 3-3Z"/><path d="m16 3 5 5"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 10h18m-13 5h2m4 0h2"/>',
+    wallet: '<path d="M4 7V6a2 2 0 0 1 2-2h12v3"/><rect x="3" y="7" width="18" height="13" rx="3"/><path d="M21 11h-5a2.5 2.5 0 0 0 0 5h5m-4-2.5h.1"/>',
     stock: '<path d="m3 7 9-5 9 5v10l-9 5-9-5Zm0 0 9 5 9-5m-9 5v10M7 5l10 5"/>',
     book: '<path d="M12 5v16M3 3c4-1 6 0 9 2 3-2 5-3 9-2v16c-4-1-6 0-9 2-3-2-5-3-9-2Z"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
@@ -37,10 +55,34 @@ function dayTaskRow(t) {
   return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : ""}${R.scheduleLabel(t) ? ` · ${esc(R.scheduleLabel(t))}` : " · Sin frecuencia definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
 }
 function dayHome() {
-  const tasks = dayTasks(), overdue = tasks.filter(t => taskStatus(t) === "Vencido").length;
-  const records = state.logs.filter(l => l.recordedById ? l.recordedById === session.id : (l.recordedBy || l.responsible) === session.name).slice().reverse().slice(0, 8);
-  const tile = (page, icon, title, subtitle, primary = false) => `<button type="button" data-day="${page}" class="day-tile ${primary ? "primary-tile" : ""}">${dayIcon(icon)}<span>${title}<small>${subtitle}</small></span></button>`;
-  return `<p class="day-eyebrow">MI DÍA A BORDO</p><h1>Hola, ${esc(session.name.split(" ")[0])}.</h1><span class="day-role-label">${session.admin ? "Administración · todos los roles" : esc(dayRoleName(role))}</span><p class="day-muted">${tasks.length ? `${tasks.length} tareas pendientes. Vamos de a una.` : "No tenés tareas pendientes."}</p><div class="day-grid">${tile("tasks", "tasks", "Mis tareas", `${tasks.length} pendientes${overdue ? ` · ${overdue} vencidas` : ""}`, true)}${writable() ? tile("work", "plus", "Registrar trabajo", "Algo que ya hice") + tile("problem", "problem", "Avisar un problema", "Foto y comentario") : ""}${tile("ops-stock", "stock", "Stock y pedidos", "Qué hay, qué falta y qué llegó")}</div><h2 class="day-section">Primero lo pendiente</h2>${tasks.slice(0, 2).map(dayTaskRow).join("") || '<div class="day-note">No hay tareas pendientes para tu cuenta.</div>'}${tasks.length > 2 ? dayButton("tasks", `Ver las ${tasks.length} tareas`, "", "day-text") : ""}<div class="day-section">${dayButton("manual", dayIcon("book") + " Manual de instrucciones")}</div><details class="day-disclosure day-section"><summary>Mis últimos registros${records.length ? ` · ${records.length}` : ""}</summary>${records.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${l.reportKind ? "Aviso" : "Trabajo realizado"} · ${date(l.date)}</small></button>`).join("") || '<p class="day-muted">Tus trabajos y avisos aparecerán acá.</p>'}</details>`;
+  const shortages = typeof BoatStockAlerts === "undefined" ? 0 : state.products.filter(product => BoatStockAlerts.level(product)).length;
+  const overdue = dayTasks().filter(task => taskStatus(task) === "Vencido").length;
+  const sections = [
+    ["ops-stock", "stock", "Stock", "Existencias, compras y pedidos", shortages ? shortages + " para reponer" : ""],
+    ["maintenance", "tools", "Mantenimiento", "Tareas, equipos y trabajos", overdue ? overdue + (overdue === 1 ? " tarea vencida" : " tareas vencidas") : ""],
+    ["ops-agenda", "calendar", "Agenda del mes", "Salidas y fichas de huéspedes", ""],
+    ["ops-cash", "wallet", "Caja", role === "capitan" || session.admin ? "Cobros y gastos del barco" : "Gastos y pagos del barco", ""]
+  ];
+  return `<h1>Inicio</h1><nav class="area-grid" aria-label="Secciones del barco">${sections.map(([page, icon, title, detail, status]) =>
+    `<button type="button" data-day="${page}" class="area-tile area-${icon}"><span class="area-icon" aria-hidden="true">${dayIcon(icon)}</span><span class="area-copy"><strong>${title}</strong><small>${detail}</small>${status ? `<span class="area-status">${status}</span>` : ""}</span><span class="area-arrow" aria-hidden="true">›</span></button>`
+  ).join("")}</nav>`;
+}
+function dayMaintenance() {
+  const records = state.logs.filter(log => log.recordedById ? log.recordedById === session.id : (log.recordedBy || log.responsible) === session.name).slice().reverse().slice(0, 8);
+  const tasks = dayTasks();
+  return `${dayBack()}<h1>Mantenimiento</h1><div class="area-actions">
+    ${dayButton("tasks", "Mis tareas" + (tasks.length ? " · " + tasks.length : ""), "", "day-primary")}
+    ${writable() ? dayButton("work", "Registrar trabajo") + dayButton("problem", "Avisar un problema") : ""}
+    ${dayButton("equipment", "Equipos del barco")}
+    ${session.admin ? action("newTask", "Nueva tarea", "", "day-secondary") : ""}
+  </div><details class="day-disclosure"><summary>Manual e historial</summary>
+    ${dayButton("manual", "Manual de instrucciones")}${dayButton("updates", "Avisos y novedades")}
+    <h2>Mis últimos registros</h2>${records.map(log => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(log.id)}"><strong>${esc(log.title)}</strong><small>${date(log.date)}</small></button>`).join("") || empty("Todavía no registraste trabajos.")}</details>`;
+}
+function dayEquipment() {
+  return `${dayButton("maintenance", "← Mantenimiento", "", "day-back")}<h1>Equipos del barco</h1>
+    ${writable() ? action("newEquipment", "Agregar equipo", "", "day-secondary") : ""}
+    ${state.boat.equipment.map(item => `<article class="day-inventory"><h2>${esc(item.name)}</h2>${[item.system, item.model, item.location].filter(Boolean).map(value => `<p>${esc(value)}</p>`).join("")}${item.identificationNote ? `<p>${esc(item.identificationNote)}</p>` : ""}${R.knownHours(item.hours) ? `<p>${esc(String(item.hours))} h</p>` : ""}${item.photo ? `<img class="day-reference" src="${esc(item.photo)}" alt="${esc(item.name)}">` : ""}${writable() ? action("editEquipment", "Actualizar equipo", item.id, "day-secondary") : ""}</article>`).join("") || empty("Todavía no hay equipos cargados en este barco.")}`;
 }
 function dayPhotoFields() {
   return `<label class="day-photo-input">Agregar fotos<input name="photos" type="file" accept="image/*" multiple><small>Hasta 3 fotos. Podés usar la cámara o elegir de la galería.</small></label><div id="dayPhotoPreview" class="attachments" aria-live="polite"></div>`;
@@ -94,29 +136,29 @@ function dayManualChapterRole(section) {
 function dayManualAppGuide(selected) {
   const steps = {
     capitan: [
-      "En Reservas revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
-      "En Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
+      "En Agenda del mes abrí la ficha y revisá fechas, pasajeros, preferencias y observaciones antes de cada embarque. Pedí a administración que complete cualquier dato faltante.",
+      "En Mantenimiento → Mis tareas registrá los controles y trabajos técnicos que te corresponden, con fecha, observaciones, fotos y materiales realmente utilizados. Si no podés hacer una tarea, usá No pude hacer esta tarea.",
       "Coordiná el trabajo de la tripulación y solicitá a administración las asignaciones o cambios de programación. Tu acceso no permite crear usuarios ni reasignar tareas.",
       "En Stock y pedidos revisá faltantes y descargá el pedido consolidado. Entregá a administración el conteo, los comprobantes y el detalle de la mercadería recibida. Si la compra ya se registró por recepción, indicá que el comprobante corresponde a un gasto sin entrada de stock.",
-      "Informá cobros únicamente cuando aparezca una instrucción verificada en una reserva asignada a tu cuenta. Registrá el importe recibido y el medio o comprobante; administración confirma la recepción."
+      "En Caja abrí Cobros de huéspedes. Cuando recibas en efectivo el importe completo autorizado, confirmá el cobro una sola vez. Si recibiste otro importe, consultá a administración."
     ],
     chef: [
-      "Antes de planificar el menú, revisá Reservas: alimentación, alimentos a evitar, bebidas y celebraciones. Un dato no informado debe consultarse; no significa ausencia de restricciones.",
+      "En Agenda del mes consultá alimentación, alergias, bebidas y celebraciones antes de planificar el menú. Consultá a administración los datos pendientes.",
       "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
       "En Stock y pedidos filtrá por Bebidas y mercadería para consultar cantidades y pedir reposición. Entregá los conteos y comprobantes a administración. Registrá cada consumo una sola vez, en inventario o como material del trabajo.",
-      "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración gestiona la aprobación y compra, y el capitán o administración registra la recepción.",
+      "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración confirma la recepción de lo que llegó.",
       "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
     ],
     marinero: [
       "Consultá tu rutina diaria del Apéndice A y el ciclo de limpieza del Apéndice B. Los horarios son referencias del manual; coordiná los ajustes con el capitán.",
-      "En Mis tareas revisá limpieza, conservación y mantenimiento asignado. Al terminar registrá fecha, observaciones, fotos y materiales utilizados.",
+      "En Mantenimiento → Mis tareas revisá limpieza, conservación y mantenimiento asignado. Al terminar registrá fecha, observaciones, fotos y materiales utilizados.",
       "Si falta un material o no podés completar una tarea, registrá el impedimento y avisá al capitán. La tarea debe permanecer pendiente hasta realizarse.",
-      "En Stock y pedidos podés cargar una foto o lista de limpieza, insumos para huéspedes y materiales operativos. Elegí conteo, compra recibida, gasto o faltantes; revisá lo leído. Administración confirma existencias y gastos. En Pedidos anotá los faltantes. Indicá cantidad, unidad, detalle y urgencia cuando corresponda.",
-      "Revisá Reservas para preparar camarotes, baños y atención al huésped. Coordiná servicio de mesa con Chef y maniobras con el capitán, según el manual."
+      "En Stock podés registrar consumos y pedir reposición. Indicá qué falta y en qué cantidad. Pasale a administración el conteo físico o el comprobante de una compra.",
+      "Consultá Agenda del mes para preparar camarotes, baños y atención al huésped. Coordiná servicio de mesa con Chef y maniobras con el capitán, según el manual."
     ]
   };
   if (!steps[selected]) return "";
-  steps[selected].push("En Mi día revisá los faltantes de stock. Los avisos aparecen al llegar al mínimo definido y al agotarse un insumo. Registrá cada consumo y recepción para mantenerlos actualizados. En Notificaciones → Activar en este teléfono habilitá los avisos; en iPhone, abrí A bordo desde su icono en la pantalla de inicio. Administración define los mínimos reales en Inventario.");
+  steps[selected].push("En Stock revisá los faltantes. Los avisos aparecen al llegar al mínimo definido y al agotarse un insumo. Registrá cada consumo y recepción para mantenerlos actualizados. En Notificaciones → Activar en este teléfono habilitá los avisos; en iPhone, abrí A bordo desde su icono en la pantalla de inicio. Administración define los mínimos reales en Inventario.");
   return `<section class="day-note"><h2>Cómo usar A bordo · ${esc(dayRoleName(selected))}</h2><ol>${steps[selected].map(step => `<li>${esc(step)}</li>`).join("")}</ol><p>Ante una urgencia, contactá directamente al capitán o a administración. Registrar un aviso no garantiza que alguien lo haya leído.</p></section>`;
 }
 function dayManualBody() {
@@ -138,11 +180,14 @@ function dayUpdates() {
   return `${dayBack()}<h1>Avisos y novedades</h1><p class="day-muted">${session.admin ? "Las novedades de otras personas se comprueban cada minuto mientras la app está abierta." : "Consultá tus avisos y usá Actualizar para ver los cambios."}</p>${dayButton("updates", "Actualizar")}${session.admin && unseenActivity.length ? action("markActivityRead", "Marcar novedades como vistas", "", "text-btn") : ""}<h2 class="day-section">Avisos del barco</h2>${reports.map(l => `<article class="day-inventory">${badge(l.resolvedAt ? "Atendido" : l.urgent ? "Urgente" : "Pendiente", l.resolvedAt ? "ok" : l.urgent ? "bad" : "warn")}<h2>${esc(l.title)}</h2><p>${esc(l.notes)}</p><p class="day-muted">${esc(l.recordedBy || l.responsible)} · ${date(l.date)}</p>${action("showLog", "Ver detalle y fotos", l.id, "text-btn")}${dayManager() && !l.resolvedAt ? dayButton("resolve", "Marcar atendido", l.id, "day-text") : ""}</article>`).join("") || empty("No hay avisos registrados.")}${dayManager() ? `<h2 class="day-section">Últimos registros</h2>${recent.map(l => `<button type="button" class="day-history" data-action="showLog" data-id="${esc(l.id)}"><strong>${esc(l.title)}</strong><small>${esc(l.recordedBy || l.responsible)} · ${date(l.date)} · ${l.reportKind ? "Aviso" : "Trabajo"}</small></button>`).join("") || empty("Todavía no hay registros.")}` : ""}`;
 }
 function renderDay() {
-  $("#dayHeader").innerHTML = `<button type="button" data-day="home" class="day-brand">${dayIcon("anchor")} A bordo</button><span>${esc(state.boat.name)}</span>`;
+  const boatLabel = boats.length > 1 ? "" : `<span class="area-boat">${esc(state.boat.name)}</span>`;
+  $("#dayHeader").innerHTML = `<button type="button" data-day="home" class="day-brand" aria-label="A bordo · Inicio">${dayIcon("anchor")} A bordo</button>${boatLabel}
+    <details class="area-account"><summary aria-label="Menú de cuenta y ajustes"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></summary>
+    <div><strong>${esc(session.name)}</strong><small>${session.admin ? "Administración" : esc(dayRoleName(role))}</small>
+    ${dayButton("ops-notifications", "Notificaciones", "", "day-text")}${dayManager() ? dayButton("manage", "Administrar", "", "day-text") + dayButton("ops-setup", "Preparar barco", "", "day-text") : ""}${action("logout","Salir","","text-btn")}</div></details>`;
   $("#notice").innerHTML = activityNotice();
-  const reports = state.logs.filter(l => l.reportKind && !l.resolvedAt && (dayManager() || (l.recordedBy || l.responsible) === session.name));
-  let body = dayPage === "home" ? dayHome() : dayPage === "tasks" ? `${dayBack()}<h1>Mis tareas</h1><p class="day-muted">${dayManager() ? "Revisá todas las tareas o filtrá por rol. " : `Tareas de ${dayRoleName(role)} y las compartidas con toda la tripulación. `}Las vencidas aparecen primero.</p>${dayManager() ? dayRolePicker("taskRole", dayTaskRole) + '<p class="day-muted">Cada rol incluye también las tareas compartidas.</p>' : ""}${dayGroupedTasks() || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("home", "Volver a mi día", "", "day-primary")}` : dayWorkForm(dayPage);
-  $("#content").innerHTML = `<div class="day-content">${body}<div class="day-footer">${dayButton("updates", dayIcon("bell") + ` Avisos${reports.length ? ` · ${reports.length} ${reports.length === 1 ? "pendiente" : "pendientes"}` : ""}`, "", "day-text")}${dayManager() ? dayButton("manage", "Administrar", "", "day-text") : ""}${action("logout", "Salir", "", "text-btn")}</div></div>`;
+  let body = dayPage === "home" ? dayHome() : dayPage === "maintenance" ? dayMaintenance() : dayPage === "equipment" ? dayEquipment() : dayPage.startsWith("ops-") ? "" : dayPage === "tasks" ? `${dayBack()}<h1>Mis tareas</h1><p class="day-muted">${dayManager() ? "Revisá todas las tareas o filtrá por rol. " : `Tareas de ${dayRoleName(role)} y las compartidas con toda la tripulación. `}Las vencidas aparecen primero.</p>${dayManager() ? dayRolePicker("taskRole", dayTaskRole) + '<p class="day-muted">Cada rol incluye también las tareas compartidas.</p>' : ""}${dayGroupedTasks() || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("maintenance", "Volver a Mantenimiento", "", "day-primary")}` : dayWorkForm(dayPage);
+  $("#content").innerHTML = `<div class="day-content${dayPage === "home" ? " area-home" : ""}">${body}</div>`;
   if (dayPage === "stock") { dayStockItems(); $("#dayStockSearch").oninput = e => dayStockItems(e.target.value); }
   if ($("#dayForm")) {
     $("#dayForm").onsubmit = saveDayForm;
@@ -213,6 +258,12 @@ document.addEventListener("click", async event => {
       if (page === "manualRole") dayManualRole = button.dataset.id;
       else if (dayManager()) { dayTaskRole = button.dataset.id; dayEquipmentGroup = ""; }
       render(); return;
+    }
+    if (page === "ops-intake") dayIntakeParent = ["ops-cash","ops-expenses"].includes(dayPage) ? "ops-cash" : "ops-stock";
+    if (page === "home" && location.search) {
+      const url = new URL(location.href);
+      url.searchParams.delete("reservation"); url.searchParams.delete("notifications");
+      history.replaceState(null, "", url);
     }
     if (page === "manage") { if (dayManager()) navigate("panel"); return; }
     if (page === "reloadDraft") {

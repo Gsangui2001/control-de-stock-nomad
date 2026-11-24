@@ -193,12 +193,13 @@ document.addEventListener('click',async event=>{
  const context=intakeContext();
  try{
   const action=button.dataset.intake,form=$('#intakeReview');
-  if(['ticket','open','back','reject'].includes(action)){
+  if(action==='ticket' || action==='expense') dayIntakeParent=action==='ticket'?'ops-stock':'ops-cash';
+  if(['ticket','expense','open','back','reject'].includes(action)){
    const pending=await draftRead(context.pendingKey);
    if(!context.active())return;
    if(pending){intakeBoat=context.draftKey;intakeDraft=pending;dayPage='ops-intake';navigate('day');return;}
   }
-  if(action==='ticket'){intakeStartKind='purchase';intakeDraft=null;dayPage='ops-intake';navigate('day');return;}
+  if(action==='ticket' || action==='expense'){intakeStartKind=action==='ticket'?'purchase':'expense';intakeDraft=null;dayPage='ops-intake';navigate('day');return;}
   if(action==='open'){intakeDraft=structuredClone(intakeDocs.find(d=>d.id===button.dataset.id));intakeDraft.reviewRevision=revision;render();}
   if(action==='restore'){intakeDraft=intakeRestore;render();}
   if(action==='back'){if(form)intakeRead(form);await intakeRemember(context,intakeDraft);const saved=await draftRead(context.draftKey);if(context.active()){intakeDraft=null;intakeRestore=saved;render();}}

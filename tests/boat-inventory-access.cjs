@@ -6,7 +6,7 @@ const sandbox={document:{addEventListener(){}},setInterval(){},renderDay(){},loa
  dayNormalize:s=>String(s).toLowerCase()};
 vm.createContext(sandbox);
 for(const file of ['operations.js','fleet-stock.js','intake.js'])vm.runInContext(fs.readFileSync('public/a-bordo/'+file,'utf8'),sandbox);
-vm.runInContext("opsData={requests:[],fleet:[]};intakeDocs=[];intakeBoat=intakeContext().draftKey;",sandbox);
+vm.runInContext("opsData={requests:[],fleet:[],transfers:[]};intakeDocs=[];intakeBoat=intakeContext().draftKey;",sandbox);
 for(const role of ['administrador','capitan','chef','marinero','lector','encargado']){
  sandbox.role=role;sandbox.session.admin=role==='administrador';
  const stock=vm.runInContext('opsStock()',sandbox);

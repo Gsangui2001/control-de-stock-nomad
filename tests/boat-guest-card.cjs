@@ -128,8 +128,20 @@ test('agenda hides amounts from roles other than captain and handles an empty mo
  const empty=agendaApp([]);assert.match(empty.briefAgendaView(),/No hay charters confirmados este mes\./);
  vm.runInContext(`briefAgendaMonth='2027-01';`,empty);assert.match(text(empty.briefAgendaView()),/Enero 2027/);
 });
-test('agenda entry is only for captain, manager or admin of the Nomade',()=>{
- const a=app();a.role='chef';assert.equal(a.briefAgendaAllowed(),false);assert.match(a.briefAgendaView(),/disponible para el capitán/);
+test('full agenda is restricted; the crew calendar uses only published cards',()=>{
+ const a=app();a.role='chef';assert.equal(a.briefAgendaAllowed(),false);
+ vm.runInContext("briefAgendaMonth='2026-11';",a);
+ const calls=[];a.opsFetch=async op=>{calls.push(op);return [];};
+ assert.match(a.briefAgendaView(),/No hay fichas de huéspedes publicadas/);
+ a.opsReservations=[
+  {id:'sent',start:'2026-11-05',end:'2026-11-08',name:'Ficha enviada de prueba',brief:{version:2},captainBalance:{amountUsd:12345}},
+  {id:'draft',start:'2026-11-09',end:'2026-11-15',name:'Borrador privado',brief:{version:0}},
+ ];
+ const calendar=text(a.briefAgendaView());
+ assert.match(calendar,/Ficha enviada de prueba/);
+ assert.doesNotMatch(calendar,/Borrador privado|12345|USD/);
+ assert.deepEqual(calls,[]);
+ a.opsReservations=[];
  a.role='capitan';assert.equal(a.briefAgendaAllowed(),true);
  a.state={boat:{name:'Otro barco'}};assert.equal(a.briefAgendaAllowed(),false);
  const crew=app();crew.role='capitan';crew.opsReservations=[{id:'r',name:'Guest',brief:{version:1}}];assert.match(crew.briefReservationsView(),/data-day="ops-agenda"/);

@@ -70,3 +70,61 @@
 .day-reference { max-height:240px; max-width:100%; object-fit:contain; border-radius:12px; }
 .daily-mode button:focus-visible,.daily-mode summary:focus-visible { outline:3px solid #368d7d; outline-offset:3px; }
 @media(max-width:420px) { .day-content{padding:21px 16px 12px} .day-top{padding:17px} .day-tile{padding:16px 12px;font-size:15px;min-height:137px} .day-content h1{font-size:25px} }
+
+.daily-mode { background:#eaf0ef; }
+.daily-mode .app-shell { max-width:880px; background:#fbfcfa; }
+.daily-mode .day-top { min-height:70px; padding:12px clamp(16px,4vw,42px); justify-content:flex-start; }
+.day-brand { min-height:44px; }
+.area-boat, .daily-mode #opsBoat { margin-left:auto; }
+.area-boat { color:#e5f1ef; font-size:15px; font-weight:600; }
+.area-account { position:relative; }
+.area-account summary { color:white; display:grid; place-items:center; width:44px; height:44px; border-radius:10px; cursor:pointer; list-style:none; }
+.area-account summary::-webkit-details-marker { display:none; }
+.area-account summary:hover, .area-account[open] summary { background:#234358; }
+.area-account > div { position:absolute; top:calc(100% + 7px); right:0; z-index:4; min-width:205px; padding:14px; border:1px solid #cad8d4; background:#fff; border-radius:13px; box-shadow:0 12px 34px #16373329; color:#193d38; }
+.area-account strong, .area-account small { display:block; overflow-wrap:anywhere; }
+.area-account small { color:#536b65; margin:4px 0 10px; }
+.area-account button { display:block; width:100%; min-height:44px; text-align:left; padding:8px 4px; }
+.daily-mode .day-content { max-width:740px; margin:0 auto; padding:26px clamp(16px,4vw,34px) 40px; }
+.daily-mode .area-home { padding-top:clamp(28px,6vw,52px); }
+.area-home h1 { margin:0 0 22px; font-size:clamp(30px,4vw,39px); letter-spacing:-1.2px; }
+.area-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.area-tile { --accent:#236d58; --pale:#e0efe5; display:grid; grid-template-columns:1fr auto; align-content:space-between; align-items:center; gap:20px 8px; text-align:left; min-height:154px; padding:20px; border:1px solid #d4dfd9; border-radius:16px; color:#18382f; background:#fff; box-shadow:0 2px 4px #1b393007; cursor:pointer; }
+.area-tile:hover { border-color:var(--accent); box-shadow:0 3px 12px #1b393012; }
+.area-tools { --accent:#975719; --pale:#fbebd4; }
+.area-calendar { --accent:#315f96; --pale:#e5edf8; }
+.area-wallet { --accent:#774c80; --pale:#f1e6f2; }
+.area-icon { display:grid; place-items:center; width:46px; height:46px; border-radius:13px; color:var(--accent); background:var(--pale); }
+.area-icon svg { width:25px; height:25px; }
+.area-copy { grid-column:1/-1; grid-row:2; min-width:0; }
+.area-copy strong { display:block; font-size:22px; line-height:1.2; letter-spacing:-.45px; }
+.area-copy small { display:block; margin-top:5px; font-size:14px; color:#526761; line-height:1.35; }
+.area-status { display:inline-block; margin-top:8px; font-weight:650; font-size:13px; color:#885311; }
+.area-arrow { grid-row:1; grid-column:2; font-size:26px; color:#697e75; line-height:1; }
+.area-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,205px),1fr)); gap:9px; margin:18px 0; }
+.area-actions a { text-decoration:none; text-align:center; }
+.area-summary { margin:4px 0 16px; color:#526761; }
+.area-subnav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 14px; }
+.area-subnav .day-back { margin:0; padding:8px 0; }
+.area-subnav .day-secondary { width:auto; min-height:44px; padding:6px 12px; font-size:13px; }
+.access-mode { background:#edf3ef; }
+.access-mode .app-shell { display:block; min-height:100dvh; }
+.access-mode .sidebar, .access-mode .topbar, .access-mode main > footer { display:none; }
+.access-mode main { margin:0; padding:clamp(32px,13vh,112px) 16px; }
+.access-card { max-width:435px; margin:0 auto; padding:clamp(24px,5vw,40px); background:#fff; border:1px solid #cddbd5; border-radius:20px; box-shadow:0 6px 32px #153b2e0c; }
+.access-brand { display:flex; gap:9px; align-items:center; font-size:20px; color:#205d52; font-weight:650; margin-bottom:24px; }
+.access-brand svg { width:30px; height:30px; }
+.access-card h1 { font-size:30px; margin:0 0 8px; letter-spacing:-1px; }
+.access-card form { display:grid; gap:14px; margin-top:24px; }
+.access-card label { margin:0; }
+.access-card input { font-size:16px; min-height:46px; }
+.access-card form .primary { min-height:48px; width:100%; }
+.access-card .form-error:empty { display:none; }
+@media(max-width:570px) {
+  .area-grid { grid-template-columns:1fr; gap:10px; }
+  .area-tile { grid-template-columns:46px minmax(0,1fr) auto; align-content:center; min-height:86px; gap:12px; padding:14px; }
+  .area-copy { grid-column:2; grid-row:1; }
+  .area-copy strong { font-size:19px; }
+  .area-copy small { font-size:13px; }
+  .area-arrow { grid-column:3; }
+}
