@@ -3,7 +3,7 @@ import {createClient} from '@supabase/supabase-js';
 import {createHash} from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import {z} from 'zod';
-import {intakeData,intakeKind,parseIntakeList,validateIntakeApply} from '@/lib/boat-intake';
+import {intakeData,intakeKind,IntakeListError,readIntakeList,validateIntakeApply} from '@/lib/boat-intake';
 import {flushBoatPush} from '@/lib/boat-push';
 export const runtime='nodejs';export const dynamic='force-dynamic';export const maxDuration=60;
 let aiRetryAfter=0;
@@ -12,6 +12,7 @@ const source=z.object({text:z.string().max(30000),photos:z.array(z.string().max(
 const schemas={
  scan:z.object({boat,text:z.string().max(30000).default(''),images:z.array(z.string().regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/).max(1200000)).max(3).default([])}),
  submit:z.object({boat,key,kind:intakeKind,source,data:intakeData}),
+ ticket_confirm:z.object({boat,key,kind:z.literal('purchase'),source,data:intakeData,revision:z.number().int().nonnegative(),confirmed:z.literal(true)}),
  apply:z.object({boat,key,id:key,revision:z.number().int().nonnegative(),kind:intakeKind,data:intakeData,confirmed:z.literal(true)}),
  reject:z.object({boat,key,id:key})
 };
@@ -22,7 +23,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}){
   const client=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{auth:{persistSession:false}});
   const session=createHash('sha256').update(req.cookies.get('boat_session')?.value||'').digest('hex');
   const rpc=async(operation:string,payload:Record<string,unknown>)=>{
-   const {data,error}=await client.rpc('boat_intake_rpc',{server_key:secret,operation,payload:{...payload,session}}).abortSignal(AbortSignal.timeout(15000));
+   const {data,error}=await client.rpc(operation==='ticket_confirm'?'boat_inventory_rpc':'boat_intake_rpc',{server_key:secret,operation,payload:{...payload,session}}).abortSignal(AbortSignal.timeout(15000));
    if(error)throw Object.assign(Error(error.message),{status:error.code==='28000'?401:error.code==='42501'?403:['PT409','40001','23505'].includes(error.code)?409:/^(P0001|22|23)/.test(error.code||'')?400:503});
    return data;
   };
@@ -35,6 +36,8 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}){
   if(op==='scan'){
    await rpc('scan_access',{boat:payload.boat});
    if(!payload.text&&!payload.images.length)return reply({error:'Adjuntá una foto o pegá una lista.'},400);
+   const list=payload.images.length?null:readIntakeList(payload.text);
+   if(list?.tabular)return reply({data:list.data,mode:'list',needsOcr:false,notice:'Lista leída. Revisá las filas y completá el área antes de confirmar.'});
    let data=null;
    if(process.env.ANTHROPIC_API_KEY&&Date.now()>aiRetryAfter){
     try{
@@ -46,12 +49,12 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}){
      data=intakeData.parse(JSON.parse(text.replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')));
     }catch{aiRetryAfter=Date.now()+600000;}
    }
-   return reply(data?{data,mode:'ai',needsOcr:false}:{data:parseIntakeList(payload.text),mode:'basic',needsOcr:payload.images.length>0,notice:'Lectura básica: revisá cada fila. Los datos que no se reconocieron quedan pendientes.'});
+   return reply(data?{data,mode:'ai',needsOcr:false}:{data:(list??readIntakeList(payload.text)).data,mode:'basic',needsOcr:payload.images.length>0,notice:'Lectura básica: revisá cada fila. Los datos que no se reconocieron quedan pendientes.'});
   }
-  if(op==='apply'){try{validateIntakeApply(payload.kind,payload.data);}catch(e){return reply({error:(e as Error).message},400);}}
+  if(op==='apply'||op==='ticket_confirm'){try{validateIntakeApply(payload.kind,payload.data);}catch(e){return reply({error:(e as Error).message},400);}}
   const result=await rpc(op,payload);
-  if(op==='apply')await flushBoatPush(5).catch(()=>{}); // Intake is committed; pending delivery retries remain durable.
+  if(op==='apply'||op==='ticket_confirm')await flushBoatPush(5).catch(()=>{}); // Intake is committed; pending delivery retries remain durable.
   return reply(result);
- }catch(error){return reply({error:error instanceof z.ZodError?'Revisá los campos, formatos y cantidades.':(error as Error).message||'No se pudo confirmar la carga.'},error instanceof z.ZodError||error instanceof SyntaxError?400:(error as any).status||503);}
+ }catch(error){return reply({error:error instanceof z.ZodError?'Revisá los campos, formatos y cantidades.':(error as Error).message||'No se pudo confirmar la carga.'},error instanceof z.ZodError||error instanceof SyntaxError||error instanceof IntakeListError?400:(error as any).status||503);}
 }
 export const GET=handle;export const POST=handle;

@@ -1,3 +1,4 @@
+const { validEquipmentList } = require('@/public/a-bordo/boat-rules.js');
 import { createClient } from '@supabase/supabase-js';
 import { createHash, randomBytes, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,8 +24,8 @@ function validateState(s:any,boat:string) {
  for(const key of ['products','tasks','logs','movements','purchases','cameras']) {
   if(!Array.isArray(s[key])||s[key].length>20000||s[key].some((x:any)=>!x||typeof x.id!=='string')||new Set(s[key].map((x:any)=>x.id)).size!==s[key].length)throw new ApiError(400,'Datos inválidos en '+key);
  }
- if(!Array.isArray(s.boat.equipment)||s.boat.equipment.some((e:any)=>!e||typeof e.id!=='string'||typeof e.name!=='string'||!number(e.hours)))throw new ApiError(400,'Equipos inválidos.');
  const photo=(v:any)=>typeof v==='string'&&new RegExp('^/api/boat/photos\\?boat='+boat+'&id=[a-f0-9-]{36}$').test(v);
+ if(!validEquipmentList(s.boat.equipment,photo))throw new ApiError(400,'Equipos inválidos.');
  for(const p of s.products){required(p.name);if(typeof p.unit!=='string'||['current','min','cost'].some(k=>!number(p[k]))||(p.photo&&!photo(p.photo)))throw new ApiError(400,'Insumo inválido.');}
  for(const l of s.logs)if(typeof l.title!=='string'||typeof l.date!=='string'||!Array.isArray(l.lines)||!Array.isArray(l.photos)||l.photos.some((v:any)=>!photo(v)))throw new ApiError(400,'Trabajo inválido.');
  for(const p of s.purchases)if(!Array.isArray(p.lines)||typeof p.date!=='string')throw new ApiError(400,'Compra inválida.');
@@ -99,8 +100,12 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
     body.state.manual=before.state.manual??{content:'',updatedAt:'',updatedBy:''};
    }
    validateState(body.state,boat);if(!Number.isSafeInteger(body.revision)||body.revision<0)throw new ApiError(400,'Revisión inválida.');
-   if(!auth.user.admin&&before.role!=='encargado'){
-    try{protectCrewHistory(before.state,body.state);}catch(error){throw new ApiError(403,(error as Error).message);}
+   // Inventory and receipt uploads belong exclusively to the administrator.
+   // Other roles may still consume material when recording their own work.
+   if(!auth.user.admin){
+    try{protectCrewHistory(before.state,body.state,before.role==='encargado' ? auth.user.name : undefined);}catch(error){throw new ApiError(403,(error as Error).message);}
+   }
+   if(!auth.user.admin){
     try{body.state.tasks=mergeCrewTasks(before.state.tasks,body.state.tasks,auth.user,before.role);}catch(error){throw new ApiError(403,(error as Error).message);}
     for(const log of body.state.logs){
      if(log.taskId&&!before.state.logs.some((l:any)=>l.id===log.id)){

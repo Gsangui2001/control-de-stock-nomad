@@ -9,6 +9,31 @@
       );
     return n;
   }
+  function knownHours(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1e12;
+  }
+  function validEquipmentList(equipment, validPhoto) {
+    if (!Array.isArray(equipment) || equipment.length > 20000) return false;
+    const ids = new Set();
+    for (const entry of equipment) {
+      if (!entry || typeof entry.id !== "string" || !entry.id.trim() || ids.has(entry.id)) return false;
+      if (typeof entry.name !== "string" || !entry.name.trim()) return false;
+      if (entry.hours != null && !knownHours(entry.hours)) return false;
+      if (entry.location !== undefined && (typeof entry.location !== "string" || entry.location.length > 240)) return false;
+      if (entry.identificationNote !== undefined && (typeof entry.identificationNote !== "string" || entry.identificationNote.length > 1000)) return false;
+      if (entry.photo !== undefined && entry.photo !== "" && !validPhoto(entry.photo)) return false;
+      ids.add(entry.id);
+    }
+    return true;
+  }
+  function editedHours(value, previous) {
+    const reading = value === "" || value == null ? null : number(value, "Horas del equipo");
+    if (reading !== null && !knownHours(reading)) throw Error("Revisá las horas del equipo.");
+    if (knownHours(previous) && (reading === null || reading < previous)) {
+      throw Error("Conservá la última lectura o registrá una mayor.");
+    }
+    return reading;
+  }
   function consume(products, lines) {
     const grouped = new Map();
     for (const line of lines)
@@ -34,6 +59,8 @@
     }));
   }
   function due(plan, today, hours) {
+    const hasThreshold = plan.nextHours != null && plan.nextHours !== "";
+    const compareHours = hasThreshold && knownHours(hours);
     if (!plan.nextDate && (plan.nextHours == null || plan.nextHours === "")) {
       if (plan.routineEvent) return "Según operación";
       if (plan.intervalDays || plan.intervalMonths || plan.intervalHours || plan.routineCycle) return "Primera realización";
@@ -41,9 +68,7 @@
     }
     if (
       (plan.nextDate && plan.nextDate < today) ||
-      (plan.nextHours !== null &&
-        plan.nextHours !== "" &&
-        Number(plan.nextHours) <= hours)
+      (compareHours && Number(plan.nextHours) <= hours)
     )
       return "Vencido";
     if(plan.nextDate === today) return "Hoy";
@@ -54,11 +79,10 @@
       : Infinity;
     if (
       days <= 7 ||
-      (plan.nextHours !== null &&
-        plan.nextHours !== "" &&
-        Number(plan.nextHours) - hours <= 10)
+      (compareHours && Number(plan.nextHours) - hours <= 10)
     )
       return "Próximo";
+    if (hasThreshold && !knownHours(hours)) return "Lectura pendiente";
     return "Al día";
   }
   function scheduleLabel(task) {
@@ -77,6 +101,7 @@
     return value.toISOString().slice(0,10);
   }
   function completeTask(task, date, hours, cycleDay) {
+    if (task.intervalHours && !knownHours(hours)) throw Error("Registrá las horas leídas para reprogramar esta tarea.");
     task.lastCompleted = date;
     if (task.routineCycle) {
       const day = Number(cycleDay);
@@ -92,6 +117,6 @@
     } else task.done = true;
     return task;
   }
-  root.BoatRules = { round, number, consume, due, scheduleLabel, repeatDate, completeTask };
+  root.BoatRules = { round, number, knownHours, validEquipmentList, editedHours, consume, due, scheduleLabel, repeatDate, completeTask };
   if (typeof module !== "undefined") module.exports = root.BoatRules;
 })(typeof globalThis !== "undefined" ? globalThis : this);

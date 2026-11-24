@@ -5,10 +5,10 @@ const opsButton=(page,label)=>`<button type="button" class="day-secondary" data-
 const opsAction=(op,id,label,extra={})=>`<button type="button" class="day-secondary" data-op="${op}" data-id="${esc(id)}" ${Object.entries(extra).map(([k,v])=>`data-${k}="${esc(v)}"`).join(' ')}>${label}</button>`;
 const opsField=(label,name,type='text',value='',attrs='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
 const opsAmount=(name='quantity',max='')=>opsField('Cantidad',name,'number','',`required min="0.0001" step="0.0001" ${max?`max="${max}"`:''}`);
-const opsArea=(selected="")=>`<label>Área<select name="area"><option value="gastronomia" ${selected==="gastronomia"?"selected":""}>Cocina y bebidas</option><option value="tecnica" ${selected==="tecnica"?"selected":""}>Limpieza, repuestos y otros insumos</option></select></label>`;
+const opsArea=(selected="")=>`<label>Área<select name="area"><option value="gastronomia" ${selected==="gastronomia"?"selected":""}>Bebidas y mercadería</option><option value="tecnica" ${selected==="tecnica"?"selected":""}>Materiales, repuestos y limpieza</option></select></label>`;
 const opsForm=(operation,body,id='')=>`<form class="ops-form" data-operation="${operation}" data-id="${esc(id)}">${body}<p class="form-error" role="alert"></p><button class="day-primary" type="submit">Guardar</button></form>`;
-async function opsFetch(operation,body) {
- let response;try{response=await fetch('/api/boat-ops/'+operation+(body?'':'?boat='+encodeURIComponent(boatId)),{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify({...body,boat:boatId}):undefined});}catch{throw Error('No se pudo confirmar el guardado. El borrador queda en este dispositivo; reintentá al recuperar conexión.');}
+async function opsFetch(operation,body,owner=boatId) {
+ let response;try{response=await fetch('/api/boat-ops/'+operation+(body?'':'?boat='+encodeURIComponent(owner)),{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify({...body,boat:owner}):undefined});}catch{throw Error(body?'No se pudo confirmar el guardado. Recuperá la conexión para verificarlo.':'No se pudo actualizar la información. Revisá la conexión y volvé a intentar.');}
  const data=await response.json();if(!response.ok){const error=Error(data.error||'No se pudo completar');error.status=response.status;throw error;}return data;
 }
 async function opsReload() {
@@ -18,7 +18,7 @@ async function opsReload() {
   const [data,reservations]=await Promise.all([opsFetch('overview'),opsFetch('reservations')]);
   if(token!==opsRenderToken||boat!==boatId)return;
   opsData=data;opsReservations=reservations;
- }catch(e){opsError=e.message;}finally{if(token===opsRenderToken){opsLoading=false;if(view==='day')render();}}
+ }catch(e){if(token===opsRenderToken&&boat===boatId)opsError=e.message;}finally{if(token===opsRenderToken){opsLoading=false;if(view==='day')render();}}
 }
 function opsPreparation(){
  const missing=[];
@@ -34,12 +34,16 @@ function opsPreparation(){
 }
 function opsRequests(){
  const all=opsData.requests, seed=opsRequestSeed?.boat===boatId?opsRequestSeed:null;
- return `<h2>Pedidos y faltantes</h2>${opsAction("export_requests","","Descargar pedido consolidado")}<p>Los faltantes se acumulan por área. Una compra suma existencias al registrar su recepción.</p><details class="day-disclosure" ${seed?"open":""}><summary>＋ Falta algo</summary>${opsForm('request_create',opsArea(seed?.area)+opsField('Producto','name','text',seed?.name||'','required maxlength="140"')+opsField('Unidad (un, kg, L, caja…)','unit','text',seed?.unit||'','required maxlength="20"')+opsAmount()+`<label>Detalle<textarea name="notes" maxlength="5000"></textarea></label><label class="check"><input name="urgent" type="checkbox">Urgente</label><label>Foto opcional<input name="photo" type="file" accept="image/*"></label>`)}</details>${['gastronomia','tecnica'].map(area=>`<h3>${area==='gastronomia'?'Cocina y bebidas':'Limpieza, repuestos y otros insumos'}</h3>${all.filter(q=>q.area===area).map(q=>`<article class="day-inventory"><h3>${esc(q.name)}</h3><p>${q.quantity} ${esc(q.unit)} · ${esc(q.status)}${q.urgent?' · URGENTE':''}</p><p>Recibido: ${q.received} · Pendiente: ${Number(q.quantity)-Number(q.received)}</p><p>${esc(q.notes)}</p>${q.photo?`<img class="day-reference" src="${esc(q.photo)}" alt="Faltante">`:''}<div class="ops-actions">${q.status==='borrador'&&(dayManager()||q.created_by===session.id)?opsAction('request_status',q.id,'Solicitar',{status:'solicitado'}):''}${dayManager()&&['solicitado','aprobado'].includes(q.status)?opsAction('request_status',q.id,q.status==='solicitado'?'Aprobar':'Marcar comprado',{status:q.status==='solicitado'?'aprobado':'comprado'}):''}${dayManager()&&Number(q.received)===0&&!['recibido','cancelado'].includes(q.status)?opsAction('request_status',q.id,'Cancelar',{status:'cancelado'}):''}</div>${q.status==='comprado'&&(dayManager()||role==='capitan')?`<details class="day-disclosure"><summary>Recibir mercadería</summary>${opsForm('request_receive',opsAmount('quantity',Number(q.quantity)-Number(q.received))+opsProductChoice(q.area,q.unit)+opsField('Ubicación','location','text','','required'),q.id)}</details>`:''}</article>`).join('')||empty('No hay pedidos en esta área.')}`).join('')}`;
+ return `<h2>Pedidos y faltantes</h2>${opsAction("export_requests","","Descargar pedido consolidado")}<p>Los faltantes se acumulan por área. Una compra suma existencias al registrar su recepción.</p>${writable()?`<details class="day-disclosure" ${seed?"open":""}><summary>＋ Falta algo</summary>${opsForm('request_create',opsArea(seed?.area)+opsField('Producto','name','text',seed?.name||'','required maxlength="140"')+opsField('Unidad (un, kg, L, caja…)','unit','text',seed?.unit||'','required maxlength="20"')+opsAmount()+`<label>Detalle<textarea name="notes" maxlength="5000"></textarea></label><label class="check"><input name="urgent" type="checkbox">Urgente</label><label>Foto opcional<input name="photo" type="file" accept="image/*"></label>`)}</details>`:''}${['gastronomia','tecnica'].map(area=>`<h3>${area==='gastronomia'?'Bebidas y mercadería':'Materiales, repuestos y limpieza'}</h3>${all.filter(q=>q.area===area).map(q=>`<article class="day-inventory"><h3>${esc(q.name)}</h3><p>${q.quantity} ${esc(q.unit)} · ${esc(q.status)}${q.urgent?' · URGENTE':''}</p><p>Recibido: ${q.received} · Pendiente: ${Number(q.quantity)-Number(q.received)}</p><p>${esc(q.notes)}</p>${q.photo?`<img class="day-reference" src="${esc(q.photo)}" alt="Faltante">`:''}<div class="ops-actions">${q.status==='borrador'&&(dayManager()||q.created_by===session.id)?opsAction('request_status',q.id,'Solicitar',{status:'solicitado'}):''}${dayManager()&&['solicitado','aprobado'].includes(q.status)?opsAction('request_status',q.id,q.status==='solicitado'?'Aprobar':'Marcar comprado',{status:q.status==='solicitado'?'aprobado':'comprado'}):''}${dayManager()&&Number(q.received)===0&&!['recibido','cancelado'].includes(q.status)?opsAction('request_status',q.id,'Cancelar',{status:'cancelado'}):''}</div>${q.status==='comprado'&&session.admin?`<details class="day-disclosure"><summary>Recibir mercadería</summary>${opsForm('request_receive',opsAmount('quantity',Number(q.quantity)-Number(q.received))+opsProductChoice(q.area,q.unit,q.name)+opsField('Ubicación','location','text','','required'),q.id)}</details>`:''}</article>`).join('')||empty('No hay pedidos en esta área.')}`).join('')}`;
 }
-function opsProductChoice(area,unit){return `<label>Sumar a<select name="productId"><option value="">Crear nuevo insumo</option>${state.products.filter(p=>(p.area||'tecnica')===area&&p.unit===unit).map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.location)}</option>`).join('')}</select></label>`;}
+function opsProductChoice(area,unit,name){
+ const normalized=value=>String(value||'').trim().normalize('NFC').toLowerCase();
+ const choices=state.products.filter(p=>(p.area||'tecnica')===area&&normalized(p.unit)===normalized(unit)&&normalized(p.name)===normalized(name));
+ return `<label>Ficha de destino<select name="productId" data-receive-product><option value="">Buscar en la ubicación o crear una ficha</option>${choices.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.location)}</option>`).join('')}</select></label>`;
+}
 function opsStock(){
  const products=state.products, open=opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status));
- return `<p class="day-eyebrow">${esc(state.boat.name)} · EXISTENCIAS Y REPOSICIÓN</p><h1>Stock y pedidos</h1><p>Consultá cantidades verificadas, registrá el consumo y agregá lo que falta.</p><div class="day-note">${products.length} insumos cargados · ${products.filter(p=>Number(p.current)===0).length} con cantidad cero registrada · ${open.length} pedidos abiertos</div><div class="ops-actions">${opsButton('intake','Cargar foto o lista')}${opsButton('expenses','Ver gastos')}${opsButton('requests','Ver pedidos y agregar faltantes')}</div><p class="day-muted">Faltante → Solicitado → Aprobado → Comprado → Recibido. El stock aumenta únicamente con la cantidad recibida; una solicitud no es una compra.</p><p class="day-muted">Los avisos dependen del conteo y los consumos registrados. ${dayManager()?'Definí el mínimo real de cada insumo en Administrar → Inventario → Editar.':'Pedí a administración que defina los mínimos reales.'} Sin mínimo definido, se avisa al llegar a cero. Activá los avisos del teléfono en Mi día → Notificaciones.</p>${!products.length?'<div class="day-note"><strong>Conteo inicial pendiente</strong><br>Todavía no se cargó el conteo inicial. Esto no significa que el barco esté vacío. Ya podés anotar faltantes en Pedidos. Usá Cargar foto o lista para enviar el conteo: producto, cantidad, unidad y ubicación. Administración lo confirma.</div>':''}${dayManager()?`<details class="day-disclosure"><summary>＋ Cargar cantidad contada</summary><p>Usá este formulario para un insumo nuevo. Para insumos existentes, revisá su ficha en Administrar → Inventario; no dupliques un producto para corregir su cantidad.</p>${opsForm('stock_add',opsArea()+opsField('Producto','name','text','','required maxlength="140"')+opsField('Unidad','unit','text','','required maxlength="20"')+opsField('Cantidad contada','quantity','number','','required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note'))}</details><details class="day-disclosure"><summary>Recuperar inventario gastronómico anterior</summary><p>Cargá el respaldo y verificá cada cantidad antes de guardar.</p><input id="legacyInventory" type="file" accept="application/json"><div id="legacyReview"></div></details>`:''}${products.length?`<label>Buscar insumo o ubicación<input id="opsStockSearch" type="search" placeholder="Nombre o lugar donde se guarda"></label><label>Filtrar por área<select id="opsStockArea"><option value="">Todas las áreas</option><option value="gastronomia">Cocina y bebidas</option><option value="tecnica">Limpieza, repuestos y otros insumos</option></select></label>`:''}<div id="opsStockList">${products.map(p=>`<article class="day-inventory" data-stock-search="${esc(dayNormalize(p.name+' '+p.location))}" data-stock-area="${esc(p.area||'tecnica')}"><div class="day-card-heading"><h2>${esc(p.name)}</h2><strong>${p.current} ${esc(p.unit)}</strong></div><p>${esc(p.location||'Ubicación pendiente')} · ${p.area==='gastronomia'?'Cocina y bebidas':'Limpieza, repuestos y otros insumos'}</p>${Number(p.current)===0?'<p class="ops-critical">Sin existencias registradas</p>':Number(p.min)>0&&Number(p.current)<=Number(p.min)?'<p class="ops-critical">Llegó al mínimo definido</p>':''}<p class="day-muted">${Number(p.min)>0?'Mínimo definido: '+p.min+' '+esc(p.unit):'Sin mínimo definido'}${p.expiryDate?' · Vence '+date(p.expiryDate):''}</p>${writable()?opsAction('request_product',p.id,'Pedir reposición'):''}${writable()&&Number(p.current)>0?`<details class="day-disclosure"><summary>Registrar consumo</summary><p>Registrá solo lo utilizado. Si ya lo descontaste como material de un trabajo, no lo cargues otra vez.</p>${opsForm('stock_consume',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsAmount('quantity',p.current)+opsField('Motivo','note','text','','required minlength="3"'))}</details>`:''}${(dayManager()||['chef','capitan'].includes(role))&&opsData.fleet.length>1&&Number(p.current)>0?`<details class="day-disclosure"><summary>Transferir a otro barco</summary>${opsForm('transfer_send',`<input type="hidden" name="productId" value="${esc(p.id)}"><label>Destino<select name="target">${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`+opsAmount('quantity',p.current))}</details>`:''}</article>`).join('')}</div><p id="opsStockNoMatch" hidden>No hay insumos con ese filtro.</p>${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<details class="day-disclosure"><summary>${esc(b.name)} · ${b.products.length} insumos</summary>${b.products.map(p=>`<p>${esc(p.name)} · ${p.current} ${esc(p.unit)} · ${esc(p.location)}</p>`).join('')||'<p>Sin conteo cargado.</p>'}</details>`).join('')}`;
+ return `<p class="day-eyebrow">${esc(state.boat.name)} · EXISTENCIAS Y REPOSICIÓN</p><h1>Stock y pedidos</h1><p>Consultá cantidades verificadas, registrá el consumo y agregá lo que falta.</p><div class="day-note">${products.length} insumos cargados · ${products.filter(p=>Number(p.current)===0).length} con cantidad cero registrada · ${open.length} pedidos abiertos</div><div class="ops-actions">${session.admin?'<button type="button" class="day-primary" data-intake="ticket">Cargar ticket y sumar stock</button>':''}${session.admin?opsButton('intake','Conteos y listas'):''}${canViewFleetStock()?opsButton('fleet','Stock de otros barcos'):''}${opsButton('expenses','Ver gastos')}${opsButton('requests','Ver pedidos y agregar faltantes')}</div><p class="day-muted">Faltante → Solicitado → Aprobado → Comprado → Recibido. El stock aumenta únicamente con la cantidad recibida; una solicitud no es una compra.</p><p class="day-muted">Los avisos dependen del conteo y los consumos registrados. ${session.admin?'Definí el mínimo real de cada insumo en Administrar → Inventario → Editar.':'Pedí a administración que defina los mínimos reales.'} Sin mínimo definido, se avisa al llegar a cero. Activá los avisos del teléfono en Mi día → Notificaciones.</p>${!products.length?`<div class="day-note"><strong>Conteo inicial pendiente</strong><br>Todavía no se cargó el conteo inicial. Esto no significa que el barco esté vacío. ${writable()?'Podés anotar faltantes en Pedidos. ':''}${session.admin?'En Conteos y listas podés revisar el producto, cantidad, unidad y ubicación.':'Administración registra el conteo.'}</div>`:''}${session.admin?`<details class="day-disclosure"><summary>＋ Cargar cantidad contada</summary><p>Usá este formulario para un insumo nuevo. Para insumos existentes, revisá su ficha en Administrar → Inventario; no dupliques un producto para corregir su cantidad.</p>${opsForm('stock_add',opsArea()+opsField('Producto','name','text','','required maxlength="140"')+opsField('Unidad','unit','text','','required maxlength="20"')+opsField('Cantidad contada','quantity','number','','required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note'))}</details><details class="day-disclosure"><summary>Recuperar inventario gastronómico anterior</summary><p>Cargá el respaldo y verificá cada cantidad antes de guardar.</p><input id="legacyInventory" type="file" accept="application/json"><div id="legacyReview"></div></details>`:''}${products.length?`<label>Buscar insumo o ubicación<input id="opsStockSearch" type="search" placeholder="Nombre o lugar donde se guarda"></label><label>Filtrar por área<select id="opsStockArea"><option value="">Todas las áreas</option><option value="gastronomia">Bebidas y mercadería</option><option value="tecnica">Materiales, repuestos y limpieza</option></select></label>`:''}<div id="opsStockList">${products.map(p=>`<article class="day-inventory" data-stock-search="${esc(dayNormalize(p.name+' '+p.location))}" data-stock-area="${esc(p.area||'tecnica')}"><div class="day-card-heading"><h2>${esc(p.name)}</h2><strong>${p.current} ${esc(p.unit)}</strong></div><p>${esc(p.location||'Ubicación pendiente')} · ${p.area==='gastronomia'?'Bebidas y mercadería':'Materiales, repuestos y limpieza'}</p>${Number(p.current)===0?'<p class="ops-critical">Sin existencias registradas</p>':Number(p.min)>0&&Number(p.current)<=Number(p.min)?'<p class="ops-critical">Llegó al mínimo definido</p>':''}<p class="day-muted">${Number(p.min)>0?'Mínimo definido: '+p.min+' '+esc(p.unit):'Sin mínimo definido'}${p.expiryDate?' · Vence '+date(p.expiryDate):''}</p>${writable()?opsAction('request_product',p.id,'Pedir reposición'):''}${writable()&&Number(p.current)>0?`<details class="day-disclosure"><summary>Registrar consumo</summary><p>Registrá solo lo utilizado. Si ya lo descontaste como material de un trabajo, no lo cargues otra vez.</p>${opsForm('stock_consume',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsAmount('quantity',p.current)+opsField('Motivo','note','text','','required minlength="3"'))}</details>`:''}${(dayManager()||['chef','capitan'].includes(role))&&opsData.fleet.length>1&&Number(p.current)>0?`<details class="day-disclosure"><summary>Transferir a otro barco</summary>${opsForm('transfer_send',`<input type="hidden" name="productId" value="${esc(p.id)}"><label>Destino<select name="target">${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`+opsAmount('quantity',p.current))}</details>`:''}</article>`).join('')}</div><p id="opsStockNoMatch" hidden>No hay insumos con ese filtro.</p>${opsData.fleet.filter(b=>canViewFleetStock()&&b.id!==boatId).map(b=>`<details class="day-disclosure"><summary>${esc(b.name)} · ${b.products.length} insumos</summary>${b.products.map(p=>`<p>${esc(p.name)} · ${p.current} ${esc(p.unit)} · ${esc(p.location)}</p>`).join('')||'<p>Sin conteo cargado.</p>'}</details>`).join('')}`;
 }
 function opsFilterStock(){
  const query=dayNormalize($('#opsStockSearch')?.value||''),area=$('#opsStockArea')?.value||'';
@@ -47,7 +51,7 @@ function opsFilterStock(){
  if($('#opsStockNoMatch'))$('#opsStockNoMatch').hidden=!state.products.length||visible>0;
 }
 
-function opsTransfers(){return `<h2>Transferencias</h2><p>La salida queda en tránsito hasta que el destino confirma cuánto recibió.</p>${opsData.transfers.map(t=>`<article class="day-inventory"><h3>${esc(t.product.name)}</h3><p>${esc(opsData.fleet.find(b=>b.id===t.source_id)?.name||'Origen')} → ${esc(opsData.fleet.find(b=>b.id===t.target_id)?.name||'Destino')}</p><p>${t.quantity} ${esc(t.product.unit)} · ${esc(t.status)} · Recibido ${t.received}</p>${t.status==='en_transito'&&t.target_id===boatId&&(dayManager()||['capitan','chef'].includes(role))?opsForm('transfer_receive',opsAmount('quantity',Number(t.quantity)-Number(t.received))+opsProductChoice(t.product.area||'tecnica',t.product.unit)+opsField('Ubicación','location','text','','required'),t.id):''}${t.status==='en_transito'&&t.source_id===boatId&&Number(t.received)===0?opsAction('transfer_cancel',t.id,'Cancelar y devolver al origen'):''}</article>`).join('')||empty('No hay transferencias.')}`;}
+function opsTransfers(){return `<h2>Transferencias</h2><p>La salida queda en tránsito hasta que el destino confirma cuánto recibió.</p>${opsData.transfers.map(t=>`<article class="day-inventory"><h3>${esc(t.product.name)}</h3><p>${esc(opsData.fleet.find(b=>b.id===t.source_id)?.name||'Origen')} → ${esc(opsData.fleet.find(b=>b.id===t.target_id)?.name||'Destino')}</p><p>${t.quantity} ${esc(t.product.unit)} · ${esc(t.status)} · Recibido ${t.received}</p>${t.status==='en_transito'&&t.target_id===boatId&&(dayManager()||['capitan','chef'].includes(role))?opsForm('transfer_receive',opsAmount('quantity',Number(t.quantity)-Number(t.received))+opsProductChoice(t.product.area||'tecnica',t.product.unit,t.product.name)+opsField('Ubicación','location','text','','required'),t.id):''}${t.status==='en_transito'&&t.source_id===boatId&&Number(t.received)===0?opsAction('transfer_cancel',t.id,'Cancelar y devolver al origen'):''}</article>`).join('')||empty('No hay transferencias.')}`;}
 function opsReservationsView(){return `<h2>Reservas de ${esc(state.boat.name)}</h2><p>Fechas y datos operativos consultados del CRM. Las reservas contratadas de Nomade se vinculan desde el CRM. Administración puede revisar otras vinculaciones.</p><div id="opsCandidates"></div>${opsReservations.map(res=>{
  const reported=(res.reports||[]).filter(x=>x.status!=='rechazado').reduce((a,x)=>a+Number(x.amount),0);
  const confirmed=(res.reports||[]).filter(x=>x.status==='confirmado').reduce((a,x)=>a+Number(x.amount),0);
@@ -66,20 +70,25 @@ renderDay=function(){
   const target=document.querySelector('.day-grid');
   const shortages=state.products.filter(p=>BoatStockAlerts.level(p));
   if(shortages.length)target?.insertAdjacentHTML('beforebegin',`<section class="ops-critical" aria-label="Faltantes de stock"><strong>${shortages.length} insumo(s) necesitan reposición</strong><p>${shortages.slice(0,4).map(p=>esc(p.name)+': '+esc(p.current)+' '+esc(p.unit)).join(' · ')}${shortages.length>4?' · y otros '+(shortages.length-4):''}</p>${opsButton('stock','Revisar faltantes')}</section>`);
-  target?.insertAdjacentHTML('afterend',`<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('intake','Fotos y listas')}${opsButton('expenses','Gastos')}${opsButton('transfers','Transferencias')}${opsButton('reservations','Reservas')}${typeof briefAgendaAllowed==='function'&&briefAgendaAllowed()?opsButton('agenda','Agenda del mes'):''}${opsButton('notifications','Notificaciones')}${dayManager()?opsButton('setup','Preparar barco'):''}</div>`);
+  target?.insertAdjacentHTML('afterend',`<div class="ops-actions">${opsButton('requests','Pedidos')}${session.admin?opsButton('intake','Tickets y listas'):''}${canViewFleetStock()?opsButton('fleet','Stock de otros barcos'):''}${opsButton('expenses','Gastos')}${opsButton('transfers','Transferencias')}${opsButton('reservations','Reservas')}${typeof briefAgendaAllowed==='function'&&briefAgendaAllowed()?opsButton('agenda','Agenda del mes'):''}${opsButton('notifications','Notificaciones')}${dayManager()?opsButton('setup','Preparar barco'):''}</div>`);
  }
  const header=document.querySelector('#dayHeader');
  if(header&&boats.length>1)header.insertAdjacentHTML('beforeend',`<select id="opsBoat" aria-label="Cambiar barco">${boats.map(b=>`<option value="${esc(b.id)}" ${b.id===boatId?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`);
  if(!dayPage.startsWith('ops-'))return;
  const name=dayPage.slice(4);
- const content=name==='setup'?opsPreparation():!opsData?'<p>Cargando datos…</p>':({requests:opsRequests,stock:opsStock,intake:intakeView,expenses:intakeExpenses,transfers:opsTransfers,reservations:opsReservationsView,agenda:()=>typeof briefAgendaView==='function'?briefAgendaView():'',notifications:opsNotifications}[name]?.()||'');
+ const content=name==='setup'?opsPreparation():!opsData?'<p>Cargando datos…</p>':({requests:opsRequests,stock:opsStock,fleet:fleetStockView,intake:intakeView,expenses:intakeExpenses,transfers:opsTransfers,reservations:opsReservationsView,agenda:()=>typeof briefAgendaView==='function'?briefAgendaView():'',notifications:opsNotifications}[name]?.()||'');
  $('#content').innerHTML=`<div class="day-content">${dayBack()}<div class="ops-actions">${opsButton('requests','Pedidos')}${opsButton('stock','Stock')}${opsButton('reservations','Reservas')}${typeof briefAgendaAllowed==='function'&&briefAgendaAllowed()?opsButton('agenda','Agenda del mes'):''}${opsAction('refresh','','Actualizar')}</div>${opsError?`<p class="form-error" role="alert">${esc(opsError)}</p>`:''}${content}<p class="day-muted">${opsLoading?'Actualizando…':'Los cambios se confirman al guardarse en el servidor.'}</p></div>`;
+ if(dayPage==='ops-fleet')fleetStockBind();
  if($('#opsStockSearch'))$('#opsStockSearch').oninput=opsFilterStock;
  if($('#opsStockArea'))$('#opsStockArea').onchange=opsFilterStock;
  if(!opsData&&!opsLoading&&!opsError)opsReload();
 };
 document.addEventListener('change',async event=>{
- if(event.target.id==='opsBoat'){if(intakeBusy||expenseBusy||opsBusy||(typeof briefBusy!=='undefined'&&briefBusy)){event.target.value=boatId;return;}opsData=null;await loadBoat(event.target.value);}
+ if(event.target.matches('[data-receive-product]')){
+  const selected=state.products.find(p=>p.id===event.target.value);
+  if(selected)event.target.form.elements.location.value=selected.location||'';
+ }
+ if(event.target.id==='opsBoat'){if(daySaving||intakeBusy||expenseBusy||opsBusy||(typeof briefBusy!=='undefined'&&briefBusy)){event.target.value=boatId;return;}try{await loadBoat(event.target.value);}catch(error){toast(error.message);}}
  if(event.target.id==='opsBackupFile'){
   try{
    const file=event.target.files[0];if(!file)return;if(file.size>3500000)throw Error('El respaldo supera el límite de restauración de 3,5 MB. Requiere recuperación asistida.');
@@ -90,37 +99,103 @@ document.addEventListener('change',async event=>{
   }catch(e){toast(e.message);}return;
  }
  if(event.target.id==='legacyInventory'){
+  const input=event.target;
+  const file=input.files?.[0];
+  const owner=boatId;
+  input.value='';
+  if(!file||!session?.admin)return;
   try{
-   const file=event.target.files[0];if(file.size>2000000)throw Error('El archivo supera 2 MB.');
-   const imported=JSON.parse(await file.text());
-   if(!Array.isArray(imported.products)||imported.products.length>1000)throw Error('Respaldo inválido.');
-   $('#legacyReview').innerHTML='<p>Revisá cada producto y confirmá la cantidad contada. No se importará nada automáticamente.</p>'+imported.products.map(p=>opsForm('stock_add',`<input type="hidden" name="area" value="gastronomia">`+opsField('Producto','name','text',p.name,'required')+opsField('Unidad','unit','text',p.unit,'required')+opsField('Cantidad contada','quantity','number',p.current,'required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note','text','Revisión de respaldo gastronómico'))).join('');
-  }catch(e){toast(e.message);}
+   if(file.size>2000000)throw Error('El archivo supera 2 MB.');
+   const backup=JSON.parse(await file.text());
+   if(!Array.isArray(backup.products)||!backup.products.length||backup.products.length>1000)throw Error('El respaldo debe contener entre 1 y 1000 productos.');
+   const items=backup.products.map((row,i)=>{
+    if(!row||typeof row.name!=='string'||!row.name.trim())throw Error('Falta el nombre en la fila '+(i+1)+'.');
+    const quantity=typeof row.current==='number'||(typeof row.current==='string'&&row.current.trim())?Number(row.current):null;
+    return {name:row.name.trim(),unit:typeof row.unit==='string'?row.unit.trim():'',
+     quantity:Number.isFinite(quantity)&&quantity>=0?quantity:null,location:typeof row.location==='string'?row.location.trim():'',
+     area:'gastronomia',unitCost:null,productId:''};
+   });
+   if(boatId!==owner||!input.isConnected)return;
+   const review=$('#legacyReview');
+   const groups=Array.from({length:Math.ceil(items.length/100)},(_,i)=>'<option value="'+i+'">Filas '+(100*i+1)+' a '+Math.min(100*(i+1),items.length)+'</option>').join('');
+   review.innerHTML='<p>'+items.length+' productos en el respaldo. Revisá las cantidades y ubicaciones contra el conteo físico actual.</p><label>Filas para revisar<select>'+groups+'</select></label><button type="button" class="day-secondary">Revisar conteo</button>';
+   review.querySelector('button').onclick=async()=>{
+    try{
+     const context=intakeContext();
+     const key=context.draftKey;
+     const [previous,pending]=await Promise.all([draftRead(key),draftRead(context.pendingKey)]);
+     if(boatId!==owner||!review.isConnected||!session?.admin)return;
+     if(previous||pending){toast('Ya hay un conteo o ticket en preparación. Revisalo en Conteos y listas antes de abrir el respaldo.');return;}
+     const start=Number(review.querySelector('select').value)*100;
+     intakeBoat=context.draftKey;intakeRestore=null;intakeDocs=null;intakeError='';
+     intakeDraft={kind:'count',source:{text:file.name+' · filas '+(start+1)+' a '+Math.min(start+100,items.length),photos:[]},
+      notice:'Respaldado anteriormente. Confirmá cada cantidad contra lo contado a bordo.',
+      data:{date:'',supplier:'',reference:'',currency:'',total:null,notes:'',items:items.slice(start,start+100)}};
+     await draftWrite(key,intakeDraft);
+     if(boatId!==owner||!review.isConnected)return;
+     dayPage='ops-intake';navigate('day');
+    }catch(error){toast(error.message);}
+   };
+  }catch(error){toast(error.message);}
  }
+
 });
 document.addEventListener('submit',async event=>{
  const form=event.target;if(!form.matches('.ops-form'))return;
+ const owner=boatWriteContext(),savedKey=draftKey(form);
  event.preventDefault();if(opsBusy||!form.reportValidity())return;
  clearTimeout(draftTimer);opsBusy=true;const button=form.querySelector('[type=submit]');button.disabled=true;
  try{
-  const data=Object.fromEntries(new FormData(form));if(form.dataset.id)data.id=form.dataset.id;
-  for(const key of ['quantity','amount'])if(key in data)data[key]=Number(data[key]);
-  if(form.dataset.operation==='request_create'){
-   data.urgent=form.elements.urgent.checked;
-   const file=form.elements.photo.files[0];data.photo=file?(await api('photos','POST',{boat:boatId,data:await photo(file)})).url:'';
+  const saved = await draftRead(savedKey);
+  verifyBoatWrite(owner);
+  if (!form._opsPending && saved?.pending) {
+   restorePendingOperation(form,saved);
+   form.querySelector('.form-error').textContent='Hay un envío anterior sin confirmar. Verificá esos datos antes de continuar.';
+   return;
   }
-  if(form.dataset.operation==='collection_instruction')data.verified=form.elements.verified.checked;
-  if(form.dataset.operation==='reservation_preferences'){data.preferences={};for(const key of ['food','allergies','drinks','activities']){data.preferences[key]=data[key];delete data[key];}}
-  const serialized=JSON.stringify(data);if(form.dataset.payload!==serialized){form.dataset.key=uid();form.dataset.payload=serialized;}
-  form._opsPending ||= {...data,key:form.dataset.key};
-  await draftSave(form);
-  await opsFetch(form.dataset.operation,form._opsPending);
-  await draftWrite(draftKey(form),null);
+  if (!form._opsPending) {
+    const data=Object.fromEntries(new FormData(form));if(form.dataset.id)data.id=form.dataset.id;
+    for(const key of ['quantity','amount'])if(key in data)data[key]=Number(data[key]);
+    if(form.dataset.operation==='request_create'){
+     data.urgent=form.elements.urgent.checked;
+     const file=form.elements.photo.files[0];data.photo=file?(await api('photos','POST',{boat:owner.boat,data:await photo(file)})).url:'';
+    }
+    if(form.dataset.operation==='collection_instruction')data.verified=form.elements.verified.checked;
+    if(form.dataset.operation==='reservation_preferences'){data.preferences={};for(const key of ['food','allergies','drinks','activities']){data.preferences[key]=data[key];delete data[key];}}
+    const serialized=JSON.stringify(data);if(form.dataset.payload!==serialized){form.dataset.key=uid();form.dataset.payload=serialized;}
+    form._opsPending = {...data,key:form.dataset.key};
+  }
+  verifyBoatWrite(owner);
+  const claimed=await draftSave(form);
+  if(claimed?.pending&&claimed.pending.key!==form._opsPending.key){
+   restorePendingOperation(form,claimed);
+   form.querySelector('.form-error').textContent='Hay un envío anterior sin confirmar. Verificá esos datos antes de continuar.';
+   return;
+  }
+  const operationKey=form._opsPending.key;
+  verifyBoatWrite(owner);
+  await opsFetch(form.dataset.operation,form._opsPending,owner.boat);
+  await editStoredDraft(savedKey,old=>old?.pending?.key===operationKey?null:old);
+  if(!sameBoatOwner(owner))return;
   if(form.dataset.operation==='request_create')opsRequestSeed=null;
   toast('Guardado en el servidor');await opsAfterSave();
- }catch(e){if(e.status&&e.status<500){form._opsPending=null;await draftSave(form);}form.querySelector('.form-error').textContent=e.message;}finally{opsBusy=false;button.disabled=false;}
+ }catch(e){
+   if(!sameBoatOwner(owner))return;
+   if(e.status&&e.status<500){
+    const rejectedKey=form._opsPending?.key;
+    if(rejectedKey)await editStoredDraft(savedKey,old=>old?.pending?.key===rejectedKey?{...old,pending:null}:old);
+    form._opsPending=null;lockPendingOperation(form,false);
+   }
+   else if(form._opsPending){lockPendingOperation(form,true);}
+   form.querySelector('.form-error').textContent=e.message;
+ }finally{opsBusy=false;button.disabled=false;}
 });
-async function opsAfterSave(){const page=dayPage;await loadBoat(boatId);dayPage=page;await opsReload();}
+async function opsAfterSave(){
+ const owner=boatId,user=session?.id,page=dayPage;
+ await loadBoat(owner);
+ if(boatId!==owner||session?.id!==user)return;
+ dayPage=page;await opsReload();
+}
 document.addEventListener('click',async event=>{
  const button=event.target.closest('[data-op]');if(!button||opsBusy||expenseBusy||(typeof briefBusy!=="undefined"&&briefBusy))return;
  const operation=button.dataset.op;opsBusy=true;button.disabled=true;
@@ -128,7 +203,7 @@ document.addEventListener('click',async event=>{
   if(operation==='request_product'){const p=state.products.find(p=>p.id===button.dataset.id);if(!p)throw Error('Insumo no disponible');opsRequestSeed={boat:boatId,name:p.name,unit:p.unit,area:p.area||'tecnica'};dayPage='ops-requests';render();return;}
   if(operation==='export_expenses'){expenseDownload();return;}
   if(operation==='backup'){opsDownloadBackup(await opsFetch('backup'),'respaldo');return;}
-  if(operation==='refresh'){if(dayPage==='ops-expenses'){if($('#expenseForm')){toast('Terminá o cancelá el formulario antes de actualizar.');return;}await opsAfterSave();await expenseReload();return;}if(dayPage==='ops-intake'){if($('#intakeReview'))intakeRead($('#intakeReview'));await opsAfterSave();intakeError='';await intakeReload();}else await opsAfterSave();return;}
+  if(operation==='refresh'){if(dayPage==='ops-fleet'){await fleetStockReload();return;}if(dayPage==='ops-expenses'){if($('#expenseForm')){toast('Terminá o cancelá el formulario antes de actualizar.');return;}await opsAfterSave();await expenseReload();return;}if(dayPage==='ops-intake'){if($('#intakeReview'))intakeRead($('#intakeReview'));await opsAfterSave();intakeError='';await intakeReload();}else await opsAfterSave();return;}
   if(operation==='export_requests'){
    const grouped=new Map();
    for(const row of opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status))){const k=[row.area,row.name.trim().toLowerCase(),row.unit].join('|');const item=grouped.get(k)||{area:row.area,name:row.name,unit:row.unit,quantity:0};item.quantity+=Number(row.quantity)-Number(row.received);grouped.set(k,item);}
