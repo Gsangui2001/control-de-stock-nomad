@@ -60,23 +60,23 @@ function briefContent(res){
 // Amounts reach only the captain. The captain's "yes" is the registration: the
 // CRM approves it on its own, so there is no "pending Carlota" state anymore.
 function briefPayment(res){
- if(role!=='capitan')return '';
+ if(role!=='capitan'||res.cashAssigned===false)return '';
  const payment=res.captainPayment,balance=res.captainBalance,mode=res.details?.captainCollection;
  const known=balance?.status==='known'&&typeof balance.amountUsd==='number'&&Number.isFinite(balance.amountUsd)?balance.amountUsd:null;
  let head='por confirmar con Carlota',extra='';
  if(payment?.status==='cleared'){
-  const left=typeof payment.balanceUsd==='number'&&payment.balanceUsd>0?payment.balanceUsd:null;
-  // "Pagado" only when nothing is left; a cleared partial keeps the remainder visible.
-  head=left==null?'pagado':`${briefMoney(left)} pendiente · por confirmar con Carlota`;
-  extra=`<p class="guest-pay-note">Cobrado ${esc(briefMoney(payment.amountUsd))} · ${esc(payment.reportedBy||'Capitán')} · ${esc(briefTime(payment.reportedAt))}</p>`;
+  const left=typeof payment.balanceUsd==='number'&&Number.isFinite(payment.balanceUsd)?payment.balanceUsd:null;
+  head=left===0?'pagado':left>0?`${briefMoney(left)} pendiente · por confirmar con Carlota`:'Cobro registrado · saldo por verificar';
+  extra=`<p class="guest-pay-note">Registrado en el CRM · ${esc(briefMoney(payment.amountUsd))} · ${esc(payment.reportedBy||'Capitán')} · ${esc(briefTime(payment.reportedAt))}</p>`;
  }else if(payment){
-  head='Pago informado · pendiente de registro';
+  head=payment.status==='pending_review'||payment.status==='excluded'?'Cobro en revisión en el CRM':'Recepción informada · revisar en el CRM';
   extra=`<p class="guest-pay-note">Informado ${esc(briefMoney(payment.amountUsd))} · ${esc(payment.reportedBy||'Capitán')} · ${esc(briefTime(payment.reportedAt))}</p>`;
- }else if(mode==='none')head='no cobra a bordo';
+ }else if(res.cashLegacyReview)head='Cobro anterior en revisión con administración';
+ else if(mode==='none')head='no cobra a bordo';
  else if(known===0)head='pagado';
- else if(known>0&&!balance.reportedCount&&!res.brief?.sourceChanged&&res.brief?.version>0){
+ else if(mode==='collect'&&known>0&&!balance.reportedCount&&!res.brief?.sourceChanged&&res.brief?.version>0){
   head=briefMoney(known);
-  extra=`<button type="button" class="day-primary guest-pay-button" data-brief-action="payment" data-id="${esc(res.id)}">Sí, me pagaron ${esc(briefMoney(known))}</button>`;
+  extra=`<button type="button" class="day-primary guest-pay-button" data-brief-action="payment" data-id="${esc(res.id)}">Recibí ${esc(briefMoney(known))} en efectivo</button>`;
  }else if(known>0&&balance.reportedCount)head='Pago informado · pendiente de registro';
  return `<div class="guest-block guest-pay"><p class="guest-line guest-pay-line"><strong>A pagar</strong><span>${esc(head)}</span></p>${extra}</div>`;
 }
@@ -143,12 +143,12 @@ document.addEventListener('click',async event=>{
   const b=res.brief;
   if(action==='publish'&&document.querySelector(`[data-operation="brief_save"][data-id="${CSS.escape(res.id)}"]`)?.dataset.dirty){throw Error('Guardá el borrador antes de publicar.');}
   if(action==='publish'&&!confirm('¿Publicar los datos guardados y avisar a la tripulación del Nomade?'))return;
-  if(action==='payment'){const amount=res.captainBalance?.amountUsd;if(!(typeof amount==='number'&&amount>0))throw Error('Actualizá: el saldo a cobrar cambió.');if(!confirm(`¿El cliente te pagó ${briefMoney(amount)} completos? Se registra en la caja del capitán y la venta queda saldada.`))return;}
+  if(action==='payment'){const amount=res.captainBalance?.amountUsd;if(res.cashAssigned===false||res.cashLegacyReview||res.captainPayment||res.details?.captainCollection!=='collect'||!(typeof amount==='number'&&amount>0))throw Error('Actualizá la ficha para verificar el cobro autorizado.');if(!confirm(`¿Recibiste ${briefMoney(amount)} en efectivo de ${res.name||'este huésped'}? Se registrará en tu caja y en su reserva del CRM.`))return;}
   button.dataset.key ||=uid();
   const payload={key:button.dataset.key,id:res.id,...(action==='publish'?{revision:b.revision,sourceHash:b.sourceHash}:{version:b.version})};
   const result=await opsFetch(action==='publish'?'brief_publish':action==='payment'?'brief_payment':'brief_review',payload);
-  if(action==='payment'){if(result?.payment)res.captainPayment=result.payment;briefAgenda=null;}
-  toast(action==='payment'?(result?.payment?.status==='cleared'?'Registrado: pagado. La venta quedó saldada en el CRM.':'Pago informado. Queda pendiente de registro en el CRM.'):action==='publish'?(result.unchanged?'La ficha ya estaba publicada sin cambios.':'Ficha publicada y aviso registrado.'):'Revisión confirmada en el servidor.');
+  if(action==='payment'){if(result?.payment)res.captainPayment=result.payment;briefAgenda=null;invalidateCaptainCash();}
+  toast(action==='payment'?(result?.payment?.status==='cleared'?'Cobro registrado en la reserva del CRM y en tu caja.':'La recepción figura en la ficha. Revisá su estado en el CRM.'):action==='publish'?(result.unchanged?'La ficha ya estaba publicada sin cambios.':'Ficha publicada y aviso registrado.'):'Revisión confirmada en el servidor.');
   await opsAfterSave();
  }catch(e){toast(e.message);}finally{briefBusy=false;button.disabled=false;}
 });
@@ -213,6 +213,7 @@ document.addEventListener('click',event=>{
  const month=event.target.closest('[data-agenda-month]');
  if(month){briefAgendaMonth=month.dataset.agendaMonth;render();return;}
  const open=event.target.closest('[data-agenda-open]');if(!open)return;
+ dayGuestCashOwner=dayPage==='ops-cash' && canViewCash() ? {boat:boatId,user:session} : null;
  const id=open.dataset.agendaOpen,params=new URLSearchParams(location.search);params.set('reservation',id);
  history.replaceState(null,'',location.pathname+'?'+params.toString());
  dayPage='ops-reservations';render();

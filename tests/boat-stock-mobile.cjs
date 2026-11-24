@@ -26,6 +26,7 @@ async function run(){
    if(pp.startsWith('/api/boat-ops/')){
     if(op==='overview')return json({requests:requests[boat],fleet:[],transfers:[],notifications:[],reservations:[]});
     if(op==='reservations')return json([]);
+    if(op==='captain_wallet')return json({wallets:[{captainId:'user-capitan',name:'Capitán de prueba',balances:[{currency:'USD',opening:0,incoming:0,spent:0,balance:0}],expenses:[],receipts:[]}]});
     if(m!=='POST')return json([]);
     const key=boat+':'+data.key;changes.push({op,boat,key,quantity:data.quantity});if(applied.has(key))return json({ok:true,alreadyApplied:true});
     const products=boats[boat].products,p=products.find(x=>x.id===data.productId);
@@ -76,7 +77,9 @@ async function run(){
    assert.equal(await page.locator('#content [data-day="ops-requests"], #content [data-day="ops-intake"], #content [data-day="ops-expenses"], #content [data-day="ops-reservations"]').count(),0);
    await openSection('Mantenimiento');
    await page.getByRole('heading',{name:'Mantenimiento',exact:true}).waitFor();
-   assert.equal(await page.getByRole('button',{name:'Nueva tarea',exact:true}).count(),Number(userRole==='admin'));
+   assert.equal(await page.getByRole('button',{name:'Nueva tarea',exact:true}).count(),0);
+   assert.equal(await page.getByRole('button',{name:'Equipos del barco',exact:true}).count(),0);
+   assert.equal(await page.getByRole('button',{name:'Manual de instrucciones',exact:true}).count(),1);
    assert.equal(await page.getByRole('button',{name:'Registrar trabajo',exact:true}).count(),Number(userRole!=='lector'));
    await page.getByRole('button',{name:/^Mis tareas/}).tap();
    await page.getByRole('heading',{name:'Mis tareas'}).waitFor();
@@ -93,10 +96,13 @@ async function run(){
     continue;
    }
    await openSection('Caja');
-   await page.getByRole('heading',{name:'Caja',exact:true}).waitFor();
-   assert.equal(await page.getByRole('button',{name:'Cobros de huéspedes',exact:true}).count(),Number(userRole==='capitan'));
+   await page.getByRole('heading',{name:userRole==='capitan'?'Mi caja':'Caja',exact:true}).waitFor();
+   if(userRole==='capitan'){
+    await page.getByRole('heading',{name:'Cobros pendientes',exact:true}).waitFor();
+    assert.equal(await page.locator('form[data-operation=captain_expense]').count(),1);
+   }
    assert.equal(await page.getByRole('link',{name:/Abrir caja en Finanzas/}).count(),Number(userRole==='admin'));
-   assert.equal(await page.getByRole('button',{name:/[Gg]astos y pagos/}).count(),1);
+   assert.equal(await page.getByRole('button',{name:/[Gg]astos y pagos/}).count(),Number(userRole!=='capitan'));
   }
  });
  await runCase('lector consulta, sin controles de escritura',async()=>{await login('lector');await stock();assert.equal(await page.locator('[data-op=request_product],[data-operation=stock_consume],[data-intake=ticket]').count(),0);await tap('[data-day=ops-requests]');await page.getByRole('heading',{name:'Pedidos y faltantes'}).waitFor();assert.equal(await page.locator('[data-operation=request_create]').count(),0);});

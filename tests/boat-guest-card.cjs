@@ -74,9 +74,10 @@ test('captain "A pagar" states: none, paid, known balance with a yes button, unk
  const a=app();a.role='capitan';
  const res={id:'r',details:{captainCollection:'collect'},captainBalance:{status:'known',currency:'USD',amountUsd:2016,reportedCount:0},brief:{version:2}};
  const due=a.briefPayment(res);
- assert.match(text(due),/A pagar USD 2\.016,00/);assert.match(due,/data-brief-action="payment"/);assert.match(due,/Sí, me pagaron USD 2\.016,00/);
- // Collection mode other than 'none' (even if not stated) still lets the captain answer.
- assert.match(a.briefPayment({...res,details:{}}),/data-brief-action="payment"/);
+ assert.match(text(due),/A pagar USD 2\.016,00/);assert.match(due,/data-brief-action="payment"/);assert.match(due,/Recibí USD 2\.016,00 en efectivo/);
+ for(const mode of [undefined,'pending','none'])assert.doesNotMatch(a.briefPayment({...res,details:{captainCollection:mode}}),/data-brief-action="payment"/);
+ assert.equal(a.briefPayment({...res,cashAssigned:false}),'');
+ assert.doesNotMatch(a.briefPayment({...res,cashLegacyReview:true}),/data-brief-action="payment"/);
  assert.doesNotMatch(a.briefPayment({...res,brief:{version:2,sourceChanged:true}}),/data-brief-action/);
  assert.doesNotMatch(a.briefPayment({...res,brief:{version:0}}),/data-brief-action/);
  const unknown=a.briefPayment({...res,captainBalance:{status:'incomplete',amountUsd:null}});
@@ -86,7 +87,7 @@ test('captain "A pagar" states: none, paid, known balance with a yes button, unk
  assert.match(text(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:0,reportedCount:0}})),/A pagar pagado/);
  assert.doesNotMatch(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:2016,reportedCount:1}}),/data-brief-action/);
  const reported=a.briefPayment({...res,captainPayment:{status:'reported',amountUsd:2016,reportedBy:'Capitán QA',reportedAt:'2026-01-01T12:00:00Z'}});
- assert.match(reported,/Pago informado · pendiente de registro/);assert.doesNotMatch(reported,/data-brief-action|Carlota/);
+ assert.doesNotMatch(reported,/data-brief-action|A pagar pagado/);
  a.role='chef';assert.equal(a.briefPayment(res),'');
  a.role='encargado';assert.equal(a.briefPayment(res),'');
 });
@@ -94,8 +95,8 @@ test('captain "A pagar" states: none, paid, known balance with a yes button, unk
 test('cleared payment is paid only when nothing is left',()=>{
  const a=app();a.role='capitan';const base={id:'r',captainPayment:{amountUsd:700,status:'cleared',balanceUsd:0,reportedBy:'Capitán QA',reportedAt:'2026-01-01T12:00:00Z'}};
  const paid=text(a.briefPayment(base));
- assert.match(paid,/A pagar pagado/);assert.match(paid,/Cobrado USD 700,00 · Capitán QA/);assert.doesNotMatch(paid,/verificado por Carlota|pendiente de Carlota/);
- assert.match(text(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:null}})),/A pagar pagado/);
+ assert.match(paid,/A pagar pagado/);assert.match(paid,/Registrado en el CRM · USD 700,00 · Capitán QA/);assert.doesNotMatch(paid,/verificado por Carlota|pendiente de Carlota/);
+ assert.match(text(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:null}})),/saldo por verificar/);
  const partial=text(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:100}}));
  assert.doesNotMatch(partial,/A pagar pagado/);assert.match(partial,/USD 100,00 pendiente/);
 });

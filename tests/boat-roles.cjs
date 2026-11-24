@@ -159,7 +159,7 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   changed=response.data.state;changed.tasks[1].assignedRole='marinero';
   assert.equal((await call('PUT',{state:changed,revision})).status,200);
   assert.equal((await call('POST',{name:'Fixture',username:'fixture',password:'dummy-not-a-real-password',role:'chef'},'users')).status,201);
-  const part={id:'spare',name:'Spare',unit:'un',current:4,min:1,cost:2};
+  const part={id:'spare',name:'Spare',unit:'un',current:4,min:1,cost:2,costKnown:true,costCurrency:'USD',lastInvoiceUnitCost:2};
   changed=structuredClone((await call('GET')).data.state);
   changed.products.push(part);
   assert.equal((await call('PUT',{state:changed,revision})).status,200,'administrator can load technical stock');
@@ -167,7 +167,9 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   for (const role of ['capitan','chef','marinero','lector','encargado']) {
     currentRole=role;
     const visible=(await call('GET')).data.state;
+    for(const field of ['cost','costKnown','costCurrency','lastInvoiceUnitCost']) assert.ok(!(field in visible.products[0]),role+' sees quantities only');
     for (const modify of [
+      s=>s.products[0].cost=9,
       s=>s.products.push({...part,id:'second'}),
       s=>s.products[0].current++,
       s=>s.purchases.push({id:'receipt',date:'2026-10-24',lines:[]})
@@ -185,6 +187,12 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   changed.logs.push({id:'work-material',title:'Routine',date:'2026-10-24',lines:[{productId:'spare',quantity:1}],photos:[]});
   changed.movements.push({id:'use',productId:'spare',delta:-1});
   assert.equal((await call('PUT',{state:changed,revision})).status,200,'work still consumes stock');
+  assert.equal(saved.products[0].lastInvoiceUnitCost,2,'a crew save preserves the invoice value');
+  const legacy=structuredClone((await call('GET')).data.state);
+  Object.assign(legacy.products[0],{cost:2,costKnown:true,costCurrency:'USD',lastInvoiceUnitCost:2});
+  const oldClientSave=await call('PUT',{state:legacy,revision});
+  assert.equal(oldClientSave.status,200,'older clients may submit the original stored prices');
+  assert.ok(!('cost' in oldClientSave.data.state.products[0]));
   changed=structuredClone((await call('GET')).data.state);
   changed.logs.push({id:'report',title:'Notice',reportKind:'novedad',date:'2026-10-24',lines:[],photos:[]});
   assert.equal((await call('PUT',{state:changed,revision})).status,200);
@@ -201,7 +209,7 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
   saved.tasks.find(t=>t.id==='shared').photo=photoUrl(4);
   saved.logs[0].photos=[photoUrl(5)];
   requestPhoto=photoUrl(6);
-  for(const role of ['chef','marinero']){
+  for(const role of ['capitan','chef','marinero']){
     currentRole=role;
     const visible=(await call('GET')).data.state;
     assert.equal(visible.purchases.length,0);
@@ -223,7 +231,7 @@ console.log('PASS: role visibility, legacy assignments, protected updates, manua
     }
   }
   assert.equal(expenseReads,0,'blocked roles never fetch the expenses list');
-  for(const role of ['capitan','encargado','lector','administrador']){
+  for(const role of ['encargado','lector','administrador']){
     currentRole=role;account.admin=role==='administrador';
     assert.equal((await call('GET')).data.state.purchases[0].id,expense.id);
     assert.equal((await call('GET',null,'list','',expenseHandler)).data.expenses[0].id,expense.id);
