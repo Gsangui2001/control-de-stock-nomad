@@ -1,0 +1,20 @@
+name: A bordo Agenda fixture
+on:
+  pull_request:
+    branches: [codex/boat-control-vercel]
+permissions:
+  contents: read
+jobs:
+  agenda-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: node --check public/a-bordo/briefs.js
+      - run: node --test tests/boat-guest-card.cjs tests/boat-agenda-authorized-preview.cjs
+      - run: node --check public/a-bordo/staging-fixture.js
+      - run: npm install --prefix "$RUNNER_TEMP/fixture-browser" --no-audit --no-fund playwright@1.65.1
+      - run: '"$RUNNER_TEMP/fixture-browser/node_modules/.bin/playwright" install --with-deps chromium'
+      - run: 'NODE_PATH="$RUNNER_TEMP/fixture-browser/node_modules" node tests/boat-staging-browser.cjs'
