@@ -191,7 +191,7 @@ document.addEventListener('submit',async event=>{
   await editStoredDraft(savedKey,old=>old?.pending?.key===operationKey?null:old);
   if(!sameBoatOwner(owner))return;
   if(form.dataset.operation==='request_create')opsRequestSeed=null;
-  if(['captain_opening','captain_expense'].includes(form.dataset.operation))invalidateCaptainCash();
+  if(['captain_opening','captain_expense','captain_handover'].includes(form.dataset.operation))invalidateCaptainCash();
   toast('Guardado en el servidor');await opsAfterSave();
  }catch(e){
    if(!sameBoatOwner(owner))return;

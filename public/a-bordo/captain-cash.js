@@ -49,20 +49,25 @@ const captainMoney = (amount, currency) => esc(currency) + " " + Number(amount).
 const captainCurrency = () => '<label>Moneda<select name="currency"><option>USD</option><option>EUR</option><option>ARS</option><option>PAB</option></select></label>';
 
 function captainWallet(wallet) {
+  const handovers = wallet.handovers || [];
   const amounts = wallet.balances.map(b => {
     const balance = b.balance != null ? captainMoney(b.balance, b.currency) : b.opening == null ? "Conteo inicial pendiente" : "Saldo por conciliar en el CRM";
     const description = b.opening == null ? "Movimientos registrados" : "Desde el conteo de " + captainMoney(b.opening, b.currency);
     return '<article class="day-inventory"><h3>' + esc(b.currency) + '</h3><strong>' + balance + '</strong><p>' + description +
-      ' · Cobrado ' + captainMoney(b.incoming, b.currency) + ' · Gastado ' + captainMoney(b.spent, b.currency) + '</p></article>';
+      ' · Cobrado ' + captainMoney(b.incoming, b.currency) + ' · Gastado ' + captainMoney(b.spent, b.currency) +
+      ' · Entregado ' + captainMoney(b.handed_over ?? 0, b.currency) + '</p></article>';
   }).join("");
   const receipts = wallet.receipts.map(r => '<p><strong>' + captainMoney(r.amount, r.currency) + '</strong> · ' + esc(r.guest) +
     ' · ' + esc(briefTime(r.at)) + (r.reviewing ? ' · En revisión en el CRM' : ' · Registrado en el CRM') + '</p>').join("");
   const expenses = wallet.expenses.map(e => '<p><strong>' + captainMoney(e.amount, e.currency) + '</strong> · ' + esc(e.concept) +
     ' · ' + esc(briefTime(e.at)) + '</p>').join("");
+  const delivered = handovers.map(h => '<p><strong>' + captainMoney(h.amount, h.currency) + '</strong> · ' + esc(h.concept) +
+    ' · ' + esc(briefTime(h.at)) + ' · Recibió ' + esc(h.receivedBy) + '</p>').join("");
   return (session.admin ? '<h2>' + esc(wallet.name) + '</h2>' : '<h2>Mi efectivo</h2>') + amounts +
     '<details class="day-disclosure"><summary>Cobros recibidos (' + wallet.receipts.length + ')</summary>' +
     (receipts || empty("Sin cobros registrados.")) + '</details><details class="day-disclosure"><summary>Gastos propios (' + wallet.expenses.length +
-    ')</summary>' + (expenses || empty("Sin gastos registrados.")) + '</details>';
+    ')</summary>' + (expenses || empty("Sin gastos registrados.")) + '</details><details class="day-disclosure"><summary>Entregas (' + handovers.length +
+    ')</summary>' + (delivered || empty("Sin entregas registradas.")) + '</details>';
 }
 
 function captainCashView() {
@@ -81,6 +86,11 @@ function captainCashView() {
     content += '<details class="day-disclosure"><summary>Registrar conteo inicial</summary><p>Contá el efectivo que tiene el capitán en esa moneda. Podés registrar cero.</p>' +
       opsForm("captain_opening", '<label>Capitán<select name="captainId">' + choices + '</select></label>' + captainCurrency() +
         opsField("Efectivo contado","amount","number","","required min=\"0\" step=\"0.01\"")) + '</details>';
+    content += '<details class="day-disclosure"><summary>Registrar entrega</summary><p>Registrá el efectivo que el capitán te entregó. ' +
+      'No puede superar lo que tiene en su caja en esa moneda. Sale un aviso al grupo comercial de Telegram, sin nombres.</p>' +
+      opsForm("captain_handover", '<label>Capitán<select name="captainId">' + choices + '</select></label>' + captainCurrency() +
+        opsField("Importe entregado","amount","number","","required min=\"0.01\" step=\"0.01\"") +
+        opsField("Nota (opcional)","note","text","","maxlength=\"140\"")) + '</details>';
   } else if (!session.admin) {
     content += '<details class="day-disclosure"><summary>Registrar un gasto propio</summary>' +
       opsForm("captain_expense", opsField("Qué pagaste con el efectivo de tu caja","concept","text","","required maxlength=\"140\"") +

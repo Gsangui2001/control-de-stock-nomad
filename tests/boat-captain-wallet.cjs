@@ -26,6 +26,26 @@ test('captain sees own cash, unknown opening and only authorized guest cards; ad
  const admin=ctx.captainCashView();assert.match(admin,/captain_opening/);assert.doesNotMatch(admin,/captain_expense/);
  for(const role of ['chef','marinero']){const a=app(role);assert.match(a.ctx.captainCashView(),/no disponible/);assert.equal(a.pending.length,0);}
 });
+test('each wallet shows collected, spent and handed over; only administration can record a handover',async()=>{
+ const handed={...wallet,balances:[{currency:'USD',opening:10,incoming:1680.5,spent:30,balance:660.5,handed_over:1000}],
+  handovers:[{id:7,currency:'USD',amount:1000,concept:'Sobre <cerrado>',at:'2026-11-25T12:00:00Z',receivedBy:'Administración QA'}]};
+ const captain=app('capitan');captain.ctx.captainCashView();captain.pending[0].resolve({wallets:[handed]});await new Promise(r=>setImmediate(r));
+ const own=captain.ctx.captainCashView();
+ assert.match(own,/USD 660,50/);assert.match(own,/Cobrado USD 1\.680,50 · Gastado USD 30,00 · Entregado USD 1\.000,00/);
+ assert.match(own,/Entregas \(1\)/);assert.match(own,/USD 1\.000,00<\/strong> · Sobre &lt;cerrado> · 2026-11-25T12:00:00Z · Recibió Administración QA/);
+ assert.doesNotMatch(own,/captain_handover|Registrar entrega/);
+ const admin=app('administrador',true);admin.ctx.captainCashView();admin.pending[0].resolve({wallets:[handed,{...wallet,captainId:'b',name:'Capitán Dos'}]});
+ await new Promise(r=>setImmediate(r));
+ const view=admin.ctx.captainCashView();
+ assert.match(view,/<summary>Registrar entrega<\/summary>/);assert.match(view,/data-operation="captain_handover"/);
+ const form=view.slice(view.indexOf('data-operation="captain_handover"'));
+ assert.match(form,/<option value="a">Capitán Uno<\/option><option value="b">Capitán Dos<\/option>/);
+ assert.match(form,/name="currency"/);assert.match(form,/Importe entregado/);assert.match(form,/Nota \(opcional\)/);
+ // A server without handovers yet still renders the wallet.
+ assert.match(view,/Entregas \(0\)/);assert.match(view,/Entregado EUR 0,00/);
+ const empty=app('administrador',true);empty.ctx.captainCashView();empty.pending[0].resolve({wallets:[]});await new Promise(r=>setImmediate(r));
+ assert.doesNotMatch(empty.ctx.captainCashView(),/captain_handover/);
+});
 test('a wallet response from a previous boat cannot become visible after switching',async()=>{
  const {ctx,pending}=app('capitan');ctx.captainCashView();ctx.boatId='boat-b';ctx.captainCashView();
  assert.deepEqual(pending.map(p=>p.boat),['boat-a','boat-b']);pending[0].resolve({wallets:[wallet]});

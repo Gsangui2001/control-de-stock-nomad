@@ -38,6 +38,8 @@ try{
  await actual('20261102233000_nomade_ficha_capitan_agenda_cobro',['boat_control.briefs']);
  await db.query('create function public.boat_briefs_rpc(text,text,jsonb) returns jsonb language sql as $$select boat_control.briefs($1,$2,$3)$$');
  await db.query(await readFile(new URL('../supabase/migrations/20261124202222_captain_personal_cash.sql',import.meta.url),'utf8'));
+ // Applied on top of the production version: every assertion below runs against the handover release.
+ await db.query(await readFile(new URL('../supabase/migrations/20261125140000_captain_cash_handovers.sql',import.meta.url),'utf8'));
  async function rpc(op,args={},user='captain',client=first){
   const q=await client.query('select public.boat_captain_cash_rpc($1,$2,$3) as data',['fixture-only',op,{boat:'nomade',session:user+'-test-session',...args}]);
   return q.rows[0].data;
@@ -105,6 +107,47 @@ try{
  assert.equal(await balance('USD'),30);assert.equal(await balance('EUR'),28);assert.equal((await cash())[0].expenses.length,1);
  await assert.rejects(spend('USD',0.001),/moneda e importe/);
  const [snapshot]=await query("select count(*)::int n from boat_control.brief_payment_reports where reservation_id=any($1::uuid[])",[[no.id,legacy.id,drift.id,quarantine.id]]);assert.equal(snapshot.n,0);
+ // Handovers: administration records the cash the captain hands over to Nomad.
+ const handover=(currency,amount,key=randomUUID(),client=first,extra={})=>rpc('captain_handover',{captainId:'captain',currency,amount,key,...extra},'admin',client);
+ const alerts=()=>query("select dedupe_key,channel,body,status from internal_alert_outbox where dedupe_key like 'captain-handover:%' order by body");
+ const money=async(currency,amount)=>(await query('select boat_control.captain_cash_money($1,$2::numeric) t',[currency,amount]))[0].t;
+ for(const [amount,text] of [[1680,'USD 1.680'],[1680.5,'USD 1.680,50'],[1234.567,'USD 1.234,57'],[1000000,'USD 1.000.000'],[1e9,'USD 1.000.000.000'],[0,'USD 0'],[0.5,'USD 0,50']])
+  assert.equal(await money('USD',amount),text);
+ assert.equal(await money('EUR',28),'EUR 28');
+ for(const who of ['captain','second','chef','sailor'])await assert.rejects(rpc('captain_handover',{captainId:'captain',currency:'USD',amount:1,key:randomUUID()},who),/administración/);
+ await assert.rejects(handover('USD',30.01),/supera el efectivo que tiene el capitán \(USD 30\)/);
+ await assert.rejects(handover('ARS',1),/conteo inicial en ARS/);
+ await assert.rejects(rpc('captain_handover',{captainId:'second',currency:'USD',amount:1,key:randomUUID()},'admin'),/conteo inicial en USD/);
+ await assert.rejects(rpc('captain_handover',{captainId:'chef',currency:'USD',amount:1,key:randomUUID()},'admin'),/Capitán incorrecto/);
+ await assert.rejects(handover('USD',0),/importe entregado/);
+ await assert.rejects(handover('USD',0.001),/moneda e importe/);
+ await assert.rejects(handover('USD',1,randomUUID(),first,{note:'x'.repeat(141)}),/140/);
+ assert.deepEqual(await alerts(),[]);
+ const handoverKey=randomUUID(),note={note:'  Sobre cerrado, recibido en la oficina  '};
+ const delivered=await handover('USD',20,handoverKey,first,note);
+ assert.deepEqual(await handover('USD',20,handoverKey,second,note),delivered);
+ await assert.rejects(handover('USD',25,handoverKey,first,note),/reutilizado/);
+ assert.deepEqual((await cash())[0].balances.find(b=>b.currency==='USD'),{currency:'USD',opening:10,incoming:100,spent:80,balance:10,handed_over:20});
+ // The CRM's PR #365 reads these columns by name with dynamic SQL.
+ assert.deepEqual(await query("select t.opening,t.balance from boat_control.captain_balances($1,$2) t where t.currency='USD'",['nomade','captain']),[{opening:'10.00',balance:'10.00'}]);
+ const [entry]=(await cash())[0].handovers;
+ assert.deepEqual({...entry,at:undefined},{id:delivered.entryId,currency:'USD',amount:20,concept:'Sobre cerrado, recibido en la oficina',receivedBy:'Administración QA',at:undefined});
+ assert.deepEqual((await cash('admin')).find(w=>w.captainId==='captain').handovers.map(h=>h.id),[delivered.entryId]);
+ assert.deepEqual((await cash('admin')).find(w=>w.captainId==='second').handovers,[]);
+ assert.deepEqual(await alerts(),[{dedupe_key:'captain-handover:'+delivered.entryId,channel:'commercial_group',status:'pending',
+  body:'📤 Entrega de efectivo · Nomade\nEl capitán entregó USD 20.\nQueda en la caja del capitán: USD 10.'}]);
+ // Expenses and handovers share the wallet lock. Whichever commits first leaves less cash for the other.
+ const [given,spentLate]=await race(()=>handover('USD',6),()=>spend('USD',6,randomUUID(),second));
+ assert.equal(given.ok,true);assert.match(spentLate.error?.message||'',/supera el efectivo/);
+ const [spentFirst,givenLate]=await race(()=>spend('USD',4),()=>handover('USD',4,randomUUID(),second));
+ assert.equal(spentFirst.ok,true);assert.match(givenLate.error?.message||'',/supera el efectivo que tiene el capitán \(USD 0\)/);
+ assert.equal(await balance('USD'),0);assert.equal((await cash())[0].handovers.length,2);assert.equal((await alerts()).length,2);
+ // Another boat uses its own name in the alert; amounts keep the Spanish format.
+ await db.query("insert into boat_control.members values('other','captain','capitan')");
+ await rpc('captain_opening',{boat:'other',captainId:'captain',currency:'USD',amount:2000,key:randomUUID()},'admin');
+ await rpc('captain_handover',{boat:'other',captainId:'captain',currency:'USD',amount:1000.5,key:randomUUID()},'admin');
+ assert.equal((await alerts()).find(a=>a.body.includes('Otro barco')).body,'📤 Entrega de efectivo · Otro barco QA\nEl capitán entregó USD 1.000,50.\nQueda en la caja del capitán: USD 999,50.');
+ for(const {body} of await alerts())assert.doesNotMatch(body,/Capitán QA|Administración QA|Sobre/);
  for(const staff of ['chef','sailor']) {
   const cards=await rpc('reservations',{},staff);
   assert.ok(cards.length);for(const card of cards)for(const field of ['reports','collection','captainBalance','captainPayment'])assert.ok(!(field in card));
@@ -115,7 +158,10 @@ try{
  await db.query('insert into fixture_reviews select opportunity_id,id from finance_transactions where opportunity_id=$1',[own.opportunity]);
  assert.equal(await balance('USD'),null);assert.equal(await balance('EUR'),28);
  await assert.rejects(spend('USD',1),/en revisión/);
- console.log('PASS · physical cash per captain/currency, initial count and idempotent expenses; approval, legacy, owner payments and finance review; concurrent CRM receipts and expenses in separate database sessions.');
+ await assert.rejects(handover('USD',1),/cobro en revisión/);
+ const euros=await handover('EUR',28);assert.equal(await balance('EUR'),0);
+ assert.equal((await alerts()).find(a=>a.dedupe_key==='captain-handover:'+euros.entryId).body,'📤 Entrega de efectivo · Nomade\nEl capitán entregó EUR 28.\nQueda en la caja del capitán: EUR 0.');
+ console.log('PASS · physical cash per captain/currency, initial count and idempotent expenses; approval, legacy, owner payments and finance review; concurrent CRM receipts and expenses in separate database sessions; handovers recorded by administration only, capped by the known balance, idempotent, serialized with expenses, with one nameless Telegram alert each.');
 }finally{
  for(const c of clients)await c.end().catch(()=>{});
  if(started)await pg.stop();

@@ -20,6 +20,7 @@ const schemas:Record<string,z.ZodTypeAny>={
  guest_plan_save:z.object({...common,id,revision:z.number().int().nonnegative(),version:z.number().int().nonnegative(),changes:z.record(planKeys,z.string().trim().max(2000)).refine(changes=>Object.keys(changes).length>0)}).strict(),
  captain_opening:z.object({...common,captainId:text,amount:cashAmount,currency:cashCurrency}).strict(),
  captain_expense:z.object({...common,amount:cashAmount.refine(n=>n>0),currency:cashCurrency,concept:text}).strict(),
+ captain_handover:z.object({...common,captainId:text,amount:cashAmount.refine(n=>n>0),currency:cashCurrency,note:z.string().trim().max(140).optional()}).strict(),
  warehouse_count:z.object({...common,name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.max(999999999.9999),revision:z.coerce.number().int().nonnegative(),
   unitCost:z.preprocess(v=>v==null||v===''?undefined:v,z.coerce.number().finite().min(0).max(1e9).optional()),currency:z.enum(['USD','EUR','ARS','PAB','']).optional()}),
  warehouse_transfer:z.object({...common,vessel:common.boat,productId:text,targetProductId:z.string().max(140).optional(),direction:z.enum(['toBoat','toDepot']),quantity:amount,location:text}),
