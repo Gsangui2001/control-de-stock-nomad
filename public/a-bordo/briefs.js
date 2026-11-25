@@ -233,7 +233,10 @@ function briefBookingColors(rows){
  const ordered=rows.filter(Boolean).slice().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))||String(a.id).localeCompare(String(b.id)));
  return new Map(ordered.map((row,index)=>[row,colors[index%colors.length]]));
 }
-const briefGuestName=item=>String(item.name||'').trim()||'Cliente por confirmar';
+// Reservations copied from the Nomade calendar (CRM, 2026-11-24) carry the guest apart from who sold
+// the seat; older payloads only have the combined name.
+const briefFromCalendar=item=>item?.source==='calendar';
+const briefGuestName=item=>String((briefFromCalendar(item)&&'guestName' in item?item.guestName||item.agency:item.name)||'').trim()||'Cliente por confirmar';
 const briefBookingDay=value=>String(value||'').slice(0,10);
 const briefBookingCovers=(item,day)=>briefBookingDay(item.start)<=day&&briefBookingDay(item.end||item.start)>=day;
 function briefAgendaRow(item,color){
@@ -243,14 +246,26 @@ function briefAgendaRow(item,color){
  const tags=[];
  if(item.status==='in_progress')tags.push(tag('Navegando','live'));
  if(item.status==='completed')tags.push(tag('Terminado'));
- tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
- if(sent&&item.reviewedAt)tags.push(tag('Revisada'));
+ if(briefFromCalendar(item)){
+  // From the boat calendar, not from a CRM sale: there is no guest card to open. Agency and Emili
+  // seats never get one; a direct booking gets it once Carlota loads the sale.
+  const agency=typeof item.agency==='string'&&item.agency.trim()?item.agency.trim():'';
+  const kind=item.kind||(agency?'agency':'direct');
+  if(kind==='seller')tags.push(tag('Venta de '+(agency||'otra vendedora'),'agency'));
+  else if(kind==='agency'&&agency)tags.push(tag('Agencia · '+agency,'agency'));
+  else tags.push(tag('Reserva directa','agency'),tag('Ficha pendiente'));
+  for(const extra of Array.isArray(item.extras)?item.extras:[])if(typeof extra==='string'&&extra.trim())tags.push(tag(extra.trim(),'extra'));
+  if(item.tentative===true)tags.push(tag('A confirmar','collect'));
+ }else{
+  tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
+  if(sent&&item.reviewedAt)tags.push(tag('Revisada'));
+ }
  if(role==='capitan'){
   if(item.paid===true)tags.push(tag('Pagado','ok'));
   else if(typeof item.toCollectUsd==='number'&&item.toCollectUsd>0)tags.push(tag('Cobrar '+briefMoney(item.toCollectUsd),'collect'));
  }
  const dates=`${briefDay(item.start)||'Pendiente'} - ${briefDay(item.end)||'Pendiente'}`;
- const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(typeof item.name==='string'&&item.name.trim()?item.name.trim():'Cliente por confirmar')}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
+ const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(briefGuestName(item))}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
  return item.id?`<button type="button" class="agenda-row booking-${color}" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
 }
 function briefMonthGrid(month,rows,colors){
