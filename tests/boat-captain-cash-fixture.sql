@@ -6,7 +6,7 @@ create extension pgcrypto with schema extensions;
 create schema boat_control;
 create table boat_control.config(secret_hash text);
 create table boat_control.accounts(id text primary key, name text, admin boolean default false);
-create table boat_control.boats(id text primary key);
+create table boat_control.boats(id text primary key, name text);
 create table boat_control.sessions(user_id text, token text, expires timestamptz);
 create table boat_control.members(boat_id text,user_id text,role text);
 create table boat_control.reservation_links(reservation_id uuid primary key,boat_id text,captain_id text);
@@ -25,6 +25,12 @@ create table finance_booking_state(opportunity_id uuid, opening_balance_status t
 create table finance_transactions(id uuid default gen_random_uuid() primary key, opportunity_id uuid,kind text,status text,charter_credit_usd numeric,amount_usd numeric,surcharge_usd numeric,processor_fee_usd numeric,payment_method text,account_label text,external_reference text,provider_event_id text unique,occurred_at timestamptz,notes text,created_by uuid,created_actor_type text,verified_by uuid,cleared_at timestamptz);
 create table finance_allocations(transaction_id uuid,allocation_type text,amount_usd numeric);
 create table fixture_reviews(opportunity_id uuid,tx uuid);
+-- The CRM's Telegram outbox: same unique key, channels and body limits as 20260923040000_bandeja_de_avisos.
+create table internal_alert_outbox(id uuid default gen_random_uuid() primary key,dedupe_key text not null unique,
+ channel text not null check (channel in ('commercial_group','private_technical')),
+ body text not null check (char_length(btrim(body))>0 and char_length(body)<=4000),
+ status text not null default 'pending' check (status in ('pending','claimed','delivered','failed')),
+ deliver_after timestamptz not null default now(),source_event_id text,opportunity_id uuid);
 create function public.finance_transaction_is_effective(uuid) returns boolean language sql stable as $$select $1 is not null and not exists(select 1 from public.fixture_reviews where tx=$1)$$;
 create function public.finance_payment_review_pending(uuid) returns boolean language sql stable as $$select exists(select 1 from public.fixture_reviews where opportunity_id=$1)$$;
 create function public.assert_finance_payment_review_resolved(uuid) returns void language plpgsql as $$begin if public.finance_payment_review_pending($1) then raise exception 'Revisión pendiente' using errcode='PFR01';end if;end$$;
@@ -34,7 +40,7 @@ create function boat_control.brief_audience_hash(text) returns text language sql
 create function boat_control.operations(text,text,jsonb) returns jsonb language sql as $$select coalesce(jsonb_agg(jsonb_build_object('id',reservation_id)),'[]') from boat_control.reservation_links where boat_id=$3->>'boat'$$;
 insert into boat_control.config values(encode(extensions.digest('fixture-only','sha256'),'hex'));
 insert into boat_control.accounts values('admin','Administración QA',true),('captain','Capitán QA',false),('second','Otro capitán QA',false),('chef','Chef QA',false),('sailor','Marinero QA',false);
-insert into boat_control.boats values('nomade'),('other');
+insert into boat_control.boats values('nomade','Nomade QA'),('other','Otro barco QA');
 insert into boat_control.sessions select id,id||'-test-session',now()+interval '1 hour' from boat_control.accounts;
 insert into boat_control.members values('nomade','captain','capitan'),('nomade','second','capitan'),('nomade','chef','chef'),('nomade','sailor','marinero');
 insert into crm_profiles values('00000000-0000-4000-8000-000000000001','admin',true,false);

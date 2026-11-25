@@ -9,7 +9,7 @@ async function run(){
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_BIN?{executablePath:process.env.CHROMIUM_BIN}:{}),args:['--disable-background-networking']});
  const errors=[];const runCase=async(name,test)=>{if(process.env.STOCK_CASE&&!name.includes(process.env.STOCK_CASE))return;try{await test();console.log('PASS '+name)}catch(e){errors.push(name);console.error('FAIL '+name+' '+e.message.split('\n').slice(0,18).join(' '));}};
  const boats={[A]:empty('Barco A',[item('filtro','Filtro',7)]),[B]:empty('Barco B',[item('cabo','Cabo',3)])},requests={[A]:[],[B]:[]},docs={[A]:[],[B]:[]},rev={[A]:1,[B]:1},applied=new Set();
- let admin=true,role='encargado',lost=false,refuseB=false,changes=[],outbound=0,ctx,page;
+ let admin=true,role='encargado',lost=false,refuseB=false,changes=[],outbound=0,handovers=[],ctx,page;
  const notices={[A]:[],[B]:[]};
  async function login(userRole){
   if(ctx)await ctx.close();admin=userRole==='admin';role=admin?'encargado':userRole;
@@ -27,7 +27,9 @@ async function run(){
    if(pp.startsWith('/api/boat-ops/')){
     if(op==='overview')return json({requests:requests[boat],fleet:[],transfers:[],notifications:notices[boat],reservations:[]});
     if(op==='reservations')return json([]);
-    if(op==='captain_wallet')return json({wallets:[{captainId:'user-capitan',name:'Capitán de prueba',balances:[{currency:'USD',opening:0,incoming:0,spent:0,balance:0}],expenses:[],receipts:[]}]});
+    if(op==='captain_wallet'){const given=handovers.reduce((a,h)=>a+h.amount,0);return json({wallets:[{captainId:'user-capitan',name:'Capitán de prueba',balances:[{currency:'USD',opening:0,incoming:handovers.length?1500:0,spent:0,balance:(handovers.length?1500:0)-given,handed_over:given}],expenses:[],receipts:[],
+     handovers:handovers.map((h,i)=>({id:i+1,currency:h.currency,amount:h.amount,concept:h.note||'Entrega de efectivo',at:'2026-11-25T12:00:00Z',receivedBy:'Administración de prueba'}))}]});}
+    if(op==='captain_handover'){assert.equal(m,'POST');assert.equal(admin,true);handovers.push(data);return json({ok:true,entryId:handovers.length});}
     if(m!=='POST')return json([]);
     if(op==='notification_read'){const notice=notices[boat].find(n=>n.id===data.id);assert.ok(notice);notice.read_at=new Date().toISOString();return json({ok:true});}
     const key=boat+':'+data.key;changes.push({op,boat,key,quantity:data.quantity});if(applied.has(key))return json({ok:true,alreadyApplied:true});
@@ -106,6 +108,22 @@ async function run(){
    assert.equal(await page.getByRole('link',{name:/Abrir caja en Finanzas/}).count(),Number(userRole==='admin'));
    assert.equal(await page.getByRole('button',{name:/[Gg]astos y pagos/}).count(),Number(userRole!=='capitan'));
   }
+ });
+ await runCase('administración registra la entrega de efectivo del capitán',async()=>{
+  await login('capitan');await openSection('Caja');await page.getByRole('heading',{name:'Mi caja',exact:true}).waitFor();
+  assert.equal(await page.locator('form[data-operation=captain_handover]').count(),0);assert.equal(await page.getByText('Registrar entrega',{exact:true}).count(),0);
+  await login('admin');await openSection('Caja');await tap('[data-day=ops-collections]');
+  await page.getByRole('heading',{name:'Efectivo de los capitanes',exact:true}).waitFor();
+  assert.match(await page.locator('#content').innerText(),/Entregado USD 0,00/);
+  await detail('Registrar entrega');const f=page.locator('form[data-operation=captain_handover]');
+  await f.locator('[name=currency]').selectOption('USD');await fill(f,{amount:'1000.5',note:'Sobre cerrado'});await submit(f);
+  await waitFor(()=>handovers.length===1);
+  assert.deepEqual({...handovers[0],key:undefined},{captainId:'user-capitan',currency:'USD',amount:1000.5,note:'Sobre cerrado',boat:A,key:undefined});
+  assert.match(handovers[0].key,/^[0-9a-f-]{36}$/);
+  await page.getByText('Entregas (1)',{exact:true}).waitFor();await detail('Entregas (1)');
+  const text=await page.locator('#content').innerText();
+  assert.match(text,/USD 499,50/);assert.match(text,/Entregado USD 1\.000,50/);assert.match(text,/Sobre cerrado · .* · Recibió Administración de prueba/);
+  handovers.length=0;
  });
  await runCase('mantenimiento vacío, trabajo sin materiales y retorno desde avisos de reposición',async()=>{
   const original=boats[A];boats[A]=empty('Barco A',[]);
