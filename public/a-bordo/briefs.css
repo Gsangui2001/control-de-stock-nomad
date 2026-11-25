@@ -63,6 +63,8 @@
 .agenda-ok { background:#e3f3ec; color:#18543e; }
 .agenda-live { background:#e6f0fb; color:#214969; }
 .agenda-collect { background:#fff1e3; color:#8c4518; font-weight:700; }
+.agenda-agency { background:#eef0fb; color:#33407a; font-weight:600; }
+.agenda-extra { background:#f3f0e6; color:#5c4f22; }
 .agenda-go { font-size:1.35rem; color:#52736f; }
 .agenda-calendar button:focus-visible { outline:2px solid #18718a; outline-offset:-2px; }
 .agenda-calendar button:hover { filter:brightness(.96); }

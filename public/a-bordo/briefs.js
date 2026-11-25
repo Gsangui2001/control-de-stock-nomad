@@ -1,5 +1,5 @@
 "use strict";
-let briefExternal=null,briefBusy=false;
+let briefExternal=null,briefBusy=false,briefAgendaReview=null;
 const briefFields={country:'País de procedencia',airConditioning:'Aire acondicionado (sí, no o por confirmar)',embarkation:'Lugar de embarque',embarkationTime:'Hora de embarque (hora local)',disembarkation:'Lugar de desembarque',disembarkationTime:'Hora de desembarque / salida tardía',food:'Dieta específica',allergies:'Alergias / alimentos a evitar',drinks:'Bebidas preferidas',activities:'Experiencia deseada',transport:'Cómo llegan / traslado',requests:'Preparación y pedidos especiales'};
 const briefMissing=value=>value===null||value===undefined||value===''?'Pendiente de informar':String(value);
 const briefInterest=value=>({snorkeling:'Esnórquel',diving:'Buceo',guna_culture:'Cultura guna',fishing:'Pesca',relax:'Descanso',sailing:'Navegación',gastronomy:'Gastronomía',remote_islands:'Islas remotas',family_activities:'Actividades en familia',other:'Otros'})[value]||value;
@@ -96,6 +96,24 @@ function guestFocusHeader(res){
  <dl class="guest-itinerary"><div><dt>Embarque</dt><dd>${esc(guestDateLabel(res.start))}</dd></div>
  <div><dt>Desembarque</dt><dd>${esc(guestDateLabel(res.end))}</dd></div></dl></header>`;
 }
+function briefAuthorizedAgendaPreview(item){
+ const v=item?.operationalPreview;
+ return role==='capitan'&&!session.admin&&!Number(item?.briefVersion)&&['confirmed','in_progress'].includes(item?.status)
+  &&v&&typeof v==='object'&&!Array.isArray(v)?v:null;
+}
+function briefOperationalPreview(v){
+ if(!v)return '';
+ const statuses=new Map([['pending','Pendiente'],['requested','Solicitado'],['coordinated','Coordinado'],['confirmed','Confirmado'],['cancelled','Cancelado']]);
+ const transport=v.transportRequired===false?'No solicitado':v.transportRequired===true?(statuses.get(v.transportStatus)||'Por confirmar'):'Por confirmar';
+ const charter=v.charterType==='private'?'Privado':v.charterType==='shared'?'Compartido':'Por confirmar';
+ const clock=new Intl.DateTimeFormat('es-PA',{timeZone:'America/Panama',dateStyle:'short',timeStyle:'short'});
+ const times=(v.transportRequired===true&&Array.isArray(v.confirmedTransferTimes)?v.confirmedTransferTimes:[])
+  .filter(t=>t&&['outbound','return'].includes(t.direction)&&typeof t.pickupAt==='string'&&Number.isFinite(Date.parse(t.pickupAt)))
+  .map(t=>`<p>Recogida de traslado ${t.direction==='outbound'?'(ida)':'(regreso)'}: ${esc(clock.format(new Date(t.pickupAt)))} · hora de Panamá</p>`).join('');
+ return `<section class="day-note" aria-label="Ficha operativa de la reserva"><h2>Ficha operativa de la reserva</h2>
+ <p>Fechas y pasajeros se cargan desde el CRM. Modalidad: ${charter}. Traslado: ${transport}.</p>${times}
+ <p>El horario de embarque y las preferencias figuran cuando se publica la ficha completa. Esta vista no autoriza cobros.</p></section>`;
+}
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
  const selected=new URLSearchParams(location.search).get('reservation');
@@ -109,7 +127,7 @@ function briefReservationsView(){
   if(!item)return '<h1>Ficha no disponible</h1><p>Volvé a la agenda para consultar las salidas de este barco.</p>';
   if(item.briefVersion>0)return '<h1>Ficha publicada</h1><p>Actualizá para cargar la información de este huésped.</p>';
   agendaOnly=true;
-  rows=[{id:item.id,name:item.name,start:item.start,end:item.end,guests:item.guests,primaryAge:item.primaryAge,brief:{version:0},onboardPlan:item.onboardPlan}];
+  rows=[{id:item.id,name:item.name,start:item.start,end:item.end,guests:item.guests,primaryAge:item.primaryAge,brief:{version:0},onboardPlan:item.onboardPlan,operationalPreview:briefAuthorizedAgendaPreview(item)}];
  }
  const extra=(selected?[]:agenda?.rows||[]).filter(r=>r.id&&!rows.some(known=>known.id===r.id));
  const extrasHtml=extra.map(r=>`<button type="button" class="guest-directory-row" data-agenda-open="${esc(r.id)}"><strong>${esc(r.name||'Cliente por confirmar')}</strong><small>${esc(guestDateLabel(r.start))} · ${r.briefVersion?'Ficha publicada':'Ficha en preparación'}</small></button>`).join('');
@@ -118,15 +136,18 @@ function briefReservationsView(){
  ${isAdmin?'<div class="ops-actions"><button type="button" class="day-secondary" data-brief-action="external">Plantillas para otros capitanes</button></div><div id="briefExternal"></div>':''}`;
  return intro+rows.map(res=>{
   const b=res.brief||{},changed=b.sourceChanged||b.draftChanged;
+  const agendaReview=isAdmin&&!agendaOnly&&selected&&briefAgendaReview?.id===res.id&&briefAgendaReview.boat===boatId&&briefAgendaReview.user===session;
   const wrapper=selected?'article':'details';
   const heading=selected?guestFocusHeader(res):`<summary>${date(res.start)} · ${esc(res.name||'Cliente pendiente')} · ${res.guests??'—'} pasajeros · ${b.version?'Versión '+b.version:'Borrador'}</summary>`;
   return `<${wrapper} class="${selected?'guest-focused':'day-disclosure'} brief-card" id="brief-${esc(res.id)}">${heading}
+  ${agendaOnly?briefOperationalPreview(res.operationalPreview):''}
+  ${agendaReview?'<div class="day-note">Guardar aquí solo actualiza el borrador: no publica la ficha ni autoriza cobros. Corroborá los datos y el saldo en el CRM antes de aprobar.</div><button type="button" class="day-secondary" data-day="ops-agenda">Volver a la agenda del mes</button>':''}
   ${selected&&typeof guestPlanPanel==='function'?guestPlanPanel(res):''}
   ${!selected?`<button type="button" class="day-secondary" data-agenda-open="${esc(res.id)}">Abrir ficha del huésped</button>`:''}
   ${!selected?(b.version?`<p class="day-muted">Publicada: ${briefTime(b.publishedAt)}</p>`:'<div class="day-note">Todavía no está publicada para la tripulación.</div>'):''}
   ${changed?`<div class="ops-critical">${isAdmin?'Hay cambios sin publicar. Revisá y publicá una nueva versión para solicitar otra revisión.':'El CRM cambió desde esta publicación. Administración debe actualizar la ficha; esta es la última versión publicada.'}</div>`:''}
   ${!selected||b.version||(isAdmin&&!agendaOnly)?briefContent(res,Boolean(selected)):''}
-  ${isAdmin&&!agendaOnly?`<details class="day-disclosure guest-admin"><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure"><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
+  ${isAdmin&&!agendaOnly?`<details class="day-disclosure guest-admin" ${agendaReview?'open':''}><summary>Administración · editar y ver revisiones</summary><details class="day-disclosure" ${agendaReview?'open':''}><summary>Completar o corregir la ficha</summary><form class="brief-form" data-operation="brief_save" data-id="${esc(res.id)}" data-revision="${b.revision||0}"><input type="hidden" name="revision" value="${b.revision||0}">${Object.entries(briefFields).map(([key,label])=>`<label>${label}<textarea name="${key}" maxlength="2000" rows="2">${esc(b.draft?.[key]||'')}</textarea></label>`).join('')}<p class="form-error" role="alert"></p><button type="submit" class="day-primary">Guardar borrador</button></form></details>
    <p>${['confirmed','in_progress'].includes(res.status)?'La reserva está confirmada en el CRM.':'La reserva debe confirmarse en el CRM antes de publicar la ficha.'}</p>
    <p>La publicación requiere la aprobación de Carlota en la ficha de la reserva.</p><a class="day-primary" href="https://crm.nomadsailors.com/operaciones" target="_blank" rel="noopener">Abrir reservas en el CRM</a>
    <h3>Revisión de la versión ${b.version||'pendiente'}</h3>${(b.reviews||[]).map(rv=>`<p>${esc(rv.name)} · ${esc(rv.role)}: <strong>${rv.reviewedAt?'Revisado · '+briefTime(rv.reviewedAt):'Pendiente'}</strong></p>`).join('')||'<p>No hay tripulantes asignados.</p>'}</details>`:
@@ -233,7 +254,10 @@ function briefBookingColors(rows){
  const ordered=rows.filter(Boolean).slice().sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))||String(a.id).localeCompare(String(b.id)));
  return new Map(ordered.map((row,index)=>[row,colors[index%colors.length]]));
 }
-const briefGuestName=item=>String(item.name||'').trim()||'Cliente por confirmar';
+// Reservations copied from the Nomade calendar (CRM, 2026-11-24) carry the guest apart from who sold
+// the seat; older payloads only have the combined name.
+const briefFromCalendar=item=>item?.source==='calendar';
+const briefGuestName=item=>String((briefFromCalendar(item)&&'guestName' in item?item.guestName||item.agency:item.name)||'').trim()||'Cliente por confirmar';
 const briefBookingDay=value=>String(value||'').slice(0,10);
 const briefBookingCovers=(item,day)=>briefBookingDay(item.start)<=day&&briefBookingDay(item.end||item.start)>=day;
 function briefAgendaRow(item,color){
@@ -243,14 +267,26 @@ function briefAgendaRow(item,color){
  const tags=[];
  if(item.status==='in_progress')tags.push(tag('Navegando','live'));
  if(item.status==='completed')tags.push(tag('Terminado'));
- tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
- if(sent&&item.reviewedAt)tags.push(tag('Revisada'));
+ if(briefFromCalendar(item)){
+  // From the boat calendar, not from a CRM sale: there is no guest card to open. Agency and Emili
+  // seats never get one; a direct booking gets it once Carlota loads the sale.
+  const agency=typeof item.agency==='string'&&item.agency.trim()?item.agency.trim():'';
+  const kind=item.kind||(agency?'agency':'direct');
+  if(kind==='seller')tags.push(tag('Venta de '+(agency||'otra vendedora'),'agency'));
+  else if(kind==='agency'&&agency)tags.push(tag('Agencia · '+agency,'agency'));
+  else tags.push(tag('Reserva directa','agency'),tag('Ficha pendiente'));
+  for(const extra of Array.isArray(item.extras)?item.extras:[])if(typeof extra==='string'&&extra.trim())tags.push(tag(extra.trim(),'extra'));
+  if(item.tentative===true)tags.push(tag('A confirmar','collect'));
+ }else{
+  tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
+  if(sent&&item.reviewedAt)tags.push(tag('Revisada'));
+ }
  if(role==='capitan'){
   if(item.paid===true)tags.push(tag('Pagado','ok'));
   else if(typeof item.toCollectUsd==='number'&&item.toCollectUsd>0)tags.push(tag('Cobrar '+briefMoney(item.toCollectUsd),'collect'));
  }
  const dates=`${briefDay(item.start)||'Pendiente'} - ${briefDay(item.end)||'Pendiente'}`;
- const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(typeof item.name==='string'&&item.name.trim()?item.name.trim():'Cliente por confirmar')}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
+ const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(briefGuestName(item))}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
  return item.id?`<button type="button" class="agenda-row booking-${color}" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
 }
 function briefMonthGrid(month,rows,colors){
@@ -334,7 +370,9 @@ document.addEventListener('click',event=>{
  }
  const open=event.target.closest('[data-agenda-open]');if(!open)return;
  dayGuestCashOwner=dayPage==='ops-cash' && canViewCash() ? {boat:boatId,user:session} : null;
- const id=open.dataset.agendaOpen,params=new URLSearchParams(location.search);params.set('reservation',id);
+ const id=open.dataset.agendaOpen;
+ briefAgendaReview=session.admin&&dayPage==='ops-agenda'&&opsReservations.some(r=>r.id===id&&r.brief)?{id,boat:boatId,user:session}:null;
+ const params=new URLSearchParams(location.search);params.set('reservation',id);
  history.replaceState(null,'',location.pathname+'?'+params.toString());
  dayPage='ops-reservations';render();
  setTimeout(()=>document.getElementById('brief-'+id)?.scrollIntoView({block:'start'}),0);
