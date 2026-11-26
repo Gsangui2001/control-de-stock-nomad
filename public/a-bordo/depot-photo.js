@@ -34,6 +34,7 @@ class DepotPhotoCount extends HTMLElement {
     this.products=this.closest("boat-admin-stock").data.products;
     this.pendingKey="depot-photo-pending:"+owner;
     this.selections=[];
+    this.mode="count";
     this.draw();
     draftRead(this.pendingKey).then(pending=>{
       if(this.active() && pending){this.pending=pending; this.draw();}
@@ -49,8 +50,9 @@ class DepotPhotoCount extends HTMLElement {
   }
 
   draw(){
-    const rows=depotPhotoItems(this.rows||[],this.products,this.group,this.defaultUnits,this.selections);
+    const rows=depotPhotoItems(this.rows||[],this.products,this.group,this.defaultUnits,this.selections).map(r=>this.mode==="replenish"&&r.quantity===0?{...r,reason:"La mercadería ingresada debe ser mayor a cero"}:r);
     this.innerHTML='<section><h2>Conteo por foto · Stock Tierra</h2><p>Sacá una foto de la lista de productos y cantidades. Se lee sola. El stock cambia solo cuando confirmás.</p>'+
+      (this.pending?'':'<label>Qué estás cargando<select data-mode><option value="count">Conteo real · reemplaza lo contado</option><option value="replenish">Ingreso de mercadería · suma lo que llegó</option></select></label>')+
       (this.pending?'': '<div class="area-actions"><button type="button" class="day-primary" data-acquire="camera">Sacar foto</button><button type="button" class="day-secondary" data-acquire="gallery">Elegir foto</button></div>'+
       '<input type="file" accept="image/*" capture="environment" data-source="camera" hidden><input type="file" accept="image/*" data-source="gallery" hidden>')+
       '<p data-progress role="status"></p><p role="alert">'+esc(this.message||"")+'</p>'+
@@ -62,6 +64,7 @@ class DepotPhotoCount extends HTMLElement {
         (r.reason?'<p class="form-error">'+esc(r.reason)+'</p>':'')+
         (r.choices.length?'<label>Artículo existente<select data-choice="'+i+'"><option value="">Elegí un artículo</option>'+r.choices.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name+' · '+x.unit+' · '+x.location)+'</option>').join("")+'</select></label>':'')+'</article>').join("")+
       '<button type="button" class="day-primary" data-confirm '+(rows.some(r=>r.reason)?'disabled':'')+'>Confirmar y actualizar Stock Tierra</button>':'')+'</section>';
+    const mode=this.querySelector("[data-mode]");if(mode){mode.value=this.mode;mode.onchange=()=>{this.mode=mode.value;this.draw();};}
     const group=this.querySelector("[data-group]"); if(group){group.value=this.group||"";group.onchange=()=>{this.group=group.value;this.draw();};}
     const defaults=this.querySelector("[data-default-units]");if(defaults){defaults.checked=!!this.defaultUnits;defaults.onchange=()=>{this.defaultUnits=defaults.checked;this.draw();};}
     for(const choice of this.querySelectorAll("[data-choice]")){const i=Number(choice.dataset.choice);choice.value=this.selections[i]||"";choice.onchange=()=>{this.selections[i]=choice.value;this.draw();};}
@@ -92,7 +95,7 @@ class DepotPhotoCount extends HTMLElement {
     if(!this.active()||this.busy||(!this.pending&&(!rows?.length||rows.some(r=>r.reason))))return;
     this.busy=true;
     try{
-      const payload=this.pending||{scope:"depot",revision:this.revision,confirmed:true,key:uid(),
+      const payload=this.pending||{scope:"depot",mode:this.mode,revision:this.revision,confirmed:true,key:uid(),
         items:rows.map(({name,unit,location,area,quantity,productId})=>({name,unit,location,area,quantity,productId}))};
       const stored=await editStoredDraft(this.pendingKey,old=>old||payload);
       this.pending=stored;

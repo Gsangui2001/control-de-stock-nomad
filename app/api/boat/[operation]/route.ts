@@ -154,7 +154,10 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
      const visible=stateForRole(snapshot,auth.user).state;
      if(!isOperationalStatePhoto(visible,url)){
       const {data:overview,error}=await client.rpc('boat_operations_rpc',{server_key:secret,operation:'overview',payload:{boat,session}}).abortSignal(AbortSignal.timeout(15000));
-      if(error||!overview?.requests?.some((request:any)=>request.photo===url))throw new ApiError(403,'Esta foto no está disponible para tu rol.');
+      if(error||!overview?.requests?.some((request:any)=>request.photo===url)){
+       const {data:packagePhoto}=await client.rpc('boat_stockroom_package_rpc',{server_key:secret,operation:'warehouse_package_photo',payload:{boat,session,photo:id}}).abortSignal(AbortSignal.timeout(10000));
+       if(packagePhoto!==true)throw new ApiError(403,'Esta foto no está disponible para tu rol.');
+      }
      }
     }
    }

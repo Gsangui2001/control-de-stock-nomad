@@ -1,0 +1,9 @@
+# Stock Tierra → barco: paquete con dos fotos (borrador)
+
+- **Administración** abre Stock Tierra, elige conteo inicial/real o ingreso de mercadería y saca una foto de la lista; la lectura comienza sola. Confirmar un conteo reemplaza solo las cantidades verificadas. Confirmar un ingreso suma cantidades. No se inventan cantidades ni se crea un asiento de Finanzas.
+- En **Administrar → Stock de barcos y depósito → Nomadé**, elegí **Preparar paquete desde Tierra**. Seleccioná los productos en stock, p. ej. cerveza: 2 fundas × 24 unidades = 48, y agregá la foto del despacho. Al confirmar se descuentan de Tierra en una sola operación. La mercadería figura **En camino**, no disponible a bordo.
+- En **Stock de Nomadé → Paquetes de Tierra**, la tripulación ve el aviso y la foto de salida. Abre **Recibir paquete**, revisa cantidades y ubicación, adjunta la foto de recepción, y confirma. Solo suma lo recibido. Lo que falte se mantiene pendiente y requiere otra recepción con su propia foto. Si el teléfono tiene notificaciones activas, se encola un aviso; la app siempre conserva el aviso interno.
+- A partir de la recepción, **Registrar consumo** del insumo descuenta lo realmente usado en ese barco (por ejemplo, 5 cervezas o 2 kg de carne). No descuenta Tierra otra vez ni inventa consumos.
+- Probar con base aislada: Admin puede despachar; un rol de Nomadé puede ver y recibir; otro barco no puede listar ni abrir fotos. Dos fundas de 24: Tierra de 60 a 12 y Nomadé sin cambio al enviar; si recibe 46, quedan 2 en camino. Recibir las 2 restantes suma 48 acumuladas. Consumir 5 deja 43. Cada acción reintentada conserva el mismo identificador. No usar estos valores de prueba en producción.
+
+No incluye alta ni permisos para Lagoon, ni cambios de reservas/finanzas. Las migraciones y la publicación se revisan aparte; las vistas previas de Vercel no pueden ejecutar los nuevos movimientos de Tierra.

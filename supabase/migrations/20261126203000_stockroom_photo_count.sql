@@ -3,6 +3,7 @@ create function boat_control.stockroom_photo_count(server_key text, payload json
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare actor boat_control.accounts%rowtype; depot boat_control.stockroom%rowtype;
   receipt boat_control.operation_receipts%rowtype; batch_key uuid; request jsonb; answer jsonb;
+  mode text:=coalesce(payload->>'mode','count');
   item jsonb; product jsonb; product_id text; loc text; qty numeric; previous numeric;
   seen text[] := '{}'; added_moves jsonb := '[]'::jsonb;
 begin
@@ -14,7 +15,7 @@ begin
  if actor.id is null then raise exception 'Iniciá sesión' using errcode='28000'; end if;
  if actor.admin is distinct from true then raise exception 'Reservado a administración.' using errcode='42501'; end if;
  batch_key=(payload->>'key')::uuid;
- if batch_key is null or payload->>'scope' is distinct from 'depot' or payload->'confirmed' is distinct from 'true'::jsonb
+ if batch_key is null or mode not in ('count','replenish') or payload->>'scope' is distinct from 'depot' or payload->'confirmed' is distinct from 'true'::jsonb
    or jsonb_typeof(payload->'items') is distinct from 'array' then
    raise exception 'Revisá y confirmá el conteo del depósito.' using errcode='22023';
  end if;
@@ -52,6 +53,11 @@ begin
    if product_id=any(seen) then raise exception 'Un producto figura dos veces en el conteo.' using errcode='22023'; end if;
    seen=array_append(seen,product_id);
    previous=(product->>'current')::numeric;
+   if mode='replenish' then
+     if qty<=0 then raise exception 'La mercadería ingresada debe ser mayor a cero.' using errcode='22023'; end if;
+     qty=previous+qty;
+   end if;
+   if qty>=1e12 then raise exception 'Cantidad inválida' using errcode='22023'; end if;
    product=product||jsonb_build_object('current',qty);
    if exists(select 1 from jsonb_array_elements(depot.products) x where x->>'id'=product_id) then
      select jsonb_agg(case when x->>'id'=product_id then product else x end order by n)
@@ -59,7 +65,7 @@ begin
    else depot.products=depot.products||jsonb_build_array(product); end if;
    added_moves=added_moves||jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'batchId',batch_key,
      'productId',product_id,'name',product->>'name','unit',product->>'unit','delta',qty-previous,'balance',qty,
-     'date',(now() at time zone 'America/Panama')::date,'reason','Conteo físico por foto','responsible',actor.name));
+     'date',(now() at time zone 'America/Panama')::date,'reason',case mode when 'replenish' then 'Entrada de mercadería por foto' else 'Conteo físico por foto' end,'responsible',actor.name));
  end loop;
  update boat_control.stockroom set products=depot.products,movements=depot.movements||added_moves,revision=depot.revision+1 where id;
  answer=jsonb_build_object('ok',true,'rows',cardinality(seen),'revision',depot.revision+1);
