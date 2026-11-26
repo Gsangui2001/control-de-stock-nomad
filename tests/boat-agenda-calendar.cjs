@@ -1,8 +1,7 @@
 // Run with the project's browser QA settings (PLAYWRIGHT_MODULE and CHROMIUM_BIN).
 // Nothing leaves this context: both the application and its boat API are local fixtures.
 // 2026-11-24: the CRM adds the Nomade calendar bookings that do not come from a sale (agency seats,
-// Emili's sales, direct bookings without a sale). They have no guest card: the agenda shows who
-// travels, who sold the seat and the booking notes, never «Ficha en preparación».
+// Emili's sales, direct bookings without a sale). Open a read-only calendar detail, not a CRM card.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -62,21 +61,34 @@ async function exercise(browser, role) {
       assert.deepEqual(errors,[]);
       return;
     }
-    assert.deepEqual(await tags('Lucía Ferraro'),['Agencia · San Blas On Board','Aire acondicionado','Late check-out']);
+    assert.deepEqual(await tags('Lucía Ferraro'),['Agencia · San Blas On Board']);
     assert.equal(await row('Lucía Ferraro').locator('strong').textContent(),'Lucía Ferraro','the guest name stands alone');
     assert.match(await row('Lucía Ferraro').textContent(),/2 pasajeros/);
     assert.deepEqual(await tags('Hugo Brandt'),['Venta de Emili']);
-    assert.deepEqual(await tags('Erik Lund'),['Reserva directa','Ficha pendiente']);
+    assert.deepEqual(await tags('Erik Lund'),['Solo calendario']);
     assert.deepEqual(await tags('Tips on Boats'),['Agencia · Tips on Boats','A confirmar']);
     assert.deepEqual(await tags('Ana Soto · Blue Sailing'),['Agencia · Blue Sailing'],'an older payload still reads right');
     assert.deepEqual((await tags('Marina Pérez')).slice(0,1),['Ficha enviada'],'CRM sales keep their guest card tags');
 
-    for(const name of ['Lucía Ferraro','Hugo Brandt','Erik Lund','Tips on Boats']) {
-      assert.equal(await row(name).locator('[data-agenda-open]').count(),0,name+' has no card to open');
-      assert.equal(await row(name).evaluate(el => el.tagName),'DIV',name+' is not a button');
-      assert.doesNotMatch(await row(name).textContent(),/Ficha en preparación|Ficha enviada/);
+    assert.equal(await page.locator('[data-agenda-calendar-toggle]').getAttribute('open'),null,'the list is visible before the optional calendar');
+    for(const name of ['Lucía Ferraro','Hugo Brandt','Erik Lund','Tips on Boats']){
+      assert.equal(await row(name).evaluate(el=>el.tagName),'BUTTON');
+      assert.equal(await row(name).getAttribute('data-agenda-open'),null);
+      await row(name).tap();
+      await page.locator('#brief-calendar-detail').waitFor();
+      assert.match(await page.locator('#brief-calendar-detail').textContent(),/solo hay datos del calendario/);
+      assert.equal(await page.locator('[data-brief-action="payment"],.brief-form').count(),0);
+      if(name==='Lucía Ferraro')assert.match(await page.locator('#brief-calendar-detail').textContent(),/Aire acondicionado.*Late check-out/s);
+      await page.getByRole('button',{name:/← Agenda del mes/}).tap();
     }
-    assert.ok(await page.locator('.agenda-stay').filter({hasText:/Lucía|LF/}).count() > 0,'the month grid shows the calendar booking');
+    await row('Marina Pérez').tap();
+    await page.getByRole('heading',{name:'Marina Pérez'}).waitFor();
+    assert.equal(await page.locator('#brief-calendar-detail').count(),0);
+    await page.getByRole('button',{name:/← Agenda del mes/}).tap();
+    await page.getByText('Ver calendario',{exact:true}).tap();
+    const booking=page.locator('button.agenda-stay[data-agenda-calendar]').filter({hasText:/Lucía|LF/});
+    await booking.first().tap();
+    await page.getByRole('heading',{name:'Lucía Ferraro'}).waitFor();
     if(process.env.AGENDA_SCREENSHOT && role === 'capitan') await page.screenshot({path:process.env.AGENDA_SCREENSHOT,fullPage:true});
     assert.deepEqual(errors,[]);
     assert.deepEqual(unexpected,[]);

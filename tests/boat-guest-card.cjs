@@ -42,7 +42,7 @@ test('card follows the owner reference: order, titles, dates, ages and companion
  assert.match(flat,/Acompañantes Tomás Ferreyra \(12\) · Ana Paz /);
  assert.doesNotMatch(flat,/Ana Paz \(|LUCIA/);
  assert.match(flat,/País de procedencia BRASIL/);
- const order=['Información del huésped','Fecha del charter','Nombre del cliente principal','Acompañantes','País de procedencia','Aire acondicionado','Llegada','Salida','Información de comidas','A evitar','Prefieren','Dieta específica','A pagar','Experiencia'];
+ const order=['Información del huésped','Fecha del charter','Nombre del cliente principal','Acompañantes','País de procedencia','Aire acondicionado','Llegada','Salida','Información de comidas','A evitar','Prefieren','Dieta específica','Experiencia'];
  const positions=order.map(label=>flat.indexOf(label));
  assert.ok(positions.every(p=>p>=0),'missing label: '+order[positions.indexOf(-1)]);
  assert.deepEqual([...positions].sort((x,y)=>x-y),positions);
@@ -85,7 +85,7 @@ test('crew only has versioned review; administration keeps draft controls inside
 test('captain only sees the guest card and review, even if old cached data includes contact',()=>{
  const a=app();a.role='capitan';a.opsReservations=[{id:'r',name:'Guest',phone:'PRIVATE_PHONE',email:'PRIVATE_EMAIL',passengers:[{name:'Otro',passport:'PRIVATE_PASSPORT'}],collection:{amount:999},reports:[{amount:999}],brief:{version:1}}];
  const out=a.briefReservationsView();
- assert.match(out,/Información del huésped/);assert.match(out,/Ya la revisé · versión 1/);assert.match(text(out),/A pagar por confirmar con Carlota/);
+ assert.match(out,/Información del huésped/);assert.match(out,/Ya la revisé · versión 1/);assert.doesNotMatch(text(out),/Cobrar en efectivo|Sí cobré/);
  assert.doesNotMatch(out,/PRIVATE_PHONE|PRIVATE_EMAIL|PRIVATE_PASSPORT|Contacto del cliente|Administración|999|Guardar borrador/);
 });
 
@@ -93,17 +93,17 @@ test('captain "A pagar" states: none, paid, known balance with a yes button, unk
  const a=app();a.role='capitan';
  const res={id:'r',details:{captainCollection:'collect'},captainBalance:{status:'known',currency:'USD',amountUsd:2016,reportedCount:0},brief:{version:2}};
  const due=a.briefPayment(res);
- assert.match(text(due),/A pagar USD 2\.016,00/);assert.match(due,/data-brief-action="payment"/);assert.match(due,/Recibí USD 2\.016,00 en efectivo/);
+ assert.match(text(due),/Cobrar en efectivo USD 2\.016,00/);assert.match(due,/data-brief-action="payment"/);assert.match(due,/Sí cobré/);
  for(const mode of [undefined,'pending','none'])assert.doesNotMatch(a.briefPayment({...res,details:{captainCollection:mode}}),/data-brief-action="payment"/);
  assert.equal(a.briefPayment({...res,cashAssigned:false}),'');
  assert.doesNotMatch(a.briefPayment({...res,cashLegacyReview:true}),/data-brief-action="payment"/);
  assert.doesNotMatch(a.briefPayment({...res,brief:{version:2,sourceChanged:true}}),/data-brief-action/);
  assert.doesNotMatch(a.briefPayment({...res,brief:{version:0}}),/data-brief-action/);
  const unknown=a.briefPayment({...res,captainBalance:{status:'incomplete',amountUsd:null}});
- assert.match(text(unknown),/A pagar por confirmar con Carlota/);assert.doesNotMatch(unknown,/USD 0|data-brief-action/);
- assert.match(text(a.briefPayment({id:'r'})),/A pagar por confirmar con Carlota/);
- assert.match(text(a.briefPayment({...res,details:{captainCollection:'none'}})),/A pagar no cobra a bordo/);
- assert.match(text(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:0,reportedCount:0}})),/A pagar pagado/);
+ assert.equal(unknown,'');assert.doesNotMatch(unknown,/USD 0|data-brief-action/);
+ assert.equal(a.briefPayment({id:'r'}),'');
+ assert.equal(a.briefPayment({...res,details:{captainCollection:'none'}}),'');
+ assert.equal(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:0,reportedCount:0}}),'');
  assert.doesNotMatch(a.briefPayment({...res,captainBalance:{status:'known',amountUsd:2016,reportedCount:1}}),/data-brief-action/);
  const reported=a.briefPayment({...res,captainPayment:{status:'reported',amountUsd:2016,reportedBy:'Capitán QA',reportedAt:'2026-01-01T12:00:00Z'}});
  assert.doesNotMatch(reported,/data-brief-action|A pagar pagado/);
@@ -111,13 +111,9 @@ test('captain "A pagar" states: none, paid, known balance with a yes button, unk
  a.role='encargado';assert.equal(a.briefPayment(res),'');
 });
 
-test('cleared payment is paid only when nothing is left',()=>{
- const a=app();a.role='capitan';const base={id:'r',captainPayment:{amountUsd:700,status:'cleared',balanceUsd:0,reportedBy:'Capitán QA',reportedAt:'2026-01-01T12:00:00Z'}};
- const paid=text(a.briefPayment(base));
- assert.match(paid,/A pagar pagado/);assert.match(paid,/Registrado en el CRM · USD 700,00 · Capitán QA/);assert.doesNotMatch(paid,/verificado por Carlota|pendiente de Carlota/);
- assert.match(text(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:null}})),/saldo por verificar/);
- const partial=text(a.briefPayment({...base,captainPayment:{...base.captainPayment,balanceUsd:100}}));
- assert.doesNotMatch(partial,/A pagar pagado/);assert.match(partial,/USD 100,00 pendiente/);
+test('already registered money stays in Caja, not in the guest card',()=>{
+ const a=app();a.role='capitan';
+ for(const balanceUsd of [0,100,null])assert.equal(a.briefPayment({id:'r',captainPayment:{amountUsd:700,status:'cleared',balanceUsd}}),'');
 });
 
 function agendaApp(rows,roleName='capitan'){
@@ -137,7 +133,7 @@ test('agenda groups by month, sorts by date and shows the captain what to collec
  const list=text(out.slice(out.indexOf('<div class="agenda-list">')));
  assert.ok(list.indexOf('Pedro Gil')<list.indexOf('Ana Paz')&&list.indexOf('Ana Paz')<list.indexOf('Clara Núñez'));
  assert.match(flat,/30\/10 - 02\/11 Pedro Gil \(45\) 4 pasajeros Navegando Ficha enviada Revisada Cobrar USD 1\.500,00/);
- assert.match(flat,/Ana Paz \(30\) 1 pasajero Terminado Ficha enviada Pagado/);
+ assert.match(flat,/Ana Paz \(30\) 1 pasajero Terminado Ficha enviada/);
  assert.match(flat,/Clara Núñez 2 pasajeros Ficha en preparación/);assert.doesNotMatch(flat,/Clara Núñez \(/);
  assert.match(out,/data-agenda-open="a"/);assert.match(out,/data-agenda-open="c"/);assert.match(out,/data-agenda-open="b"/);
  assert.match(out,/data-agenda-month="2026-10"/);assert.match(out,/data-agenda-month="2026-12"/);

@@ -90,6 +90,7 @@ async function exercise(browser, role) {
     const entry = guest => rows.locator('[data-agenda-open="'+guest.id+'"]');
     await entry(cross).waitFor();
     assert.equal(await entry(next).count(),0,'next month stays out of this month');
+    await page.getByText('Ver calendario',{exact:true}).tap();
     await page.locator('[data-agenda-day="'+day(3)+'"]').tap();
     await entry(overlap).waitFor();
     assert.equal(await entry(pending).count(),Number(full),'unpublished data reaches only the full agenda');

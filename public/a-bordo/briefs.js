@@ -1,5 +1,6 @@
 "use strict";
-let briefExternal=null,briefBusy=false,briefAgendaReview=null;
+let briefExternal=null,briefBusy=false,briefAgendaReview=null,briefCalendarSelection=null;
+let briefAgendaCalendarOpen=false,briefCalendarButtons=new Map();
 const briefFields={country:'País de procedencia',airConditioning:'Aire acondicionado (sí, no o por confirmar)',embarkation:'Lugar de embarque',embarkationTime:'Hora de embarque (hora local)',disembarkation:'Lugar de desembarque',disembarkationTime:'Hora de desembarque / salida tardía',food:'Dieta específica',allergies:'Alergias / alimentos a evitar',drinks:'Bebidas preferidas',activities:'Experiencia deseada',transport:'Cómo llegan / traslado',requests:'Preparación y pedidos especiales'};
 const briefMissing=value=>value===null||value===undefined||value===''?'Pendiente de informar':String(value);
 const briefInterest=value=>({snorkeling:'Esnórquel',diving:'Buceo',guna_culture:'Cultura guna',fishing:'Pesca',relax:'Descanso',sailing:'Navegación',gastronomy:'Gastronomía',remote_islands:'Islas remotas',family_activities:'Actividades en familia',other:'Otros'})[value]||value;
@@ -104,9 +105,29 @@ function briefOperationalPreview(v){
  <p>Fechas y pasajeros se cargan desde el CRM. Modalidad: ${charter}. Traslado: ${transport}.</p>${times}
  <p>El horario de embarque y las preferencias figuran cuando se publica la ficha completa. Esta vista no autoriza cobros.</p></section>`;
 }
+function briefCalendarCard(item){
+ const status=item.tentative===true?'A confirmar':'Registrada en calendario';
+ const guests=Number.isInteger(item.guests)&&item.guests>0?item.guests+' '+(item.guests===1?'pasajero':'pasajeros'):'Pasajeros por confirmar';
+ const agency=typeof item.agency==='string'?item.agency.trim():'';
+ return `<article class="guest-focused brief-card" id="brief-calendar-detail"><header class="guest-focus-header"><h1>${esc(briefGuestName(item))}</h1><p class="guest-focus-meta">${esc(guests)} · ${esc(status)}</p></header>
+ <div class="guest-block"><p><strong>Embarque</strong> · ${esc(guestDateLabel(item.start))}</p><p><strong>Desembarque</strong> · ${esc(guestDateLabel(item.end))}</p>${agency?`<p><strong>Origen</strong> · ${esc(agency)}</p>`:''}
+ ${Array.isArray(item.extras)?item.extras.filter(x=>typeof x==='string'&&x.trim()).map(x=>`<p>${esc(x)}</p>`).join(''):''}</div>
+ <p class="day-note">Por ahora solo hay datos del calendario. La ficha completa se muestra cuando la reserva esté vinculada en el CRM. Esta vista no autoriza cobros.</p></article>`;
+}
+function briefCalendarOpenAttr(item){
+ if(item.id)return 'data-agenda-open="'+esc(item.id)+'"';
+ if(!briefFromCalendar(item))return '';
+ if(!briefCalendarButtons.has(item))briefCalendarButtons.set(item,String(briefCalendarButtons.size));
+ return 'data-agenda-calendar="'+briefCalendarButtons.get(item)+'"';
+}
 function briefReservationsView(){
  const isAdmin=Boolean(session.admin),pending=opsReservations.filter(r=>r.brief?.version&&!r.brief.reviewedAt).length;
  const selected=new URLSearchParams(location.search).get('reservation');
+ if(!selected&&briefCalendarSelection){
+  const c=briefCalendarSelection;
+  if(c.boat===boatId&&c.user===session&&c.role===role&&briefAgendaAllowed())return briefCalendarCard(c.item);
+  briefCalendarSelection=null;
+ }
  let rows=selected?opsReservations.filter(r=>r.id===selected):opsReservations;
  const agenda=(!selected||!rows.length)&&typeof briefAgendaEnsure==='function'&&briefAgendaAllowed()?briefAgendaEnsure():null;
  let agendaOnly=false;
@@ -115,7 +136,7 @@ function briefReservationsView(){
   if(agenda?.error)return `<p class="form-error" role="alert">${esc(agenda.error)}</p><button class="day-secondary" type="button" data-agenda-retry>Reintentar</button>`;
   const item=agenda?.rows?.find(r=>r.id===selected);
   if(!item)return '<h1>Ficha no disponible</h1><p>Volvé a la agenda para consultar las salidas de este barco.</p>';
-  if(item.briefVersion>0)return '<h1>Ficha publicada</h1><p>Actualizá para cargar la información de este huésped.</p>';
+
   agendaOnly=true;
   rows=[{id:item.id,name:item.name,start:item.start,end:item.end,guests:item.guests,primaryAge:item.primaryAge,brief:{version:0},onboardPlan:item.onboardPlan,operationalPreview:briefAuthorizedAgendaPreview(item)}];
  }
@@ -130,7 +151,7 @@ function briefReservationsView(){
   const wrapper=selected?'article':'details';
   const heading=selected?guestFocusHeader(res):`<summary>${date(res.start)} · ${esc(res.name||'Cliente pendiente')} · ${res.guests??'—'} pasajeros · ${b.version?'Versión '+b.version:'Borrador'}</summary>`;
   return `<${wrapper} class="${selected?'guest-focused':'day-disclosure'} brief-card" id="brief-${esc(res.id)}">${heading}
-  ${agendaOnly?briefOperationalPreview(res.operationalPreview):''}
+  ${agendaOnly?(briefOperationalPreview(res.operationalPreview)||'<p class="day-note">Podés consultar las fechas y pasajeros de esta reserva. La ficha completa no está disponible en esta vista.</p>'):''}
   ${agendaReview?'<div class="day-note">Guardar aquí solo actualiza el borrador: no publica la ficha ni autoriza cobros. Corroborá los datos y el saldo en el CRM antes de aprobar.</div><button type="button" class="day-secondary" data-day="ops-agenda">Volver a la agenda del mes</button>':''}
   ${selected&&typeof guestPlanPanel==='function'?guestPlanPanel(res):''}
   ${!selected?`<button type="button" class="day-secondary" data-agenda-open="${esc(res.id)}">Abrir ficha del huésped</button>`:''}
@@ -264,8 +285,7 @@ function briefAgendaRow(item,color){
   const kind=item.kind||(agency?'agency':'direct');
   if(kind==='seller')tags.push(tag('Venta de '+(agency||'otra vendedora'),'agency'));
   else if(kind==='agency'&&agency)tags.push(tag('Agencia · '+agency,'agency'));
-  else tags.push(tag('Reserva directa','agency'),tag('Ficha pendiente'));
-  for(const extra of Array.isArray(item.extras)?item.extras:[])if(typeof extra==='string'&&extra.trim())tags.push(tag(extra.trim(),'extra'));
+  else tags.push(tag('Solo calendario','agency'));
   if(item.tentative===true)tags.push(tag('A confirmar','collect'));
  }else{
   tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
@@ -274,7 +294,8 @@ function briefAgendaRow(item,color){
  if(role==='capitan'&&item.paid!==true&&typeof item.toCollectUsd==='number'&&item.toCollectUsd>0)tags.push(tag('Cobrar '+briefMoney(item.toCollectUsd),'collect'));
  const dates=`${briefDay(item.start)||'Pendiente'} - ${briefDay(item.end)||'Pendiente'}`;
  const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(briefGuestName(item))}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
- return item.id?`<button type="button" class="agenda-row booking-${color}" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
+ const open=briefCalendarOpenAttr(item);
+ return open?`<button type="button" class="agenda-row booking-${color}" ${open}>${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
 }
 function briefMonthGrid(month,rows,colors){
  const [year,m]=month.split('-').map(Number);
@@ -301,7 +322,8 @@ function briefMonthGrid(month,rows,colors){
    const cls='agenda-stay booking-'+colors.get(item),span=to-from+1;
    const words=name.split(/\s+/),initials=words[0].slice(0,1)+(words.length>1?words[words.length-1].slice(0,1):'');
    const compact=span===1?initials.toLocaleUpperCase('es'):span===2?words[0]:name;
-   return item.id?`<button type="button" class="${cls}" style="${style}" data-agenda-open="${esc(item.id)}" aria-label="${esc('Abrir ficha de '+label)}" title="${esc(label)}">${esc(compact)}</button>`:`<span class="${cls}" style="${style}" title="${esc(label)}">${esc(compact)}</span>`;
+   const open=briefCalendarOpenAttr(item);
+   return open?`<button type="button" class="${cls}" style="${style}" ${open} aria-label="${esc('Abrir ficha de '+label)}" title="${esc(label)}">${esc(compact)}</button>`:`<span class="${cls}" style="${style}" title="${esc(label)}">${esc(compact)}</span>`;
   });
   cells.push('<div class="agenda-week"><div class="agenda-days">'+days.join('')+'</div>'+(stays.length?'<div class="agenda-ranges">'+stays.join('')+'</div>':'')+'</div>');
  }
@@ -318,6 +340,7 @@ function briefAgendaEnsure(){
  return {rows:briefAgendaForCurrentBoat(),loading:full&&briefAgendaLoading,error:full?briefAgendaError:''};
 }
 function briefAgendaView(){
+ briefCalendarButtons=new Map();briefCalendarSelection=null;
  const full=briefAgendaAllowed();
  briefAgendaEnsure();
  const rows = full ? briefAgenda : opsReservations.filter(r => r.brief?.version > 0).map(r => ({
@@ -335,11 +358,13 @@ function briefAgendaView(){
   const undated=rows.filter(item=>item&&!briefMonthKey(item.start));
   const colors=briefBookingColors(rows);
   const card=item=>briefAgendaRow(item,colors.get(item));
-  body=briefMonthGrid(month,monthRows,colors)+`<section class="agenda-results" aria-labelledby="agenda-results-title"><div class="agenda-section-head"><h2 id="agenda-results-title" tabindex="-1">${esc(label)} <span>(${list.length})</span></h2>${selected?'<button type="button" class="agenda-text" data-agenda-all>Ver todo el mes</button>':''}</div><div class="agenda-list">${list.map(card).join('')||empty(selected?'No hay reservas para ese día.':full?'No hay charters confirmados este mes.':'No hay fichas de huéspedes publicadas para este mes.')}</div></section>`;
+  body=`<section class="agenda-results" aria-labelledby="agenda-results-title"><div class="agenda-section-head"><h2 id="agenda-results-title" tabindex="-1">${esc(label)} <span>(${list.length})</span></h2>${selected?'<button type="button" class="agenda-text" data-agenda-all>Ver todo el mes</button>':''}</div><div class="agenda-list">${list.map(card).join('')||empty(selected?'No hay reservas para ese día.':full?'No hay charters confirmados este mes.':'No hay fichas de huéspedes publicadas para este mes.')}</div></section>`+
+   '<details class="day-disclosure" data-agenda-calendar-toggle '+(briefAgendaCalendarOpen?'open':'')+'><summary>Ver calendario</summary>'+briefMonthGrid(month,monthRows,colors)+'</details>';
   if(undated.length)body+='<details class="day-disclosure"><summary>Reservas sin fecha ('+undated.length+')</summary><div class="agenda-list">'+undated.map(card).join('')+'</div></details>';
  }
- return `<h1>Agenda del mes</h1><section class="agenda-calendar"><div class="agenda-nav"><h2 aria-live="polite">${briefMonthName(month)}</h2><div><button type="button" class="agenda-today" data-agenda-today>Hoy</button><button type="button" data-agenda-month="${briefShiftMonth(month,-1)}" aria-label="Mes anterior">‹</button><button type="button" data-agenda-month="${briefShiftMonth(month,1)}" aria-label="Mes siguiente">›</button></div></div>${body}</section><div class="area-actions"><button type="button" class="day-secondary" data-day="ops-reservations">Fichas de huéspedes</button></div>`;
+ return `<h1>Agenda del mes</h1><section class="agenda-calendar"><div class="agenda-nav"><h2 aria-live="polite">${briefMonthName(month)}</h2><div><button type="button" class="agenda-today" data-agenda-today>Hoy</button><button type="button" data-agenda-month="${briefShiftMonth(month,-1)}" aria-label="Mes anterior">‹</button><button type="button" data-agenda-month="${briefShiftMonth(month,1)}" aria-label="Mes siguiente">›</button></div></div>${body}</section>${session.admin?'<details class="day-disclosure"><summary>Más opciones</summary><button type="button" class="day-secondary" data-day="ops-reservations">Fichas de huéspedes</button></details>':''}`;
 }
+document.addEventListener('toggle',event=>{if(event.target.matches?.('[data-agenda-calendar-toggle]'))briefAgendaCalendarOpen=event.target.open;},true);
 document.addEventListener('click',event=>{
  const month=event.target.closest('[data-agenda-month]');
  if(month){
@@ -355,14 +380,21 @@ document.addEventListener('click',event=>{
   briefAgendaDate=day?day.dataset.agendaDay:briefToday();briefAgendaMonth=briefAgendaDate.slice(0,7);
   render();document.querySelector('#agenda-results-title')?.focus();return;
  }
- const open=event.target.closest('[data-agenda-open]');if(!open)return;
+ const open=event.target.closest('[data-agenda-open],[data-agenda-calendar]');if(!open)return;
  dayGuestCashOwner=dayPage==='ops-cash' && canViewCash() ? {boat:boatId,user:session} : null;
  const id=open.dataset.agendaOpen;
- briefAgendaReview=session.admin&&dayPage==='ops-agenda'&&opsReservations.some(r=>r.id===id&&r.brief)?{id,boat:boatId,user:session}:null;
- const params=new URLSearchParams(location.search);params.set('reservation',id);
- history.replaceState(null,'',location.pathname+'?'+params.toString());
+ const params=new URLSearchParams(location.search);
+ if(id){briefCalendarSelection=null;params.set('reservation',id);}
+ else{
+  const item=[...briefCalendarButtons].find(([,key])=>key===open.dataset.agendaCalendar)?.[0];
+  if(!item||!briefAgendaAllowed())return;
+  params.delete('reservation');briefCalendarSelection={item,boat:boatId,user:session,role};
+ }
+ briefAgendaReview=null; // A tap opens a readable fiche, never the administration editor.
+ const search=params.toString();
+ history.replaceState(null,'',location.pathname+(search?'?'+search:''));
  dayPage='ops-reservations';render();
- setTimeout(()=>document.getElementById('brief-'+id)?.scrollIntoView({block:'start'}),0);
+ window.scrollTo(0,0);
 });
 // Refreshing the operations data also refreshes the agenda (a payment or a new
 // confirmation changes it). Guarded so the card renders in isolated tests.
