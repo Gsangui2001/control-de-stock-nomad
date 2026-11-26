@@ -57,28 +57,18 @@ function briefContent(res,focused=false){
  <div class="guest-block">${row('Experiencia',experience)}${requests?row('Para recibirlos',requests):''}</div>
  </article>${(role!=='capitan'&&('phone' in res))?`<details class="day-disclosure guest-contact"><summary>Contacto del cliente</summary><p>${esc(joined([res.phone,res.email])||pending)}</p></details>`:''}`;
 }
-// Amounts reach only the captain. The captain's "yes" is the registration: the
-// CRM approves it on its own, so there is no "pending Carlota" state anymore.
+// The collection is a single explicit action in the authorized guest fiche.
+function briefCollectableAmount(res){
+ const balance=res.captainBalance, amount=balance?.amountUsd;
+ if(role!=='capitan'||res.cashAssigned===false||res.cashLegacyReview||res.captainPayment||
+    res.details?.captainCollection!=='collect'||!(res.brief?.version>0)||res.brief.sourceChanged||
+    balance?.status!=='known'||balance.reportedCount||typeof amount!=='number'||!Number.isFinite(amount)||amount<=0)return null;
+ return amount;
+}
 function briefPayment(res){
- if(role!=='capitan'||res.cashAssigned===false)return '';
- const payment=res.captainPayment,balance=res.captainBalance,mode=res.details?.captainCollection;
- const known=balance?.status==='known'&&typeof balance.amountUsd==='number'&&Number.isFinite(balance.amountUsd)?balance.amountUsd:null;
- let head='por confirmar con Carlota',extra='';
- if(payment?.status==='cleared'){
-  const left=typeof payment.balanceUsd==='number'&&Number.isFinite(payment.balanceUsd)?payment.balanceUsd:null;
-  head=left===0?'pagado':left>0?`${briefMoney(left)} pendiente · por confirmar con Carlota`:'Cobro registrado · saldo por verificar';
-  extra=`<p class="guest-pay-note">Registrado en el CRM · ${esc(briefMoney(payment.amountUsd))} · ${esc(payment.reportedBy||'Capitán')} · ${esc(briefTime(payment.reportedAt))}</p>`;
- }else if(payment){
-  head=payment.status==='pending_review'||payment.status==='excluded'?'Cobro en revisión en el CRM':'Recepción informada · revisar en el CRM';
-  extra=`<p class="guest-pay-note">Informado ${esc(briefMoney(payment.amountUsd))} · ${esc(payment.reportedBy||'Capitán')} · ${esc(briefTime(payment.reportedAt))}</p>`;
- }else if(res.cashLegacyReview)head='Cobro anterior en revisión con administración';
- else if(mode==='none')head='no cobra a bordo';
- else if(known===0)head='pagado';
- else if(mode==='collect'&&known>0&&!balance.reportedCount&&!res.brief?.sourceChanged&&res.brief?.version>0){
-  head=briefMoney(known);
-  extra=`<button type="button" class="day-primary guest-pay-button" data-brief-action="payment" data-id="${esc(res.id)}">Recibí ${esc(briefMoney(known))} en efectivo</button>`;
- }else if(known>0&&balance.reportedCount)head='Pago informado · pendiente de registro';
- return `<div class="guest-block guest-pay"><p class="guest-line guest-pay-line"><strong>A pagar</strong><span>${esc(head)}</span></p>${extra}</div>`;
+ const amount=briefCollectableAmount(res);
+ if(amount===null)return '';
+ return `<div class="guest-block guest-pay"><p class="guest-line guest-pay-line"><strong>Cobrar en efectivo</strong><span>${esc(briefMoney(amount))}</span></p><button type="button" class="day-primary guest-pay-button" data-brief-action="payment" data-id="${esc(res.id)}">Sí cobré</button></div>`;
 }
 function guestDateLabel(value){
  const iso=/^\d{4}-\d{2}-\d{2}/.exec(String(value||''));
@@ -200,7 +190,7 @@ document.addEventListener('click',async event=>{
   const b=res.brief;
   if(action==='publish'&&document.querySelector(`[data-operation="brief_save"][data-id="${CSS.escape(res.id)}"]`)?.dataset.dirty){throw Error('Guardá el borrador antes de publicar.');}
   if(action==='publish'&&!confirm('¿Publicar los datos guardados y avisar a la tripulación del Nomade?'))return;
-  if(action==='payment'){const amount=res.captainBalance?.amountUsd;if(res.cashAssigned===false||res.cashLegacyReview||res.captainPayment||res.details?.captainCollection!=='collect'||!(typeof amount==='number'&&amount>0))throw Error('Actualizá la ficha para verificar el cobro autorizado.');if(!confirm(`¿Recibiste ${briefMoney(amount)} en efectivo de ${res.name||'este huésped'}? Se registrará en tu caja y en su reserva del CRM.`))return;}
+  if(action==='payment'&&briefCollectableAmount(res)===null)throw Error('Actualizá la ficha para verificar el cobro autorizado.');
   button.dataset.key ||=uid();
   const payload={key:button.dataset.key,id:res.id,...(action==='publish'?{revision:b.revision,sourceHash:b.sourceHash}:{version:b.version})};
   const result=await opsFetch(action==='publish'?'brief_publish':action==='payment'?'brief_payment':'brief_review',payload);
@@ -281,10 +271,7 @@ function briefAgendaRow(item,color){
   tags.push(tag(sent?'Ficha enviada':'Ficha en preparación',sent?'ok':''));
   if(sent&&item.reviewedAt)tags.push(tag('Revisada'));
  }
- if(role==='capitan'){
-  if(item.paid===true)tags.push(tag('Pagado','ok'));
-  else if(typeof item.toCollectUsd==='number'&&item.toCollectUsd>0)tags.push(tag('Cobrar '+briefMoney(item.toCollectUsd),'collect'));
- }
+ if(role==='capitan'&&item.paid!==true&&typeof item.toCollectUsd==='number'&&item.toCollectUsd>0)tags.push(tag('Cobrar '+briefMoney(item.toCollectUsd),'collect'));
  const dates=`${briefDay(item.start)||'Pendiente'} - ${briefDay(item.end)||'Pendiente'}`;
  const inner=`<span class="agenda-main"><span class="agenda-dates">${esc(dates)}</span><strong>${esc(briefGuestName(item))}${age==null?'':` (${age})`}</strong><small>${esc(guests)}</small><span class="agenda-tags">${tags.join('')}</span></span>`;
  return item.id?`<button type="button" class="agenda-row booking-${color}" data-agenda-open="${esc(item.id)}">${inner}<span class="agenda-go" aria-hidden="true">›</span></button>`:`<div class="agenda-row agenda-pending">${inner}</div>`;
