@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { validateRestoredBoatState } from '@/lib/boat-restore-validation';
+import { readIntakeList, IntakeListError } from '@/lib/boat-intake';
 import { flushBoatPush } from '@/lib/boat-push';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -23,6 +24,8 @@ const schemas:Record<string,z.ZodTypeAny>={
  captain_handover:z.object({...common,captainId:text,amount:cashAmount.refine(n=>n>0),currency:cashCurrency,note:z.string().trim().max(140).optional()}).strict(),
  warehouse_count:z.object({...common,name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.max(999999999.9999),revision:z.coerce.number().int().nonnegative(),
   unitCost:z.preprocess(v=>v==null||v===''?undefined:v,z.coerce.number().finite().min(0).max(1e9).optional()),currency:z.enum(['USD','EUR','ARS','PAB','']).optional()}),
+ warehouse_photo_read:z.object({scope:z.literal('depot'),text:z.string().trim().min(1).max(12000)}).strict(),
+ warehouse_photo_count:z.object({scope:z.literal('depot'),key:id,confirmed:z.literal(true),revision:z.number().int().nonnegative(),items:z.array(z.object({name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.lt(1e9).refine(n=>Math.abs(n*10000-Math.round(n*10000))<0.00025)}).strict()).min(1).max(100)}).strict(),
  warehouse_transfer:z.object({...common,vessel:common.boat,productId:text,targetProductId:z.string().max(140).optional(),direction:z.enum(['toBoat','toDepot']),quantity:amount,location:text}),
  backup_restore:z.object({...common,revision:z.number().int().nonnegative(),backup:backupSchema}),
  request_create:z.object({...common,area:z.enum(['tecnica','gastronomia']),name:text,unit:text.max(20),quantity:amount,urgent:z.boolean(),notes:z.string().max(5000),photo:z.string().max(500).default('')}),
@@ -67,7 +70,7 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
    if(!req.headers.get('content-type')?.startsWith('application/json'))return json({error:'Se requiere JSON'},415);
-   const maxBytes=operation==='backup_restore'?3500000:['brief_save','guest_plan_save'].includes(operation)?150000:30000;
+   const maxBytes=operation==='backup_restore'?3500000:['brief_save','guest_plan_save','warehouse_photo_count'].includes(operation)?150000:30000;
    const raw=await req.text();if(Buffer.byteLength(raw)>maxBytes)return json({error:'Registro demasiado grande'},413);
    if(!schemas[operation])return json({error:'Operación desconocida'},404);
    payload=schemas[operation].parse(JSON.parse(raw));
@@ -85,10 +88,19 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const sessionCookie=req.cookies.get('boat_session')?.value;
   if(!sessionCookie)return json({error:'Iniciá sesión para abrir el barco.'},401);
   payload.session=createHash('sha256').update(sessionCookie).digest('hex');
+  // Previews can share the production database. Do not write stock from them.
+  if(operation==='warehouse_photo_count'&&process.env.VERCEL_ENV==='preview')
+   return json({error:'El guardado del depósito no está habilitado en esta vista de prueba.'},403);
+  if(operation==='warehouse_photo_read') {
+   const {error}=await client.rpc('boat_admin_stock_rpc',{server_key:secret,operation:'warehouse_dashboard',payload:{scope:'depot',session:payload.session}}).abortSignal(AbortSignal.timeout(15000));
+   if(error)return json({error:error.code==='28000'?'Iniciá sesión.':error.code==='42501'?'Reservado a administración.':'No se pudo validar el acceso al depósito.'},error.code==='28000'?401:error.code==='42501'?403:503);
+   try { return json({items:readIntakeList(payload.text,{simpleCount:true}).data.items.map(({name,quantity,unit,location})=>({name,quantity,unit,location}))}); }
+   catch(error) { if(error instanceof IntakeListError)return json({error:error.message},400); throw error; }
+  }
   const cash=operation.startsWith('captain_')||['collection_report','brief_payment'].includes(operation);
   const guestPlan=['agenda','reservations','guest_plan','guest_plan_save'].includes(operation);
-  const rpc=guestPlan?'boat_guest_plan_rpc':cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
-  const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
+  const rpc=operation==='warehouse_photo_count'?'boat_stockroom_photo_count_rpc':guestPlan?'boat_guest_plan_rpc':cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const {data,error}=await client.rpc(rpc,(operation==='warehouse_photo_count'?{server_key:secret,payload}:{server_key:secret,operation,payload})).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:['23505','40001','PT409','PFR01'].includes(error.code||'')?409: /^(P0001|22|23)/.test(error.code||'')?400:503;
    return json({error:error.code==='23505'?'Ese registro ya existe. Actualizá la vista.':error.message},status);

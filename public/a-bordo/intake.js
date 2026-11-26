@@ -181,7 +181,9 @@ document.addEventListener('submit',async event=>{
  finally{intakeBusy=false;button.disabled=false;}
 });
 document.addEventListener('change',event=>{
- const row=event.target.closest('[data-intake-row]');
+ const input=event.target;
+ if(input.name==='files'&&input.form?.id==='intakeInput'&&input.form.elements.kind.value==='count'&&input.files.length&&!intakeBusy)input.form.requestSubmit();
+ const row=input.closest('[data-intake-row]');
  if(row&&event.target.name==='productId'){
   const p=state.products.find(p=>p.id===event.target.value);if(p)for(const [key,value] of Object.entries({name:p.name,unit:p.unit,area:p.area||'tecnica',location:p.location})){const field=row.querySelector('[name="'+key+'"]');if(field)field.value=value;}
   intakeRead(row.closest('form'));intakeRemember();

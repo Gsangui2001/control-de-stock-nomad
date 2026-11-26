@@ -35,7 +35,7 @@ function listCells(line: string, separator: string): string[] | undefined {
 }
 
 // Keep the source row intact when reading CSV fields containing a delimiter.
-export function readIntakeList(text:string){
+export function readIntakeList(text:string,{simpleCount=false}:{simpleCount?:boolean}={}){
  const result:IntakeData={date:'',supplier:'',reference:'',currency:'',total:null,notes:'',items:[]};
  const number=(s:string)=>{const n=s.trim();if(/^\d+(?:[.,]\d{1,2})?$/.test(n))return Number(n.replace(',','.'));return null;};
  const unit='(kg|g|gr|L|ml|litros?|un|unidades?|uds?|cajas?|bolsas?|botellas?|paquetes?|latas?|rollos?)';
@@ -75,6 +75,7 @@ export function readIntakeList(text:string){
   else if(headerSeparator) throw new IntakeListError('Fila '+lineNo+': faltan columnas o hay comillas sin cerrar. Revisá la fila indicada.');
   else if((m=line.match(new RegExp('^(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'\\s+(?:de\\s+)?(.+)$','i')))){row.name=field(m[3],140,'el producto',lineNo);row.quantity=number(m[1]);row.unit=m[2];}
   else if((m=line.match(new RegExp('^(.+?)\\s*[:=]\\s*(\\d+(?:[.,]\\d{1,2})?)\\s*'+unit+'$','i')))){row.name=field(m[1],140,'el producto',lineNo);row.quantity=number(m[2]);row.unit=m[3];}
+  else if(simpleCount&&(m=line.match(/^(.+?)\s*(?:[:=]\s*|\s+)(\d+(?:[.,]\d{1,2})?)$/))&&/\p{L}/u.test(m[1])){row.name=field(m[1],140,'el producto',lineNo);row.quantity=number(m[2]);}
   else row.name=field(line,140,'la descripción',lineNo);
   if(!cells)tabular=false;
   result.items.push(row);

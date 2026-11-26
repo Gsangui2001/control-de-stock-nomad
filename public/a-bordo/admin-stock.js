@@ -117,7 +117,7 @@ class BoatAdminStock extends HTMLElement {
     this.innerHTML='<h1>Stock de barcos y depósito</h1><label>Inventario<select data-stock-scope>'+choices+
       '<option value="depot">'+esc(d.depot || "Depósito")+'</option></select></label>'+
         '<div class="area-actions">'+(isDepot ? "" : '<button type="button" class="day-secondary" data-boat-stock>Abrir stock de este barco</button>')+'</div>'+
-        (isDepot?this.countForm():'')+(!isDepot && d.depot ? this.transfer("toBoat")+this.transfer("toDepot") : '')+
+        (isDepot?'<depot-photo-count data-revision="'+esc(d.depotRevision)+'"></depot-photo-count>':'')+(!isDepot && d.depot ? this.transfer("toBoat")+this.transfer("toDepot") : '')+
         (isDepot && d.boats.length ? '<p class="day-muted">Para trasladar existencias, elegí el barco en Inventario.</p>' : '')+
         (d.products.length?'<label>Buscar artículo o ubicación<input type="search" data-stock-filter></label>':'')+
         this.itemList("gastronomia")+this.itemList("tecnica")+this.movements()+(isDepot?"":this.finance());
