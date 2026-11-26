@@ -6,6 +6,11 @@ export function canUseBoatTask(task:Task,user:User,role:string):boolean {
   if(task.assignedRole && task.assignedRole!==role) return false;
   return !task.assignee || [user.id,user.name,user.username,role].some(value=>normalized(value)===normalized(task.assignee));
 }
+// Chef duties are reference material, not a required completion log.
+export function chefWorkReportAllowed(log:Task):boolean {
+ return ['problem','blocked','missing'].includes(log.reportKind) && log.type==='Aviso'
+   && Array.isArray(log.lines) && log.lines.length===0;
+}
 // A crew submission only contains its visible tasks. Preserve all hidden tasks,
 // and allow progress updates, never reassignment, deletion or new tasks.
 export function mergeCrewTasks(before:Task[],incoming:Task[],user:User,role:string):Task[] {
@@ -18,6 +23,7 @@ export function mergeCrewTasks(before:Task[],incoming:Task[],user:User,role:stri
     const update=updates.get(task.id)!;
     if(JSON.stringify(update.cycleIndex)!==JSON.stringify(task.cycleIndex) && (!Array.isArray(task.routineCycle)||!Number.isInteger(update.cycleIndex)||update.cycleIndex<0||update.cycleIndex>=task.routineCycle.length)) throw new Error('Día del ciclo inválido.');
     for(const key of Array.from(new Set([...Object.keys(task),...Object.keys(update)]))) {
+      if(role==='chef' && progress.has(key) && JSON.stringify(task[key])!==JSON.stringify(update[key])) throw new Error('El perfil Chef consulta sus tareas sin marcarlas como realizadas.');
       if(!progress.has(key) && JSON.stringify(task[key])!==JSON.stringify(update[key])) throw new Error('Solo administración puede modificar la asignación o las instrucciones de una tarea.');
     }
     return {...task,...update};

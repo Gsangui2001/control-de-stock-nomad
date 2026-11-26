@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { flushBoatPush } from '@/lib/boat-push';
 import { canReadBoatSuppliers, crewProduct, isOperationalStatePhoto, protectCrewHistory, restoreCrewProductCosts } from '@/lib/boat-crew-state';
-import { canUseBoatTask, mergeCrewTasks } from '@/lib/boat-task-access';
+import { canUseBoatTask, chefWorkReportAllowed, mergeCrewTasks } from '@/lib/boat-task-access';
 import { clearManualGrant, issueManualGrant } from '@/lib/boat-manual-grant';
 
 export const runtime = 'nodejs';
@@ -128,7 +128,9 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
    if(!auth.user.admin){
     try{body.state.tasks=mergeCrewTasks(before.state.tasks,body.state.tasks,auth.user,before.role);}catch(error){throw new ApiError(403,(error as Error).message);}
     for(const log of body.state.logs){
-     if(log.taskId&&!before.state.logs.some((l:any)=>l.id===log.id)){
+     if(before.state.logs.some((l:any)=>l.id===log.id))continue;
+     if(before.role==='chef'&&!chefWorkReportAllowed(log))throw new ApiError(403,'Chef puede avisar problemas, pero no tiene que cerrar tareas de cocina.');
+     if(log.taskId){
       const task=before.state.tasks.find((t:any)=>t.id===log.taskId);
       if(!task||!canUseBoatTask(task,auth.user,before.role))throw new ApiError(403,'Esta tarea no está asignada a tu rol.');
      }
@@ -154,7 +156,10 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
      const visible=stateForRole(snapshot,auth.user).state;
      if(!isOperationalStatePhoto(visible,url)){
       const {data:overview,error}=await client.rpc('boat_operations_rpc',{server_key:secret,operation:'overview',payload:{boat,session}}).abortSignal(AbortSignal.timeout(15000));
-      if(error||!overview?.requests?.some((request:any)=>request.photo===url))throw new ApiError(403,'Esta foto no está disponible para tu rol.');
+      if(error||!overview?.requests?.some((request:any)=>request.photo===url)){
+       const {data:packagePhoto}=await client.rpc('boat_stockroom_package_rpc',{server_key:secret,operation:'warehouse_package_photo',payload:{boat,session,photo:id}}).abortSignal(AbortSignal.timeout(10000));
+       if(packagePhoto!==true)throw new ApiError(403,'Esta foto no está disponible para tu rol.');
+      }
      }
     }
    }

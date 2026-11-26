@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { validateRestoredBoatState } from '@/lib/boat-restore-validation';
+import { readIntakeList, IntakeListError } from '@/lib/boat-intake';
 import { flushBoatPush } from '@/lib/boat-push';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -23,6 +24,11 @@ const schemas:Record<string,z.ZodTypeAny>={
  captain_handover:z.object({...common,captainId:text,amount:cashAmount.refine(n=>n>0),currency:cashCurrency,note:z.string().trim().max(140).optional()}).strict(),
  warehouse_count:z.object({...common,name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.max(999999999.9999),revision:z.coerce.number().int().nonnegative(),
   unitCost:z.preprocess(v=>v==null||v===''?undefined:v,z.coerce.number().finite().min(0).max(1e9).optional()),currency:z.enum(['USD','EUR','ARS','PAB','']).optional()}),
+ warehouse_photo_read:z.object({scope:z.literal('depot'),text:z.string().trim().min(1).max(12000)}).strict(),
+ warehouse_photo_count:z.object({scope:z.literal('depot'),key:id,mode:z.enum(['count','replenish']).optional(),confirmed:z.literal(true),revision:z.number().int().nonnegative(),items:z.array(z.object({name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.lt(1e9).refine(n=>Math.abs(n*10000-Math.round(n*10000))<0.00025)}).strict()).min(1).max(100)}).strict(),
+ warehouse_package_send:z.object({...common,photo:id,revision:z.number().int().nonnegative(),items:z.array(z.object({productId:text,packs:z.number().int().positive().max(1e6),perPack:amount}).strict()).min(1).max(50)}).strict(),
+ warehouse_package_receive:z.object({...common,id,photo:id,signature:id,verified:z.literal(true)}).strict(),
+ warehouse_package_issue:z.object({...common,id,photo:id,note:z.string().trim().min(3).max(300)}).strict(),
  warehouse_transfer:z.object({...common,vessel:common.boat,productId:text,targetProductId:z.string().max(140).optional(),direction:z.enum(['toBoat','toDepot']),quantity:amount,location:text}),
  backup_restore:z.object({...common,revision:z.number().int().nonnegative(),backup:backupSchema}),
  request_create:z.object({...common,area:z.enum(['tecnica','gastronomia']),name:text,unit:text.max(20),quantity:amount,urgent:z.boolean(),notes:z.string().max(5000),photo:z.string().max(500).default('')}),
@@ -60,14 +66,14 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
   const operation=params.operation;
   let payload:any;
   if(req.method==='GET') {
-   if(!['overview','fleet_stock','warehouse_dashboard','reservations','agenda','guest_plan','reservation_candidates','external_templates','backup','captain_wallet'].includes(operation))return json({error:'Recurso inexistente'},404);
+   if(!['overview','fleet_stock','warehouse_package_list','warehouse_dashboard','reservations','agenda','guest_plan','reservation_candidates','external_templates','backup','captain_wallet'].includes(operation))return json({error:'Recurso inexistente'},404);
    payload=z.object({boat:common.boat}).parse({boat:req.nextUrl.searchParams.get('boat')});
    if(operation==='guest_plan')payload.id=id.parse(req.nextUrl.searchParams.get('id'));
    if(operation==='warehouse_dashboard')payload.scope=z.union([common.boat,z.literal('depot')]).parse(req.nextUrl.searchParams.get('scope')||payload.boat);
   } else {
    if(req.headers.get('origin') && req.headers.get('origin')!==req.nextUrl.origin && new URL(req.headers.get('origin')!).host!==req.headers.get('host'))return json({error:'Origen no permitido'},403);
    if(!req.headers.get('content-type')?.startsWith('application/json'))return json({error:'Se requiere JSON'},415);
-   const maxBytes=operation==='backup_restore'?3500000:['brief_save','guest_plan_save'].includes(operation)?150000:30000;
+   const maxBytes=operation==='backup_restore'?3500000:['brief_save','guest_plan_save','warehouse_photo_count'].includes(operation)?150000:30000;
    const raw=await req.text();if(Buffer.byteLength(raw)>maxBytes)return json({error:'Registro demasiado grande'},413);
    if(!schemas[operation])return json({error:'Operación desconocida'},404);
    payload=schemas[operation].parse(JSON.parse(raw));
@@ -80,20 +86,29 @@ async function handle(req:NextRequest,{params}:{params:{operation:string}}) {
     }
    }
    if(operation==='push_subscribe'&&!validPushEndpoint(payload.subscription.endpoint))return json({error:'Proveedor de notificaciones no admitido'},400);
-   if(payload.photo&&!new RegExp('^/api/boat/photos\\?boat='+payload.boat+'&id=[a-f0-9-]{36}$').test(payload.photo))return json({error:'Foto inválida'},400);
+   if(payload.photo&&!operation.startsWith('warehouse_package_')&&!new RegExp('^/api/boat/photos\\?boat='+payload.boat+'&id=[a-f0-9-]{36}$').test(payload.photo))return json({error:'Foto inválida'},400);
   }
   const sessionCookie=req.cookies.get('boat_session')?.value;
   if(!sessionCookie)return json({error:'Iniciá sesión para abrir el barco.'},401);
   payload.session=createHash('sha256').update(sessionCookie).digest('hex');
+  // Previews can share the production database. Do not write stock from them.
+  if((operation==='warehouse_photo_count'||req.method==='POST'&&operation.startsWith('warehouse_package_'))&&process.env.VERCEL_ENV==='preview')
+   return json({error:'El guardado del depósito no está habilitado en esta vista de prueba.'},403);
+  if(operation==='warehouse_photo_read') {
+   const {error}=await client.rpc('boat_admin_stock_rpc',{server_key:secret,operation:'warehouse_dashboard',payload:{scope:'depot',session:payload.session}}).abortSignal(AbortSignal.timeout(15000));
+   if(error)return json({error:error.code==='28000'?'Iniciá sesión.':error.code==='42501'?'Reservado a administración.':'No se pudo validar el acceso al depósito.'},error.code==='28000'?401:error.code==='42501'?403:503);
+   try { return json({items:readIntakeList(payload.text,{simpleCount:true}).data.items.map(({name,quantity,unit,location})=>({name,quantity,unit,location}))}); }
+   catch(error) { if(error instanceof IntakeListError)return json({error:error.message},400); throw error; }
+  }
   const cash=operation.startsWith('captain_')||['collection_report','brief_payment'].includes(operation);
   const guestPlan=['agenda','reservations','guest_plan','guest_plan_save'].includes(operation);
-  const rpc=guestPlan?'boat_guest_plan_rpc':cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
-  const {data,error}=await client.rpc(rpc,{server_key:secret,operation,payload}).abortSignal(AbortSignal.timeout(15000));
+  const rpc=operation==='warehouse_photo_count'?'boat_stockroom_photo_count_rpc':operation.startsWith('warehouse_package_')?'boat_stockroom_package_rpc':guestPlan?'boat_guest_plan_rpc':cash?'boat_captain_cash_rpc':operation.startsWith('warehouse_')?'boat_admin_stock_rpc':operation==='fleet_stock'?'boat_inventory_rpc':operation.startsWith('brief_')||operation==='external_templates'?'boat_briefs_rpc':operation.startsWith('backup')?'boat_backup_rpc':'boat_operations_rpc';
+  const {data,error}=await client.rpc(rpc,(operation==='warehouse_photo_count'?{server_key:secret,payload}:{server_key:secret,operation,payload})).abortSignal(AbortSignal.timeout(15000));
   if(error) {
    const status=error.code==='28000'?401:error.code==='42501'?403:['23505','40001','PT409','PFR01'].includes(error.code||'')?409: /^(P0001|22|23)/.test(error.code||'')?400:503;
    return json({error:error.code==='23505'?'Ese registro ya existe. Actualizá la vista.':error.message},status);
   }
-  if(req.method==='POST'&&!guestPlan&&!operation.startsWith('warehouse_'))await flushBoatPush(5).catch(()=>{}); // Records already committed; delivery retries are durable.
+  if(req.method==='POST'&&!guestPlan&&(!operation.startsWith('warehouse_')||operation.startsWith('warehouse_package_')))await flushBoatPush(5).catch(()=>{}); // Records already committed; delivery retries are durable.
   return json(operation==='overview'?{...data,pushPublicKey:process.env.BOAT_PUSH_PUBLIC_KEY||''}:data);
  }catch(error){return json({error:error instanceof z.ZodError?'Revisá los campos requeridos y las cantidades.':'No se pudo confirmar. Conservá el formulario y reintentá.'},error instanceof z.ZodError||error instanceof SyntaxError?400:503);}
 }

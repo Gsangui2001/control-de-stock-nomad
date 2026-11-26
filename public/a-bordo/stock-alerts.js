@@ -7,6 +7,9 @@
   return quantity===0?2:minimum>0&&quantity<=minimum?1:0;
  }
  function body(kind,detail={}){
+  if(kind==='package_dispatched')return 'Hay un paquete de Tierra en camino. Abrí Stock para ver el envío.';
+  if(kind==='package_received')return 'El barco verificó las fotos y firmó la recepción del paquete entero.';
+  if(kind==='package_issue')return 'El barco informó una diferencia al verificar el paquete. No ingresó mercadería al stock.';
   if(kind==='brief_published')return `Ficha del viaje ${detail.start||''}: versión ${detail.version}. Abrila y confirmá tu revisión.`;
   if(kind==='stock_agotado')return `${detail.name||'Insumo'}: sin existencias registradas (${detail.current??0} ${detail.unit||''}).`;
   if(kind==='stock_minimo')return `${detail.name||'Insumo'}: quedan ${detail.current} ${detail.unit||''}. Mínimo: ${detail.min} ${detail.unit||''}.`;

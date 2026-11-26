@@ -53,7 +53,7 @@ function captainWallet(wallet) {
   const amounts = wallet.balances.map(b => {
     const balance = b.balance != null ? captainMoney(b.balance, b.currency) : b.opening == null ? "Conteo inicial pendiente" : "Saldo por conciliar en el CRM";
     const description = b.opening == null ? "Movimientos registrados" : "Desde el conteo de " + captainMoney(b.opening, b.currency);
-    return '<article class="day-inventory"><h3>' + esc(b.currency) + '</h3><strong>' + balance + '</strong><p>' + description +
+    return '<article class="day-inventory"><h3>Efectivo disponible · ' + esc(b.currency) + '</h3><strong>' + balance + '</strong><p>' + description +
       ' · Cobrado ' + captainMoney(b.incoming, b.currency) + ' · Gastado ' + captainMoney(b.spent, b.currency) +
       ' · Entregado ' + captainMoney(b.handed_over ?? 0, b.currency) + '</p></article>';
   }).join("");
@@ -86,14 +86,15 @@ function captainCashView() {
     content += '<details class="day-disclosure"><summary>Registrar conteo inicial</summary><p>Contá el efectivo que tiene el capitán en esa moneda. Podés registrar cero.</p>' +
       opsForm("captain_opening", '<label>Capitán<select name="captainId">' + choices + '</select></label>' + captainCurrency() +
         opsField("Efectivo contado","amount","number","","required min=\"0\" step=\"0.01\"")) + '</details>';
-    content += '<details class="day-disclosure"><summary>Registrar entrega</summary><p>Registrá el efectivo que el capitán te entregó. ' +
-      'No puede superar lo que tiene en su caja en esa moneda. Sale un aviso al grupo comercial de Telegram, sin nombres.</p>' +
+    content += '<details class="day-disclosure"><summary>Registrar entrega</summary><p>Registrá únicamente el importe que recibiste del capitán. ' +
+      'El importe se descuenta de su caja en esa moneda. Sale un aviso al grupo comercial de Telegram, sin nombres.</p>' +
+      (session.name?'<p>Recibe: <strong>'+esc(session.name)+'</strong></p>':'') +
       opsForm("captain_handover", '<label>Capitán<select name="captainId">' + choices + '</select></label>' + captainCurrency() +
         opsField("Importe entregado","amount","number","","required min=\"0.01\" step=\"0.01\"") +
         opsField("Nota (opcional)","note","text","","maxlength=\"140\"")) + '</details>';
   } else if (!session.admin) {
     content += '<details class="day-disclosure"><summary>Registrar un gasto propio</summary>' +
-      opsForm("captain_expense", opsField("Qué pagaste con el efectivo de tu caja","concept","text","","required maxlength=\"140\"") +
+      opsForm("captain_expense", opsField("Qué pagaste con efectivo de tu caja (ej.: cerveza, carne, pescado)","concept","text","","required maxlength=\"140\"") +
         captainCurrency() + opsField("Importe pagado","amount","number","","required min=\"0.01\" step=\"0.01\"")) + '</details>';
     const due = opsReservations.filter(r => r.cashAssigned !== false && !r.cashLegacyReview && !r.captainPayment &&
       r.brief?.version > 0 && !r.brief.sourceChanged && r.details?.captainCollection === "collect" &&

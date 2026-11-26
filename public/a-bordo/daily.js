@@ -14,6 +14,7 @@ function dayRolePicker(kind, selected) {
   return `<div class="day-role-picker" role="group" aria-label="${kind === "manualRole" ? "Secciones del manual" : "Filtrar tareas por rol"}">${[{id:"all",name:"Todos"},...dayRoles].map(r => `<button type="button" data-day="${kind}" data-id="${r.id}" aria-pressed="${selected === r.id}">${r.name}</button>`).join("")}</div>`;
 }
 const dayManager = () => Boolean(session?.admin || role === "encargado");
+const dayChefReference = () => !session?.admin && role === "chef";
 const canViewCash = () => Boolean(session?.admin || ["capitan","encargado","lector"].includes(role));
 const cashPages = new Set(["ops-cash", "ops-collections", "ops-expenses"]);
 const dayButton = (page, label, id = "", style = "day-secondary") =>
@@ -24,7 +25,7 @@ let dayNoticeStockOwner = null;
 function dayBack() {
   let parent = "home", label = "Inicio";
   if (dayPage === "task" || dayPage === "blocked") {
-    parent = "tasks"; label = "Mis tareas";
+    parent = "tasks"; label = dayChefReference()?"Mis responsabilidades":"Mis tareas";
   } else if (["tasks","work","problem","manual","updates"].includes(dayPage)) {
     parent = "maintenance"; label = "Mantenimiento";
   } else if (["ops-requests","ops-fleet","ops-admin-stock","ops-transfers"].includes(dayPage) || (dayPage === "ops-intake" && dayIntakeParent !== "ops-cash")) {
@@ -59,11 +60,11 @@ function dayTasks() {
     .sort((a, b) => Number(taskStatus(b) === "Vencido") - Number(taskStatus(a) === "Vencido") || (a.nextDate || "9999").localeCompare(b.nextDate || "9999"));
 }
 function dayTaskRow(t) {
-  return `<article class="day-task ${taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : ""}${R.scheduleLabel(t) ? ` · ${esc(R.scheduleLabel(t))}` : " · Sin frecuencia definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
+  return `<article class="day-task ${!dayChefReference() && taskStatus(t) === "Vencido" ? "late" : ""}"><button type="button" data-day="task" data-id="${esc(t.id)}"><span>${dayChefReference()?"":statusBadge(t)}<strong>${esc(t.title)}</strong><small>${esc(dayRoleName(t.assignedRole))}${t.assignee ? ` · ${esc(t.assignee)}` : ""} · ${esc(t.system)}${t.nextDate ? ` · ${date(t.nextDate)}` : t.nextHours !== "" && t.nextHours != null ? ` · A las ${t.nextHours} h` : ""}${R.scheduleLabel(t) ? ` · ${esc(R.scheduleLabel(t))}` : " · Sin frecuencia definida"}</small></span><span aria-hidden="true">›</span></button></article>`;
 }
 function dayHome() {
   const shortages = typeof BoatStockAlerts === "undefined" ? 0 : state.products.filter(product => BoatStockAlerts.level(product)).length;
-  const overdue = dayTasks().filter(task => taskStatus(task) === "Vencido").length;
+  const overdue = (dayChefReference()?[]:dayTasks()).filter(task => taskStatus(task) === "Vencido").length;
   const sections = [
     ["ops-stock", "stock", "Stock", "Existencias, compras y pedidos", shortages ? shortages + " para reponer" : ""],
     ["maintenance", "tools", "Mantenimiento", "Tareas, equipos y trabajos", overdue ? overdue + (overdue === 1 ? " tarea vencida" : " tareas vencidas") : ""],
@@ -78,8 +79,8 @@ function dayMaintenance() {
   const records = state.logs.filter(log => log.recordedById ? log.recordedById === session.id : (log.recordedBy || log.responsible) === session.name).slice().reverse().slice(0, 8);
   const tasks = dayTasks();
   return `${dayBack()}<h1>Mantenimiento</h1><div class="area-actions">
-    ${dayButton("tasks", "Mis tareas" + (tasks.length ? " · " + tasks.length : ""), "", "day-primary")}
-    ${writable() ? dayButton("work", "Registrar trabajo") + dayButton("problem", "Avisar un problema") : ""}
+    ${dayButton("tasks", (dayChefReference()?"Mis responsabilidades":"Mis tareas") + (tasks.length ? " · " + tasks.length : ""), "", "day-primary")}
+    ${writable() ? (dayChefReference()?"":dayButton("work", "Registrar trabajo")) + dayButton("problem", "Avisar un problema") : ""}
     ${dayButton("manual", "Manual de instrucciones")}
   </div><details class="day-disclosure"><summary>Avisos e historial</summary>
     ${dayButton("updates", "Avisos y novedades")}
@@ -98,6 +99,14 @@ function dayWorkForm(kind) {
   const product = kind === "missing" ? state.products.find(p => p.id === daySelected) : null;
   const report = ["problem", "blocked", "missing"].includes(kind);
   if ((["task", "blocked"].includes(kind) && (!task || !dayOwnTask(task))) || (kind === "missing" && !product)) return dayBack() + empty("Este registro ya no está disponible.");
+  if (dayChefReference() && !report) {
+    if (!task) return dayBack()+empty("Chef puede consultar sus responsabilidades y avisar problemas.");
+    return dayBack()+'<p class="day-eyebrow">RESPONSABILIDAD DE CHEF</p><h1>'+esc(task.title)+'</h1>'+
+      '<p>'+esc(task.system)+'</p><p>'+esc(task.description||"Consultá el manual para ver el procedimiento.")+'</p>'+
+      (task.observation?'<p>'+esc(task.observation)+'</p>':'')+
+      '<p>No tenés que marcar esta tarea como hecha.</p>'+dayButton("manual","Abrir manual de Chef")+
+      (writable()?dayButton("blocked","Avisar un problema con esta tarea",task.id):"");
+  }
   const title = kind === "blocked" ? "No pude hacerla" : kind === "missing" ? "Pedir reposición" : report ? "¿Qué pasó?" : task ? task.title : "¿Qué trabajo hiciste?";
   return `${dayBack()}<p class="day-eyebrow">${report ? "AVISO DEL BARCO" : task ? "MI TAREA" : "NUEVO REGISTRO"}</p><h1>${esc(title)}</h1>${task ? `<p class="day-muted">${esc(task.system)}${R.scheduleLabel(task) ? ` · ${esc(R.scheduleLabel(task))}` : ""}</p>${task.sourceRef ? `<p class="day-muted">Fuente: ${esc(task.sourceRef)}</p>` : ""}${task.lastCompleted ? `<p>Última realización registrada: ${date(task.lastCompleted)}.</p>` : (task.intervalDays || task.intervalMonths || task.routineCycle) ? `<p class="day-muted">Sin una realización inicial registrada. La próxima fecha se fija cuando guardes un trabajo real.</p>` : ""}${kind === "blocked" ? `<p>${esc(task.title)}</p>` : `${task.description ? `<div class="day-note">${esc(task.description)}</div>` : ""}${task.observation ? `<p>${esc(task.observation)}</p>` : ""}${task.photo ? `<img class="day-reference" src="${esc(task.photo)}" alt="Referencia de la tarea">` : ""}`}` : ""}${product ? `<div class="day-note"><strong>${esc(product.name)}</strong><br>Disponible: ${product.current} ${esc(product.unit)} · ${esc(product.location)}</div>` : ""}<form id="dayForm" data-kind="${kind}">
     ${!task && !report ? field("Trabajo realizado", "title", "", "text", 'required maxlength="140" placeholder="Ej.: Lavado del dinghy"') + select("Tipo de trabajo", "type", ["Mantenimiento", "Limpieza", "Reparación", "Verificación de funcionamiento"]) : ""}
@@ -153,9 +162,9 @@ function dayManualAppGuide(selected) {
     chef: [
       "En Agenda del mes consultá alimentación, alergias, bebidas y celebraciones antes de planificar el menú. Consultá a administración los datos pendientes.",
       "Planificá y prepará los servicios según el manual y la coordinación del capitán. Revisá conservación, higiene, presentación y disponibilidad real de alimentos y bebidas.",
-      "En Stock y pedidos filtrá por Bebidas y mercadería para consultar cantidades y pedir reposición. Entregá los conteos y comprobantes a administración. Registrá cada consumo una sola vez, en inventario o como material del trabajo.",
+      "En Stock y pedidos filtrá por Bebidas y mercadería para consultar cantidades y pedir reposición. Entregá los conteos y comprobantes a administración. Registrá cada consumo una sola vez, desde Stock.",
       "En Pedidos agregá los faltantes con cantidad, unidad y detalle; luego solicitá el pedido. Administración confirma la recepción de lo que llegó.",
-      "Registrá limpieza, trabajos y anomalías de cocina con tu cuenta. Mis tareas muestra las asignadas a Chef y las compartidas; el manual sigue disponible aunque todavía no haya tareas programadas."
+      "Consultá tus responsabilidades de cocina sin marcar tareas como hechas. Si hay un problema, usá Avisar un problema. Los consumos se registran solo en Stock."
     ],
     marinero: [
       "Consultá tu rutina diaria del Apéndice A y el ciclo de limpieza del Apéndice B. Los horarios son referencias del manual; coordiná los ajustes con el capitán.",
@@ -194,7 +203,7 @@ function renderDay() {
     <div><strong>${esc(session.name)}</strong><small>${session.admin ? "Administración" : esc(dayRoleName(role))}</small>
     ${dayButton("ops-notifications", "Notificaciones", "", "day-text")}${dayManager() ? dayButton("manage", "Administrar", "", "day-text") + dayButton("ops-setup", "Preparar barco", "", "day-text") : ""}${action("logout","Salir","","text-btn")}</div></details>`;
   $("#notice").innerHTML = activityNotice();
-  let body = dayPage === "home" ? dayHome() : dayPage === "maintenance" ? dayMaintenance() : dayPage === "equipment" ? dayEquipment() : dayPage.startsWith("ops-") ? "" : dayPage === "tasks" ? `${dayBack()}<h1>Mis tareas</h1><p class="day-muted">${dayManager() ? "Revisá todas las tareas o filtrá por rol. " : `Tareas de ${dayRoleName(role)} y las compartidas con toda la tripulación. `}Las vencidas aparecen primero.</p>${dayManager() ? dayRolePicker("taskRole", dayTaskRole) + '<p class="day-muted">Cada rol incluye también las tareas compartidas.</p>' : ""}${dayGroupedTasks() || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("maintenance", "Volver a Mantenimiento", "", "day-primary")}` : dayWorkForm(dayPage);
+  let body = dayPage === "home" ? dayHome() : dayPage === "maintenance" ? dayMaintenance() : dayPage === "equipment" ? dayEquipment() : dayPage.startsWith("ops-") ? "" : dayPage === "tasks" ? `${dayBack()}<h1>${dayChefReference()?"Mis responsabilidades":"Mis tareas"}</h1><p class="day-muted">${dayChefReference()?"Consultá tus responsabilidades y el manual, sin marcar tareas como hechas.":(dayManager()?"Revisá todas las tareas o filtrá por rol. ":`Tareas de ${dayRoleName(role)} y las compartidas con toda la tripulación. `) + "Las vencidas aparecen primero."}</p>${dayManager() ? dayRolePicker("taskRole", dayTaskRole) + '<p class="day-muted">Cada rol incluye también las tareas compartidas.</p>' : ""}${dayGroupedTasks() || empty("No tenés tareas pendientes.")}` : dayPage === "stock" ? dayStock() : dayPage === "manual" ? dayManual() : dayPage === "updates" ? dayUpdates() : dayPage === "success" && dayResult ? `<div class="day-success"><span>✓</span><h1>${esc(dayResult.title)}</h1><p class="day-muted">${esc(dayResult.message)}</p></div>${dayButton("maintenance", "Volver a Mantenimiento", "", "day-primary")}` : dayWorkForm(dayPage);
   $("#content").innerHTML = `<div class="day-content${dayPage === "home" ? " area-home" : ""}">${body}</div>`;
   if (dayPage === "stock") { dayStockItems(); $("#dayStockSearch").oninput = e => dayStockItems(e.target.value); }
   if ($("#dayForm")) {
@@ -216,6 +225,7 @@ async function saveDayForm(event) {
   const d = Object.fromEntries(new FormData(form));
   for (const key in d) if (typeof d[key] === "string") d[key] = d[key].trim();
   const kind = form.dataset.kind, isReport = ["problem", "blocked", "missing"].includes(kind);
+  if(dayChefReference()&&!isReport)return;
   const button = form.querySelector('[type="submit"]');
   const owner=boatWriteContext();
   daySaving = true; button.disabled = true; $("#dayError").textContent = "";
