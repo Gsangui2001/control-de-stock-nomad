@@ -65,7 +65,7 @@ test('isolated Postgres: reject crew, duplicate and stale counts; preserve stock
   `);
   const base=read('supabase/migrations/20261124202124_boat_admin_stockroom.sql');
   await db.exec(base.slice(base.indexOf('create function boat_control.stockroom_match('),base.indexOf('create function boat_control.stockroom_price(')));
-  await db.exec(read('supabase/migrations/20261126203000_stockroom_photo_count.sql'));
+  await db.exec(read('supabase/migrations/20261126204806_stockroom_photo_count.sql'));
   const batch={session:'admin',key:randomUUID(),scope:'depot',confirmed:true,revision:0,items:[
    {name:'Arroz',quantity:7,unit:'kg',location:'Seco',area:'gastronomia',productId:'arroz'},
    {name:'Huevos',quantity:0,unit:'unidad',location:'Frío',area:'gastronomia'}

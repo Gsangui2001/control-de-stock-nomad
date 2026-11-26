@@ -26,7 +26,7 @@ test('published operational guest details stay visible without leaking the autho
             {"id":null,"start":"2026-11-27","briefVersion":0}]'::jsonb end
    $$;
   `);
-  await db.exec(fs.readFileSync('supabase/migrations/20261126211500_nomade_guest_role_projection.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261126204809_nomade_guest_role_projection.sql','utf8'));
   const call=(session,op='reservations',boat='nomade')=>db.query('select public.boat_guest_plan_rpc($1,$2,$3::jsonb) as data',['fixture',op,JSON.stringify({boat,session})]).then(r=>r.rows[0].data);
   for(const op of ['agenda','reservations']){
    const [a,b,m]=await call('captain',op);

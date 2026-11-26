@@ -53,7 +53,7 @@ test('isolated Postgres: 2×24 dispatch, scoped notice/photos, signed full recei
     update boat_control.boats set state=jsonb_set(jsonb_set(state,'{products}',items),'{movements}',state->'movements'||jsonb_build_array(jsonb_build_object('delta',delta))) where id=b;
     return p; end $$;
   `);
-  for(const name of ['20261126203000_stockroom_photo_count','20261126210000_stockroom_packages'])
+  for(const name of ['20261126204806_stockroom_photo_count','20261126204807_stockroom_packages'])
    await db.exec(fs.readFileSync('supabase/migrations/'+name+'.sql','utf8'));
   const call=(op,args,session='admin',boat='nomade')=>db.query('select public.boat_stockroom_package_rpc($1,$2,$3::jsonb) as data',['fixture','warehouse_package_'+op,JSON.stringify({boat,session,...args})]).then(r=>r.rows[0].data);
   const depot=()=>db.query('select products,movements,revision from boat_control.stockroom').then(r=>r.rows[0]);
