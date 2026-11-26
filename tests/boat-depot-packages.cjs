@@ -8,11 +8,11 @@ test('Tierra photographed inbound load is additive; count remains explicit',()=>
  assert.match(s,/Ingreso de mercadería · suma lo que llegó/);
  assert.match(s,/Conteo real · reemplaza lo contado/);
 });
-test('isolated Postgres: 2×24 dispatch, scoped notice/photos, partial receive, deduplication, and onboard consumption',
+test('isolated Postgres: 2×24 dispatch, scoped notice/photos, signed full receipt, deduplication, and onboard consumption',
  {skip:!hasPGlite&&'Install @electric-sql/pglite for the isolated SQL test'},async()=>{
  const {PGlite}=require('@electric-sql/pglite');
  const db=new PGlite();
- const pic=randomUUID(), received1=randomUUID(),received2=randomUUID(),otherPhoto=randomUUID();
+ const pic=randomUUID(), received1=randomUUID(),received2=randomUUID(),signature=randomUUID(),otherPhoto=randomUUID();
  try {
   await db.exec(`create role anon; create role authenticated; create schema boat_control; create schema extensions;
   create function extensions.digest(text,text) returns bytea language sql immutable as $$select decode(md5($1),'hex')$$;
@@ -27,7 +27,7 @@ test('isolated Postgres: 2×24 dispatch, scoped notice/photos, partial receive, 
   create table boat_control.members(boat_id text,user_id text,role text);
   insert into boat_control.members values('nomade','c','chef'),('nomade','l','lector'),('other','s','marinero');
   create table boat_control.photos(id uuid primary key,boat_id text);
-  insert into boat_control.photos values ('${pic}','nomade'),('${received1}','nomade'),('${received2}','nomade'),('${otherPhoto}','other');
+  insert into boat_control.photos values ('${pic}','nomade'),('${received1}','nomade'),('${received2}','nomade'),('${signature}','nomade'),('${otherPhoto}','other');
   create table boat_control.stockroom(id boolean primary key,name text,products jsonb,movements jsonb,revision int);
   insert into boat_control.stockroom values(true,'Tierra','[{"id":"beer","name":"Cerveza","unit":"unidad","location":"Seco","area":"gastronomia","current":60},{"id":"pasta","name":"Fideos","unit":"kg","location":"Seco","area":"gastronomia","current":10}]','[]',0);
   create table boat_control.operation_receipts(user_id text,key uuid,request jsonb,result jsonb,created_at timestamptz,primary key(user_id,key));
@@ -80,19 +80,24 @@ test('isolated Postgres: 2×24 dispatch, scoped notice/photos, partial receive, 
   const [pkg]=await call('list',{},'crew');
   assert.equal(pkg.sent_photo,pic);assert.equal(pkg.items[0].sent,48);
   assert.equal('lastInvoiceUnitCost' in pkg.items[0],false);
-  const receive={key:randomUUID(),id:pkg.id,photo:received1,items:[{lineId:pkg.items[0].id,quantity:46,location:'Heladera'},{lineId:pkg.items[1].id,quantity:3,location:'Cocina'}]};
-  await assert.rejects(call('receive',{...receive,photo:pic},'crew'),/foto nueva/);
-  await assert.rejects(call('receive',{...receive,items:[receive.items[0],{...receive.items[1],quantity:99}]},'crew'),/cantidades pendientes/);
+  const issue={key:randomUUID(),id:pkg.id,photo:received2,note:'El sello está roto'};
+  assert.equal((await call('issue',issue,'crew')).status,'review');
   assert.deepEqual((await vessel()).products,[]);
-  const first=await call('receive',receive,'crew');
-  assert.equal(first.status,'partial');assert.deepEqual(await call('receive',receive,'crew'),first);
-  assert.deepEqual((await vessel()).products.map(p=>p.current),[46,3]);
-  const done={key:randomUUID(),id:pkg.id,photo:received2,items:[{lineId:pkg.items[0].id,quantity:2,location:'Heladera'}]};
-  assert.equal((await call('receive',done,'crew')).status,'received');
-  await assert.rejects(call('receive',{...done,key:randomUUID()},'crew'),/ya fue recibido/);
+  const receive={key:randomUUID(),id:pkg.id,photo:received1,signature,verified:true};
+  await assert.rejects(call('receive',{...receive,photo:pic},'crew'),/foto nueva/);
+  await assert.rejects(call('receive',{...receive,verified:false},'crew'),/firmá/);
+  await assert.rejects(call('receive',{...receive,signature:otherPhoto},'crew'),/firmá/);
+  await assert.rejects(call('receive',{...receive,items:[{lineId:pkg.items[0].id,quantity:46}]},'crew'),/envío completo/);
+  assert.deepEqual((await vessel()).products,[]);
+  const done=await call('receive',receive,'crew');
+  assert.equal(done.status,'received');assert.deepEqual(await call('receive',receive,'crew'),done);
+  assert.deepEqual((await vessel()).products.map(p=>p.current),[48,3]);
+  await assert.rejects(call('receive',{...receive,key:randomUUID()},'crew'),/ya fue recibido/);
   const [closed]=await call('list',{},'crew');
-  assert.equal((await db.query("select jsonb_array_length(boat_control.backup_snapshot('nomade')->'transfers') as n")).rows[0].n,2);
-  assert.equal(closed.receipts.length,2);assert.equal(closed.receipts[0].photo,received1);
+  assert.equal((await db.query("select jsonb_array_length(boat_control.backup_snapshot('nomade')->'transfers') as n")).rows[0].n,1);
+  assert.equal(closed.receipts.length,2);assert.equal(closed.receipts[0].verified,false);assert.equal(closed.receipts[1].photo,received1);
+  assert.equal(closed.receipts[1].signature,signature);assert.equal(closed.receipts[1].signedBy,'Chef QA');
+  assert.equal(await call('photo',{photo:signature},'crew'),true);
   const [beer]=(await vessel()).products;
   await db.query("select boat_control.stock_delta('nomade',$1::jsonb,-5,'c','Consumo')",[JSON.stringify(beer)]);
   assert.deepEqual((await vessel()).products.map(p=>p.current),[43,3]);

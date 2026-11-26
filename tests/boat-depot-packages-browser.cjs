@@ -2,13 +2,14 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const enabled=process.env.STOCK_TEST_BROWSER==='1';
-test('mobile dispatch and partial receiving send separate photos and verified quantities',{skip:!enabled&&'Set STOCK_TEST_BROWSER=1 with Chromium'},async()=>{
+test('mobile dispatch and whole package signature records separate photos without quantity re-entry',{skip:!enabled&&'Set STOCK_TEST_BROWSER=1 with Chromium'},async()=>{
  const {chromium}=require('playwright-core');
  const binary=process.env.CHROMIUM_BIN || await (await import(require.resolve('@sparticuz/chromium'))).default.executablePath();
  const browser=await chromium.launch({executablePath:binary,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
  try{
   const page=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const sendPhoto='00000000-0000-4000-8000-000000000001', recPhoto='00000000-0000-4000-8000-000000000002';
+  const sign='00000000-0000-4000-8000-000000000005';
   const id='00000000-0000-4000-8000-000000000003',lineId='00000000-0000-4000-8000-000000000004';
   const events=[];let pkg=null;
   await page.route('**/*',async route=>{
@@ -21,7 +22,7 @@ test('mobile dispatch and partial receiving send separate photos and verified qu
       const depotNameKey=x=>x.toLowerCase(), uid=()=>crypto.randomUUID(), toast=()=>{};
       let stored; const draftRead=async()=>stored,editStoredDraft=async(k,fn)=>stored=fn(stored);
       const photo=async f=>f.name;
-      const api=async(op,method,{data})=>({url:'/api/boat/photos?boat=nomade&id='+(data==='salida.png'?'${sendPhoto}':'${recPhoto}')});
+      const api=async(op,method,{data})=>({url:'/api/boat/photos?boat=nomade&id='+(data==='salida.png'?'${sendPhoto}':data==='llegada.png'?'${recPhoto}':'${sign}')});
       const opsAfterSave=async()=>document.querySelector('stockroom-packages').read();
       customElements.define('boat-admin-stock',class extends HTMLElement{
        constructor(){super();this.data={scope:"nomade",depotRevision:0,depotProducts:[{id:"beer",name:"Cerveza",current:60,unit:"unidad",location:"Seco"}],boats:[{id:"nomade",name:"Nomadé"}]};}
@@ -38,8 +39,8 @@ test('mobile dispatch and partial receiving send separate photos and verified qu
     return route.fulfill({json:{ok:true}});
    }
    if(p.endsWith('/warehouse_package_receive')){
-    const body=route.request().postDataJSON();events.push(body);pkg.status='partial';pkg.items[0].received=46;
-    pkg.receipts=[{photo:recPhoto,items:[{name:'Cerveza',quantity:46,unit:'unidad'}],note:''}];
+    const body=route.request().postDataJSON();events.push(body);pkg.status='received';pkg.items[0].received=48;
+    pkg.receipts=[{photo:recPhoto,signature:sign,verified:true,signedBy:'Chef QA',at:'2026-11-26T12:10:00Z'}];
     return route.fulfill({json:{ok:true}});
    }
    return route.abort();
@@ -57,14 +58,19 @@ test('mobile dispatch and partial receiving send separate photos and verified qu
   assert.equal(await page.getByText('Preparar paquete desde Tierra').count(),0);
   assert.match(await page.getByRole('link',{name:'Foto del despacho'}).getAttribute('href'),new RegExp(sendPhoto));
   await page.getByText('Recibir paquete',{exact:true}).click();
-  await page.locator('[name=quantity]').fill('46');
-  await page.locator('[name=location]').fill('Heladera');
+  assert.equal(await page.locator('[name=quantity]').count(),0);
   await page.locator('[name=photo]').setInputFiles({name:'llegada.png',mimeType:'image/png',buffer:Buffer.from('fixture')});
-  await page.getByRole('button',{name:'Confirmar lo recibido'}).click();
-  await page.getByRole('heading',{name:'Recibido en parte'}).waitFor();
+  await page.locator('[name=verified]').check();
+  await page.getByRole('button',{name:'Firmar y recibir todo'}).click();
+  await page.getByText(/firmá antes/).waitFor();
+  const canvas=page.locator('[data-signature]');await canvas.scrollIntoViewIfNeeded();const b=await canvas.boundingBox();
+  await page.mouse.move(b.x+30,b.y+20);await page.mouse.down();await page.mouse.move(b.x+90,b.y+45,{steps:8});await page.mouse.up();
+  await page.getByRole('button',{name:'Firmar y recibir todo'}).click();
+  await page.getByRole('heading',{name:'Recibido y firmado'}).waitFor();
   assert.match(await page.getByRole('link',{name:'Foto de recepción'}).getAttribute('href'),new RegExp(recPhoto));
+  assert.match(await page.getByRole('link',{name:'Ver firma'}).getAttribute('href'),new RegExp(sign));
   assert.equal(events.length,2);assert.equal(events[0].photo,sendPhoto);assert.equal(events[1].photo,recPhoto);
   assert.deepEqual(events[0].items,[{productId:'beer',packs:2,perPack:24}]);
-  assert.deepEqual(events[1].items,[{lineId,quantity:46,location:'Heladera'}]);
+  assert.equal(events[1].items,undefined);assert.equal(events[1].signature,sign);assert.equal(events[1].verified,true);
  }finally{await browser.close();}
 });

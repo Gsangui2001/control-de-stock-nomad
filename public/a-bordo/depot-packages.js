@@ -38,26 +38,34 @@ class StockroomPackages extends HTMLElement {
       '<label>Cantidad por funda (en la unidad del inventario)<input type="number" name="perPack" min="0.0001" step="0.0001" required></label><p data-pack-total></p></div>';
   }
   shipCard(pkg){
-    const statuses={in_transit:"En camino",partial:"Recibido en parte",received:"Recibido completo"};
-    const lines=pkg.items.map(l=>'<li>'+esc(l.name)+': '+esc(l.packs+' × '+l.perPack+' = '+l.sent+' '+l.unit)+
-      ' · recibido: '+esc(l.received)+'</li>').join("");
-    const receipts=pkg.receipts.map(r=>'<li><a target="_blank" rel="noopener" href="'+esc(this.url(r.photo))+'">Foto de recepción</a> · '+esc(r.items.map(l=>l.name+' '+l.quantity+' '+l.unit).join(' · '))+(r.note?' · '+esc(r.note):'')+'</li>').join("");
-    const rows=pkg.items.filter(l=>l.sent>l.received).map(l=>{
-      const remaining=Number((l.sent-l.received).toFixed(4));
-      const matches=state.products.filter(p=>boatId===this.boat &&
-        depotNameKey(p.name)===depotNameKey(l.name) && depotNameKey(p.unit)===depotNameKey(l.unit) && (p.area||'tecnica')===l.area);
-      const targetLocation=matches.length===1?matches[0].location:"";
-      return '<div data-receive-line="'+esc(l.id)+'" class="day-inventory"><strong>'+esc(l.name+' · faltan '+remaining+' '+l.unit)+'</strong>'+
-        '<label>Cantidad que llegó<input type="number" name="quantity" required min="0" max="'+remaining+'" step="0.0001" value="'+remaining+'"></label>'+
-        (matches.length?'<label>Ubicación de stock<select name="targetProductId"><option value="">Usar otra ubicación</option>'+
-          matches.map(p=>'<option value="'+esc(p.id)+'" data-location="'+esc(p.location)+'" '+(matches.length===1?'selected':'')+'>'+esc(p.location)+'</option>').join("")+'</select></label>':'')+
-        '<label>Lugar de guardado<input name="location" maxlength="140" value="'+esc(targetLocation)+'" placeholder="Ej.: heladera de popa"></label></div>';
-    }).join("");
+    const statuses={in_transit:"En camino",review:"Diferencia por revisar",received:"Recibido y firmado"};
+    const lines=pkg.items.map(l=>'<li>'+esc(l.name)+': '+esc(l.packs+' × '+l.perPack+' = '+l.sent+' '+l.unit)+'</li>').join("");
+    const receipts=pkg.receipts.map(r=>'<li><a target="_blank" rel="noopener" href="'+esc(this.url(r.photo))+'">Foto de recepción</a>'+
+      (r.verified?' · Firmó '+esc(r.signedBy||"tripulación")+' · '+esc(date(r.at))+' · <a target="_blank" rel="noopener" href="'+esc(this.url(r.signature))+'">Ver firma</a>':' · Diferencia: '+esc(r.note))+'</li>').join("");
     return '<article class="day-inventory"><h3>'+esc(statuses[pkg.status]||pkg.status)+'</h3><p>'+esc(date(pkg.sent_at))+' · Tierra → '+esc(this.depot?.boats?.find(b=>b.id===this.boat)?.name || state.boat.name)+'</p><ul>'+lines+
-      '</ul><p><a target="_blank" rel="noopener" href="'+esc(this.url(pkg.sent_photo))+'">Foto del despacho</a></p>'+(receipts?'<ul>'+receipts+'</ul>':'')+
-      (!this.pending&&pkg.status!=="received"?'<details class="day-disclosure"><summary>Recibir paquete</summary><p>Compará con la foto de despacho. Si un producto no llegó, indicá 0; queda pendiente.</p>'+
-       '<form data-package-receive="'+esc(pkg.id)+'">'+rows+this.photoLabel('Foto de lo recibido')+
-       '<label>Observación (opcional)<input name="note" maxlength="300"></label><button class="day-primary" type="submit">Confirmar lo recibido</button></form></details>':'')+'</article>';
+      '</ul><figure><a target="_blank" rel="noopener" href="'+esc(this.url(pkg.sent_photo))+'"><img loading="lazy" class="day-reference" style="max-height:200px;object-fit:contain" alt="Foto del despacho" src="'+esc(this.url(pkg.sent_photo))+'"></a><figcaption>Foto de salida de Tierra</figcaption></figure>'+(receipts?'<ul>'+receipts+'</ul>':'')+
+      (!this.pending&&pkg.status!=="received"?'<details class="day-disclosure"><summary>Recibir paquete</summary><p>Compará la foto y el listado de salida con el paquete que llegó. No hay que cargar los productos otra vez.</p>'+
+       '<form data-package-receive="'+esc(pkg.id)+'">'+this.photoLabel('Sacar o elegir foto del paquete recibido')+
+       '<figure data-arrival-preview hidden><img class="day-reference" style="max-height:200px;object-fit:contain" alt="Vista de la foto de llegada"><figcaption>Foto de llegada</figcaption></figure>'+
+       '<label class="check"><input type="checkbox" name="verified" required>Verifiqué las fotos y el paquete coincide con el envío completo.</label>'+
+       '<label>Firmá con el dedo<canvas width="360" height="120" data-signature aria-label="Dibujá tu firma" style="display:block;max-width:100%;width:100%;border:1px solid #718198;background:#fff;touch-action:none"></canvas></label>'+
+       '<button class="day-secondary" type="button" data-clear-signature>Borrar firma</button><button class="day-primary" type="submit">Firmar y recibir todo</button>'+
+       '<details><summary>No coincide con el envío</summary><label>Qué no coincide<textarea name="note" maxlength="300"></textarea></label><button type="button" class="day-secondary" data-package-issue>Avisar diferencia sin recibir</button></details></form></details>':'')+'</article>';
+  }
+  setupSignature(form){
+    const canvas=form.querySelector("[data-signature]"),ctx=canvas.getContext("2d");
+    ctx.strokeStyle="#12263a";ctx.lineWidth=3;ctx.lineCap="round";ctx.lineJoin="round";
+    let pointer=null,old;
+    const pos=e=>{const b=canvas.getBoundingClientRect();return [(e.clientX-b.left)*canvas.width/b.width,(e.clientY-b.top)*canvas.height/b.height];};
+    canvas.onpointerdown=e=>{if(pointer!==null)return;pointer=e.pointerId;old=pos(e);canvas.setPointerCapture(pointer);};
+    canvas.onpointermove=e=>{
+      if(pointer!==e.pointerId)return;
+      const next=pos(e);if(Math.hypot(next[0]-old[0],next[1]-old[1])<1)return;
+      ctx.beginPath();ctx.moveTo(...old);ctx.lineTo(...next);ctx.stroke();old=next;canvas.dataset.signed="true";
+    };
+    canvas.onpointerup=canvas.onpointercancel=()=>{pointer=null;};
+    form.querySelector("[data-clear-signature]").onclick=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);delete canvas.dataset.signed;};
+    return canvas;
   }
   draw(){
     const maySend=this.admin&&this.depot?.depotProducts?.some(p=>p.current>0);
@@ -79,15 +87,24 @@ class StockroomPackages extends HTMLElement {
       }));void this.save("send",send,{items,revision:this.depot.depotRevision});};
     }
     for(const form of this.querySelectorAll("[data-package-receive]")){
-      form.onchange=e=>{if(e.target.name==="targetProductId"){e.target.closest("[data-receive-line]").querySelector('[name=location]').value=e.target.selectedOptions[0]?.dataset.location||"";}};
-      form.onsubmit=e=>{e.preventDefault();const items=[...form.querySelectorAll("[data-receive-line]")].map(row=>({
-        lineId:row.dataset.receiveLine,quantity:Number(row.querySelector('[name=quantity]').value),location:row.querySelector('[name=location]').value.trim(),
-        targetProductId:row.querySelector('[name=targetProductId]')?.value||undefined
-      })).filter(l=>l.quantity>0);void this.save("receive",form,{id:form.dataset.packageReceive,items,note:form.elements.note.value});};
+      const canvas=this.setupSignature(form);
+      form.elements.photo.onchange=()=>{
+        const preview=form.querySelector("[data-arrival-preview]"), image=preview.querySelector("img");
+        if(image.src)URL.revokeObjectURL(image.src);
+        const file=form.elements.photo.files[0];preview.hidden=!file;
+        if(file){image.src=URL.createObjectURL(file);this.previewURLs??=new Set();this.previewURLs.add(image.src);}else image.removeAttribute("src");
+        form.elements.verified.checked=false;
+      };
+      form.onsubmit=e=>{e.preventDefault();
+        void this.save("receive",form,{id:form.dataset.packageReceive,verified:form.elements.verified.checked},
+          canvas.dataset.signed==='true'?canvas.toDataURL("image/png"):null);
+      };
+      form.querySelector("[data-package-issue]").onclick=()=>this.save("issue",form,{id:form.dataset.packageReceive,note:form.elements.note.value.trim()});
     }
     const verify=this.querySelector("[data-verify-package]");if(verify)verify.onclick=()=>this.save();
   }
-  async save(op,form,data){
+  disconnectedCallback(){for(const src of this.previewURLs||[])URL.revokeObjectURL(src);}
+  async save(op,form,data,signatureData){
     if(!this.alive()||this.busy)return;
     const button=form?.querySelector('[type=submit]')||this.querySelector("[data-verify-package]");
     this.busy=true;if(button)button.disabled=true;
@@ -95,7 +112,9 @@ class StockroomPackages extends HTMLElement {
     try {
       let pending=this.pending;
       if(!pending){
-        if(!data.items.length||op==="receive"&&data.items.some(l=>!l.location))throw Error("Indicá una cantidad recibida y su ubicación.");
+        if(op==="send"&&!data.items.length)throw Error("Elegí qué productos vas a despachar.");
+        if(op==="receive"&&(!data.verified||!signatureData))throw Error("Compará las fotos y firmá antes de recibir.");
+        if(op==="issue"&&data.note.length<3)throw Error("Indicá brevemente qué no coincide.");
         const file=form.elements.photo.files[0];
         if(!file)throw Error("Adjuntá la foto del paquete.");
         const image=await photo(file);
@@ -103,7 +122,13 @@ class StockroomPackages extends HTMLElement {
         const saved=await api('photos','POST',{boat:this.boat,data:image});
         if(!this.alive())return;
         const photoId=new URL(saved.url,location.origin).searchParams.get('id');
-        pending={op,payload:{boat:this.boat,key:uid(),photo:photoId,...data}};
+        let signature;
+        if(op==="receive"){
+          const signed=await api('photos','POST',{boat:this.boat,data:signatureData});
+          if(!this.alive())return;
+          signature=new URL(signed.url,location.origin).searchParams.get('id');
+        }
+        pending={op,payload:{boat:this.boat,key:uid(),photo:photoId,...data,...(signature?{signature}:{})}};
         const claimed=await editStoredDraft(this.key,old=>old||pending);
         this.pending=claimed;
         if(claimed.payload.key!==pending.payload.key){this.message="Verificá primero el guardado anterior.";this.draw();return;}
@@ -113,7 +138,7 @@ class StockroomPackages extends HTMLElement {
       await editStoredDraft(this.key,old=>old?.payload.key===pending.payload.key?null:old);
       this.pending=null;
       if(!this.alive())return;
-      toast(pending.op==="send"?"Paquete despachado. Aviso registrado.":"Recepción guardada en el stock del barco.");
+      toast(pending.op==="send"?"Paquete despachado. Aviso registrado.":pending.op==="issue"?"Diferencia informada. No cambió el stock.":"Paquete completo recibido y firmado.");
       if(this.parent)await this.parent.read();else await opsAfterSave();
     }catch(err){
       this.message=err.message;

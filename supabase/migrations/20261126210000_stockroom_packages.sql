@@ -2,13 +2,13 @@ create table boat_control.stockroom_packages (
  id uuid primary key default gen_random_uuid(), boat_id text not null references boat_control.boats(id),
  sent_by text not null references boat_control.accounts(id), sent_at timestamptz not null default now(),
  sent_photo uuid not null references boat_control.photos(id), items jsonb not null,
- status text not null default 'in_transit' check (status in ('in_transit','partial','received'))
+ status text not null default 'in_transit' check (status in ('in_transit','review','received'))
 );
 create index stockroom_packages_boat_recent on boat_control.stockroom_packages(boat_id,sent_at desc);
 create table boat_control.stockroom_package_receipts (
  id uuid primary key default gen_random_uuid(), package_id uuid not null references boat_control.stockroom_packages(id),
  received_by text not null references boat_control.accounts(id), received_at timestamptz not null default now(),
- photo_id uuid not null references boat_control.photos(id), items jsonb not null, note text not null default ''
+ photo_id uuid not null references boat_control.photos(id), signature_id uuid references boat_control.photos(id), items jsonb not null, note text not null default '', verified boolean not null default false
 );
 create index stockroom_package_receipts_package on boat_control.stockroom_package_receipts(package_id,received_at);
 alter table boat_control.stockroom_packages enable row level security;
@@ -32,7 +32,7 @@ create function boat_control.stockroom_package(server_key text, operation text, 
 language plpgsql security definer set search_path='' as $$
 declare actor boat_control.accounts%rowtype; depot boat_control.stockroom%rowtype; ship boat_control.stockroom_packages%rowtype;
  prior boat_control.operation_receipts%rowtype; vessel boat_control.boats%rowtype;
- b text=payload->>'boat'; member_role text; request jsonb; answer jsonb; k uuid; attachment uuid; ship_id uuid;
+ b text=payload->>'boat'; member_role text; request jsonb; answer jsonb; k uuid; attachment uuid; signature uuid; ship_id uuid;
  normalized jsonb:='[]'; logs jsonb:='[]'; received_rows jsonb:='[]'; seen text[]:='{}';
  line jsonb; old_line jsonb; p jsonb; target jsonb; row_id text; loc text; note text;
  packs numeric; per_pack numeric; qty numeric; remaining numeric; balance numeric; status_after text;
@@ -50,23 +50,27 @@ begin
  if operation='warehouse_package_list' then
   return (select coalesce(jsonb_agg(to_jsonb(rows) order by rows.sent_at desc),'[]') from (
     select sp.id,sp.boat_id,sp.sent_at,sp.sent_photo,sp.items,sp.status,coalesce(
-      (select jsonb_agg(jsonb_build_object('photo',r.photo_id,'at',r.received_at,'items',r.items,'note',r.note) order by r.received_at) from boat_control.stockroom_package_receipts r where r.package_id=sp.id),'[]') receipts
+      (select jsonb_agg(jsonb_build_object('photo',r.photo_id,'signature',r.signature_id,'signedBy',(select name from boat_control.accounts where id=r.received_by),'at',r.received_at,'items',r.items,'note',r.note,'verified',r.verified) order by r.received_at) from boat_control.stockroom_package_receipts r where r.package_id=sp.id),'[]') receipts
     from boat_control.stockroom_packages sp where sp.boat_id=b
     order by (sp.status<>'received') desc,sp.sent_at desc limit 100) rows);
  end if;
  if operation='warehouse_package_photo' then
   attachment=(payload->>'photo')::uuid;
   return to_jsonb(exists(select 1 from boat_control.stockroom_packages p where p.boat_id=b and (p.sent_photo=attachment or exists(
-    select 1 from boat_control.stockroom_package_receipts r where r.package_id=p.id and r.photo_id=attachment))));
+    select 1 from boat_control.stockroom_package_receipts r where r.package_id=p.id and (r.photo_id=attachment or r.signature_id=attachment)))));
  end if;
- if operation not in ('warehouse_package_send','warehouse_package_receive') then raise exception 'Operación desconocida' using errcode='22023'; end if;
+ if operation not in ('warehouse_package_send','warehouse_package_receive','warehouse_package_issue') then raise exception 'Operación desconocida' using errcode='22023'; end if;
  if operation='warehouse_package_send' and actor.admin is distinct from true then raise exception 'Solo Administración despacha desde Tierra.' using errcode='42501'; end if;
  k=(payload->>'key')::uuid; attachment=(payload->>'photo')::uuid;
  if k is null or not exists(select 1 from boat_control.photos where id=attachment and boat_id=b) then
   raise exception 'Adjuntá una foto del paquete correspondiente a este barco.' using errcode='22023';
  end if;
- if jsonb_typeof(payload->'items') is distinct from 'array' then raise exception 'No se indicaron productos' using errcode='22023'; end if;
- if jsonb_array_length(payload->'items') not between 1 and 50 then raise exception 'Incluí entre 1 y 50 productos.' using errcode='22023'; end if;
+ if operation='warehouse_package_send' then
+  if jsonb_typeof(payload->'items') is distinct from 'array' then raise exception 'No se indicaron productos' using errcode='22023'; end if;
+  if jsonb_array_length(payload->'items') not between 1 and 50 then raise exception 'Incluí entre 1 y 50 productos.' using errcode='22023'; end if;
+ elsif payload ? 'items' then
+  raise exception 'Se firma el envío completo; no se vuelven a cargar sus cantidades.' using errcode='22023';
+ end if;
  request=(payload-'session')||jsonb_build_object('operation',operation);
  perform pg_advisory_xact_lock(hashtextextended(actor.id||k::text,0));
  select * into prior from boat_control.operation_receipts where user_id=actor.id and key=k;
@@ -108,29 +112,41 @@ begin
   if ship.sent_photo=attachment or exists(select 1 from boat_control.stockroom_package_receipts where package_id=ship_id and photo_id=attachment) then
    raise exception 'Adjuntá una foto nueva de lo recibido.' using errcode='22023';
   end if;
-  select * into strict vessel from boat_control.boats where id=b for update;
-  normalized=ship.items;
-  for line in select value from jsonb_array_elements(payload->'items') loop
-   row_id=line->>'lineId'; qty=(line->>'quantity')::numeric; loc=trim(line->>'location');
-   select x into old_line from jsonb_array_elements(ship.items) x where x->>'id'=row_id;
-   remaining=(old_line->>'sent')::numeric-(old_line->>'received')::numeric;
-   if old_line is null or row_id=any(seen) or qty is null or qty<=0 or qty>remaining or qty<>round(qty,4)
-      or coalesce(length(loc),0) not between 1 and 140 then raise exception 'Revisá cantidades pendientes y lugar de guardado.' using errcode='22023'; end if;
-   seen=array_append(seen,row_id);
-   select state into vessel.state from boat_control.boats where id=b;
-   target=boat_control.stockroom_match(vessel.state->'products',old_line,loc,nullif(line->>'targetProductId',''));
-   perform boat_control.stock_delta(b,coalesce(target,jsonb_build_object('name',old_line->>'name','unit',old_line->>'unit','area',old_line->>'area','location',loc)),
-    qty,actor.id,'Paquete recibido de Tierra · '||ship_id::text);
-   select jsonb_agg(case when x->>'id'=row_id then x||jsonb_build_object('received',(old_line->>'received')::numeric+qty) else x end order by n)
-    into normalized from jsonb_array_elements(normalized) with ordinality entries(x,n);
-   received_rows=received_rows||jsonb_build_array(jsonb_build_object('lineId',row_id,'name',old_line->>'name','unit',old_line->>'unit','quantity',qty,'location',loc));
-  end loop;
-  status_after=case when exists(select 1 from jsonb_array_elements(normalized) x where (x->>'received')::numeric<(x->>'sent')::numeric) then 'partial' else 'received' end;
-  note=coalesce(payload->>'note','');
-  if length(note)>300 then raise exception 'La observación supera 300 caracteres.' using errcode='22023'; end if;
-  insert into boat_control.stockroom_package_receipts(package_id,received_by,photo_id,items,note) values(ship_id,actor.id,attachment,received_rows,note);
-  update boat_control.stockroom_packages set items=normalized,status=status_after where id=ship_id;
-  perform boat_control.stockroom_package_notify(b,actor.id,'package_received',jsonb_build_object('packageId',ship_id,'boat',vessel.name,'status',status_after));
+  note=coalesce(trim(payload->>'note'),'');
+  if operation='warehouse_package_issue' then
+   if length(note) not between 3 and 300 then raise exception 'Indicá brevemente qué no coincide.' using errcode='22023'; end if;
+   status_after='review';
+  else
+   signature=(payload->>'signature')::uuid;
+   if payload->'verified' is distinct from 'true'::jsonb or signature is null or signature in (attachment,ship.sent_photo)
+     or not exists(select 1 from boat_control.photos where id=signature and boat_id=b)
+     or exists(select 1 from boat_control.stockroom_package_receipts where package_id=ship_id and signature_id=signature) then
+    raise exception 'Verificá las fotos y firmá la recepción completa.' using errcode='22023';
+   end if;
+   select * into strict vessel from boat_control.boats where id=b for update;
+   normalized='[]';
+   for old_line in select value from jsonb_array_elements(ship.items) loop
+    qty=(old_line->>'sent')::numeric;
+    select state into vessel.state from boat_control.boats where id=b;
+    select case when count(*)=1 then (jsonb_agg(x)->0) end into target
+     from jsonb_array_elements(vessel.state->'products') x
+     where lower(normalize(trim(x->>'name'),NFC))=lower(normalize(trim(old_line->>'name'),NFC))
+       and lower(normalize(trim(x->>'unit'),NFC))=lower(normalize(trim(old_line->>'unit'),NFC))
+       and coalesce(x->>'area','tecnica')=coalesce(old_line->>'area','tecnica');
+    loc=coalesce(nullif(target->>'location',''),'Recepción a bordo');
+    target=coalesce(target,boat_control.stockroom_match(vessel.state->'products',old_line,loc,null));
+    perform boat_control.stock_delta(b,coalesce(target,jsonb_build_object('name',old_line->>'name','unit',old_line->>'unit','area',old_line->>'area','location',loc)),
+     qty,actor.id,'Paquete recibido de Tierra · '||ship_id::text);
+    normalized=normalized||jsonb_build_array(old_line||jsonb_build_object('received',qty));
+    received_rows=received_rows||jsonb_build_array(jsonb_build_object('lineId',old_line->>'id','name',old_line->>'name','unit',old_line->>'unit','quantity',qty,'location',loc));
+   end loop;
+   status_after='received';
+  end if;
+  insert into boat_control.stockroom_package_receipts(package_id,received_by,photo_id,signature_id,items,note,verified)
+   values(ship_id,actor.id,attachment,signature,received_rows,note,status_after='received');
+  update boat_control.stockroom_packages set items=coalesce(nullif(normalized,'[]'::jsonb),ship.items),status=status_after where id=ship_id;
+  perform boat_control.stockroom_package_notify(b,actor.id,case when status_after='review' then 'package_issue' else 'package_received' end,
+   jsonb_build_object('packageId',ship_id,'boat',vessel.name,'status',status_after));
  end if;
  answer=jsonb_build_object('ok',true,'id',ship_id,'status',status_after);
  insert into boat_control.operation_receipts(user_id,key,request,result,created_at) values(actor.id,k,request,answer,now());
@@ -149,9 +165,9 @@ revoke all on function boat_control.backup_snapshot_before_packages(text) from p
 create function boat_control.backup_snapshot(b text) returns jsonb
 language sql stable set search_path='' as $$
  with existing as (select boat_control.backup_snapshot_before_packages(b) snapshot), package_receipts as (
-  select coalesce(jsonb_agg(jsonb_build_object('kind','warehouse_package_receive','id',r.id,'packageId',r.package_id,'items',r.items,'photo',r.photo_id)
+  select coalesce(jsonb_agg(jsonb_build_object('kind','warehouse_package_receive','id',r.id,'packageId',r.package_id,'items',r.items,'photo',r.photo_id,'signature',r.signature_id)
    order by r.received_at,r.id),'[]') additions
-  from boat_control.stockroom_package_receipts r join boat_control.stockroom_packages p on p.id=r.package_id where p.boat_id=b)
+  from boat_control.stockroom_package_receipts r join boat_control.stockroom_packages p on p.id=r.package_id where p.boat_id=b and r.verified)
  select jsonb_set(snapshot,'{transfers}',coalesce(snapshot->'transfers','[]')||additions) from existing,package_receipts
 $$;
 revoke all on function boat_control.backup_snapshot(text) from public,anon,authenticated;
