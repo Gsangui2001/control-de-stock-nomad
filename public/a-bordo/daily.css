@@ -133,6 +133,11 @@ boat-manual-media h2 { margin:0 0 12px; }
 .access-card form { display:grid; gap:14px; margin-top:24px; }
 .access-card label { margin:0; }
 .access-card input { font-size:16px; min-height:46px; }
+.access-password { display:grid; gap:6px; }
+.access-password-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+.access-password-row input { width:100%; min-width:0; margin:0; }
+.access-password-toggle { min-height:46px; padding:6px 10px; max-width:117px; line-height:1.2; background:#fff; border:1px solid #a7bdb5; color:#205d52; font-size:14px; font-weight:650; }
+.access-password-toggle:focus-visible { outline:2px solid #205d52; outline-offset:2px; }
 .access-card form .primary { min-height:48px; width:100%; }
 .access-card .form-error:empty { display:none; }
 @media(max-width:570px) {
