@@ -28,7 +28,7 @@ const schemas:Record<string,z.ZodTypeAny>={
   unitCost:z.preprocess(v=>v==null||v===''?undefined:v,z.coerce.number().finite().min(0).max(1e9).optional()),currency:z.enum(['USD','EUR','ARS','PAB','']).optional()}),
  warehouse_photo_read:z.object({scope:z.literal('depot'),text:z.string().trim().min(1).max(12000)}).strict(),
  warehouse_photo_count:z.object({scope:z.literal('depot'),key:id,mode:z.enum(['count','replenish']).optional(),confirmed:z.literal(true),revision:z.number().int().nonnegative(),items:z.array(z.object({name:text,unit:text.max(20),location:text,area:z.enum(['tecnica','gastronomia']),productId:z.string().max(140).optional(),quantity:finite.lt(1e9).refine(n=>Math.abs(n*10000-Math.round(n*10000))<0.00025)}).strict()).min(1).max(100)}).strict(),
- warehouse_package_send:z.object({...common,photo:id,revision:z.number().int().nonnegative(),items:z.array(z.object({productId:text,packs:z.number().int().positive().max(1e6),perPack:amount}).strict()).min(1).max(50)}).strict(),
+ warehouse_package_send:z.object({...common,photo:id,revision:z.number().int().nonnegative(),items:z.array(z.object({productId:text,packs:z.number().int().positive().max(1e6),perPack:amount,portionGrams:z.number().int().min(1).max(5000).optional()}).strict()).min(1).max(50)}).strict(),
  warehouse_package_receive:z.object({...common,id,photo:id,signature:id,verified:z.literal(true)}).strict(),
  warehouse_package_issue:z.object({...common,id,photo:id,note:z.string().trim().min(3).max(300)}).strict(),
  warehouse_transfer:z.object({...common,vessel:common.boat,productId:text,targetProductId:z.string().max(140).optional(),direction:z.enum(['toBoat','toDepot']),quantity:amount,location:text}),

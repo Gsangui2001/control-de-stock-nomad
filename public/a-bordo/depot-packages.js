@@ -41,11 +41,11 @@ class StockroomPackages extends HTMLElement {
     const options=this.depot.depotProducts.filter(p=>p.current>0).map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name+' · '+p.current+' '+p.unit+' · '+p.location)+'</option>').join("");
     return '<div data-line class="day-inventory"><label>Producto<select name="productId" required><option value="">Elegí un insumo de Tierra</option>'+options+'</select></label>'+
       '<label>Fundas, cajas o grupos<input type="number" name="packs" min="1" max="1000000" step="1" required value="1"></label>'+
-      '<label>Cantidad por funda (en la unidad del inventario)<input type="number" name="perPack" min="0.0001" step="0.0001" required></label><p data-pack-total></p></div>';
+      '<label>Cantidad por funda (en la unidad del inventario)<input type="number" name="perPack" min="0.0001" step="0.0001" required></label><div data-portion-options hidden><label>Gramos por porción (opcional)<input type="number" name="portionGrams" min="1" max="5000" step="1" disabled></label><p class="day-muted">Usalo si preparaste porciones de igual peso. Si el cálculo deja sobrante, ajustá los kilos y dejá el sobrante en Tierra.</p></div><p data-pack-total></p></div>';
   }
   shipCard(pkg){
     const statuses={in_transit:"En camino",review:"Diferencia por revisar",received:"Recibido y firmado"};
-    const lines=pkg.items.map(l=>'<li>'+esc(l.name)+': '+esc(l.packs+' × '+l.perPack+' = '+l.sent+' '+l.unit)+'</li>').join("");
+    const lines=pkg.items.map(l=>'<li>'+esc(l.name)+': '+esc(l.packs+' × '+l.perPack+' = '+l.sent+' '+l.unit)+(l.portionGrams?' · '+esc(l.portions+' porciones de '+l.portionGrams+' g'):'')+'</li>').join("");
     const receipts=pkg.receipts.map(r=>'<li><a target="_blank" rel="noopener" href="'+esc(this.url(r.photo))+'">Foto de recepción</a>'+
       (r.verified?' · Firmó '+esc(r.signedBy||"tripulación")+' · '+esc(date(r.at))+' · <a target="_blank" rel="noopener" href="'+esc(this.url(r.signature))+'">Ver firma</a>':' · Diferencia: '+esc(r.note))+'</li>').join("");
     return '<article class="day-inventory"><h3>'+esc(statuses[pkg.status]||pkg.status)+'</h3><p>'+esc(date(pkg.sent_at))+' · Tierra → '+esc(this.depot?.boats?.find(b=>b.id===this.boat)?.name || state.boat.name)+'</p><ul>'+lines+
@@ -88,9 +88,17 @@ class StockroomPackages extends HTMLElement {
       send.querySelector("[data-add-line]").onclick=()=>{if(this.sendRows<50){this.sendRows++;send.querySelector("[data-send-lines]").insertAdjacentHTML("beforeend",this.sendLine());}};
       send.oninput=e=>{const row=e.target.closest("[data-line]");if(!row)return;const selected=this.depot.depotProducts.find(p=>p.id===row.querySelector('[name=productId]').value);
         const n=Number(row.querySelector('[name=packs]').value)*Number(row.querySelector('[name=perPack]').value);
-        row.querySelector('[data-pack-total]').textContent=selected?'Total a despachar: '+Number(n.toFixed(4))+' '+selected.unit:'';};
+        const portion=row.querySelector('[name=portionGrams]');
+        const eligible=selected?.area==='gastronomia'&&String(selected.unit).trim().toLowerCase()==='kg';
+        row.querySelector('[data-portion-options]').hidden=!eligible;
+        portion.disabled=!eligible;if(!eligible)portion.value='';
+        const grams=Number(portion.value), total=grams>0?n*1000/grams:0;
+        const closed=grams===0||Number.isFinite(total)&&total>0&&Math.abs(total-Math.round(total))<1e-8;
+        portion.setCustomValidity(closed?'':'Ajustá los kilos para que salgan porciones enteras.');
+        row.querySelector('[data-pack-total]').textContent=selected?'Total a despachar: '+Number(n.toFixed(4))+' '+selected.unit+(grams>0?(closed?' · '+Math.round(total)+' porciones':' · El peso deja un sobrante'):''):'';};
       send.onsubmit=e=>{e.preventDefault();const items=[...send.querySelectorAll("[data-line]")].map(row=>({
-        productId:row.querySelector('[name=productId]').value,packs:Number(row.querySelector('[name=packs]').value),perPack:Number(row.querySelector('[name=perPack]').value)
+        productId:row.querySelector('[name=productId]').value,packs:Number(row.querySelector('[name=packs]').value),perPack:Number(row.querySelector('[name=perPack]').value),
+        ...(!row.querySelector('[name=portionGrams]').disabled&&row.querySelector('[name=portionGrams]').value?{portionGrams:Number(row.querySelector('[name=portionGrams]').value)}:{})
       }));void this.save("send",send,{items,revision:this.depot.depotRevision});};
     }
     for(const form of this.querySelectorAll("[data-package-receive]")){
