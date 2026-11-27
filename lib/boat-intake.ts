@@ -34,11 +34,32 @@ function listCells(line: string, separator: string): string[] | undefined {
  if (!quoted) return [...cells, cell.trim()];
 }
 
+// Never infer a pack size from the brand or from a price.
+function readPhotoPacks(line:string):{name:string;quantity:number|null;unit:string}|undefined {
+ const token='(packs?|fundas?|paquetes?|cajas?)';
+ const label='(?:unidad(?:es)?|uds?|latas?|botellas?)';
+ const prefix=new RegExp('^(\\d{1,6})\\s+'+token+'\\s+(?:de\\s+)?(.+)$','i');
+ const suffix=new RegExp('^(.+?)\\s+(\\d{1,6})\\s+'+token+'\\b(.*)$','i');
+ const size=new RegExp('\\s+(?:[x×]\\s*|de\\s+)(\\d{1,4})(?:\\s*('+label+'))?\\s*$','i');
+ const typed=new RegExp('\\s+(\\d{1,4})\\s+('+label+')\\s*$','i');
+ const a=line.match(prefix),b=a?null:line.match(suffix);
+ if(!a&&!b)return;
+ const n=Number(a?.[1]??b?.[2]);
+ const rest=a?.[3]??b?.[4]??'';
+ let amount=rest.match(size)??rest.match(typed);
+ if(!amount&&b)amount=(' '+rest.trim()).match(size);
+ if(!amount&&!/^packs?$|^fundas?$/i.test(a?.[2]??b?.[3]??''))return;
+ const name=(a?(amount?rest.slice(0,amount.index):rest):b?.[1]??'').trim();
+ if(!name||!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(name))return;
+ const each=Number(amount?.[1]??0);
+ return {name,quantity:n>0&&each>0&&n*each<1e9?n*each:null,unit:amount?.[2]??(each>0?'unidad':'')};
+}
+
 // Keep the source row intact when reading CSV fields containing a delimiter.
 export function readIntakeList(text:string,{simpleCount=false}:{simpleCount?:boolean}={}){
  const result:IntakeData={date:'',supplier:'',reference:'',currency:'',total:null,notes:'',items:[]};
  const number=(s:string)=>{const n=s.trim();if(/^\d+(?:[.,]\d{1,2})?$/.test(n))return Number(n.replace(',','.'));return null;};
- const unit='(kg|g|gr|L|ml|litros?|un|unidades?|uds?|cajas?|bolsas?|botellas?|paquetes?|latas?|rollos?)';
+ const unit='(kg|g|gr|L|ml|litros?|un|unidad(?:es)?|uds?|cajas?|bolsas?|botellas?|paquetes?|latas?|rollos?)';
  let tabular = true;
  let headerSeparator = '';
  const field = (s:string, limit:number, label:string, line:number) => {
@@ -68,7 +89,9 @@ export function readIntakeList(text:string,{simpleCount=false}:{simpleCount?:boo
   const cells=(formats.find(f=>number(f.cells[1])!==null)||formats[0])?.cells;
   if(result.items.length>=100)throw new IntakeListError('La lista supera los 100 productos. Dividila en dos cargas para conservar todas las filas.');
   let row:IntakeData['items'][number]={name:'',quantity:null,unit:'',location:'',area:'',unitCost:null,productId:''};
-  if(cells){
+  const packaging=simpleCount&&!cells&&!headerSeparator?readPhotoPacks(line):undefined;
+  if(packaging){row={...row,...packaging,name:field(packaging.name,140,'el producto',lineNo)};}
+  else if(cells){
    if(cells.length>5)throw new IntakeListError('Fila '+lineNo+': hay más de cinco columnas. Revisá los separadores antes de cargarla.');
    row={...row,name:field(cells[0],140,'el producto',lineNo),quantity:number(cells[1]),unit:field(cells[2],20,'la unidad',lineNo),location:field(cells[3]||'',140,'la ubicación',lineNo),unitCost:cells[4]?number(cells[4]):null};
   }

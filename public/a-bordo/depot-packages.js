@@ -1,4 +1,9 @@
 "use strict";
+const packageReceiptIsValid=(pending,receipt)=>{
+  const expected={send:"in_transit",receive:"received",issue:"review"}[pending?.op];
+  if(!expected || receipt?.ok!==true || receipt.status!==expected)return false;
+  return pending.op==="send" ? typeof receipt.id==="string" && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(receipt.id) : !!pending.payload.id && receipt.id===pending.payload.id;
+};
 class StockroomPackages extends HTMLElement {
   connectedCallback(){
     if(!session || (!session.admin&&!['capitan','chef','marinero','encargado'].includes(role)))return;
@@ -22,12 +27,13 @@ class StockroomPackages extends HTMLElement {
   async read(){
     if(!this.alive())return;
     this.innerHTML='<h2>Paquetes de Tierra</h2><p role="status">Buscando paquetes…</p>';
-    try {
-      const [packages,pending]=await Promise.all([this.fetch("list"),draftRead(this.key)]);
-      if(this.alive()){this.packages=packages;this.pending=pending;this.draw();}
-    } catch(e){
-      if(this.alive())this.innerHTML='<h2>Paquetes de Tierra</h2><p role="alert">'+esc(e.message)+'</p>';
-    }
+    const [packages,pending]=await Promise.allSettled([this.fetch("list"),draftRead(this.key)]);
+    if(!this.alive())return;
+    this.pending=pending.status==="fulfilled"?pending.value:null;
+    this.draftUnavailable=pending.status!=="fulfilled";
+    this.listUnavailable=packages.status!=="fulfilled"||!Array.isArray(packages.value);
+    this.packages=this.listUnavailable?[]:packages.value;
+    this.draw();
   }
   url(id){return "/api/boat/photos?boat="+encodeURIComponent(this.boat)+"&id="+encodeURIComponent(id);}
   photoLabel(label){return '<label>'+label+'<input type="file" name="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required></label>';}
@@ -44,7 +50,7 @@ class StockroomPackages extends HTMLElement {
       (r.verified?' · Firmó '+esc(r.signedBy||"tripulación")+' · '+esc(date(r.at))+' · <a target="_blank" rel="noopener" href="'+esc(this.url(r.signature))+'">Ver firma</a>':' · Diferencia: '+esc(r.note))+'</li>').join("");
     return '<article class="day-inventory"><h3>'+esc(statuses[pkg.status]||pkg.status)+'</h3><p>'+esc(date(pkg.sent_at))+' · Tierra → '+esc(this.depot?.boats?.find(b=>b.id===this.boat)?.name || state.boat.name)+'</p><ul>'+lines+
       '</ul><figure><a target="_blank" rel="noopener" href="'+esc(this.url(pkg.sent_photo))+'"><img loading="lazy" class="day-reference" style="max-height:200px;object-fit:contain" alt="Foto del despacho" src="'+esc(this.url(pkg.sent_photo))+'"></a><figcaption>Foto de salida de Tierra</figcaption></figure>'+(receipts?'<ul>'+receipts+'</ul>':'')+
-      (!this.pending&&pkg.status!=="received"?'<details class="day-disclosure"><summary>Recibir paquete</summary><p>Compará la foto y el listado de salida con el paquete que llegó. No hay que cargar los productos otra vez.</p>'+
+      (!this.pending&&!this.draftUnavailable&&pkg.status!=="received"?'<details class="day-disclosure"><summary>Recibir paquete</summary><p>Compará la foto y el listado de salida con el paquete que llegó. No hay que cargar los productos otra vez.</p>'+
        '<form data-package-receive="'+esc(pkg.id)+'">'+this.photoLabel('Sacar o elegir foto del paquete recibido')+
        '<figure data-arrival-preview hidden><img class="day-reference" style="max-height:200px;object-fit:contain" alt="Vista de la foto de llegada"><figcaption>Foto de llegada</figcaption></figure>'+
        '<label class="check"><input type="checkbox" name="verified" required>Verifiqué las fotos y el paquete coincide con el envío completo.</label>'+
@@ -68,14 +74,15 @@ class StockroomPackages extends HTMLElement {
     return canvas;
   }
   draw(){
-    const maySend=this.admin&&this.depot?.depotProducts?.some(p=>p.current>0);
+    const maySend=!this.listUnavailable&&!this.draftUnavailable&&this.admin&&this.depot?.depotProducts?.some(p=>p.current>0);
     this.innerHTML='<section><h2>Paquetes de Tierra</h2><p role="alert" data-feedback>'+esc(this.message||"")+'</p>'+
       (this.pending?'<p>Hay un guardado pendiente. Verificalo antes de registrar otro paquete.</p><button data-verify-package type="button" class="day-primary">Verificar guardado pendiente</button>':
-      maySend?'<details class="day-disclosure"><summary>Preparar paquete desde Tierra</summary><p>El stock de Tierra baja cuando confirmás el despacho. El barco suma la cantidad recién cuando confirma la recepción.</p>'+
+      this.draftUnavailable?'<p>No se pudo comprobar el guardado anterior. Actualizá antes de seguir.</p>':maySend?'<details class="day-disclosure"><summary>Preparar paquete desde Tierra</summary><p>El stock de Tierra baja cuando confirmás el despacho. El barco suma la cantidad recién cuando confirma la recepción.</p>'+
       '<form data-package-send><div data-send-lines>'+this.sendLine()+'</div><button type="button" class="day-secondary" data-add-line>Agregar producto</button>'+
       this.photoLabel('Foto del paquete antes de despachar')+'<button class="day-primary" type="submit">Confirmar despacho</button></form></details>':
-      this.depot?'<p>No hay existencias en Tierra para despachar.</p>':'')+
-      (this.packages.length?this.packages.map(p=>this.shipCard(p)).join(""):'<p>No hay paquetes de Tierra para este barco.</p>')+'</section>';
+      this.depot&&!this.listUnavailable?'<p>No hay existencias en Tierra para despachar.</p>':'')+
+      (this.listUnavailable?'<p>No se pudo consultar la lista de paquetes.</p>':this.packages.length?this.packages.map(p=>this.shipCard(p)).join(""):'<p>No hay paquetes de Tierra para este barco.</p>')+
+      (this.draftUnavailable||this.listUnavailable?'<button type="button" class="day-secondary" data-reload-packages>Actualizar paquetes</button>':'')+'</section>';
     const send=this.querySelector("[data-package-send]");
     if(send){
       send.querySelector("[data-add-line]").onclick=()=>{if(this.sendRows<50){this.sendRows++;send.querySelector("[data-send-lines]").insertAdjacentHTML("beforeend",this.sendLine());}};
@@ -101,14 +108,16 @@ class StockroomPackages extends HTMLElement {
       };
       form.querySelector("[data-package-issue]").onclick=()=>this.save("issue",form,{id:form.dataset.packageReceive,note:form.elements.note.value.trim()});
     }
+    const reload=this.querySelector("[data-reload-packages]");if(reload)reload.onclick=()=>this.read();
     const verify=this.querySelector("[data-verify-package]");if(verify)verify.onclick=()=>this.save();
   }
   disconnectedCallback(){for(const src of this.previewURLs||[])URL.revokeObjectURL(src);}
   async save(op,form,data,signatureData){
-    if(!this.alive()||this.busy)return;
+    if(!this.alive()||this.busy||this.draftUnavailable)return;
     const button=form?.querySelector('[type=submit]')||this.querySelector("[data-verify-package]");
     this.busy=true;if(button)button.disabled=true;
     const feedback=this.querySelector("[data-feedback]");feedback.textContent="";
+    const verification=!!this.pending;
     try {
       let pending=this.pending;
       if(!pending){
@@ -117,16 +126,22 @@ class StockroomPackages extends HTMLElement {
         if(op==="issue"&&data.note.length<3)throw Error("Indicá brevemente qué no coincide.");
         const file=form.elements.photo.files[0];
         if(!file)throw Error("Adjuntá la foto del paquete.");
+        const upload=async image=>{
+          try {
+            const saved=await api('photos','POST',{boat:this.boat,data:image});
+            const id=new URL(saved.url,location.origin).searchParams.get('id');
+            if(!id||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id))throw Error("Foto sin comprobante.");
+            return id;
+          }catch{throw Error("No se confirmó la foto o la firma. Todavía no se registró movimiento de stock. Intentá de nuevo.");}
+        };
         const image=await photo(file);
         if(!this.alive())return;
-        const saved=await api('photos','POST',{boat:this.boat,data:image});
+        const photoId=await upload(image);
         if(!this.alive())return;
-        const photoId=new URL(saved.url,location.origin).searchParams.get('id');
         let signature;
         if(op==="receive"){
-          const signed=await api('photos','POST',{boat:this.boat,data:signatureData});
+          signature=await upload(signatureData);
           if(!this.alive())return;
-          signature=new URL(signed.url,location.origin).searchParams.get('id');
         }
         pending={op,payload:{boat:this.boat,key:uid(),photo:photoId,...data,...(signature?{signature}:{})}};
         const claimed=await editStoredDraft(this.key,old=>old||pending);
@@ -134,7 +149,8 @@ class StockroomPackages extends HTMLElement {
         if(claimed.payload.key!==pending.payload.key){this.message="Verificá primero el guardado anterior.";this.draw();return;}
       }
       if(!this.alive())return;
-      await this.fetch(pending.op,pending.payload);
+      const receipt=await this.fetch(pending.op,pending.payload);
+      if(!packageReceiptIsValid(pending,receipt))throw Error("No se pudo confirmar el guardado. Verificalo antes de registrar otro paquete.");
       await editStoredDraft(this.key,old=>old?.payload.key===pending.payload.key?null:old);
       this.pending=null;
       if(!this.alive())return;
@@ -142,7 +158,7 @@ class StockroomPackages extends HTMLElement {
       if(this.parent)await this.parent.read();else await opsAfterSave();
     }catch(err){
       this.message=err.message;
-      if(this.pending&&[400,409,403].includes(err.status)){
+      if(this.pending&&!verification&&[400,409,403].includes(err.status)){
         const key=this.pending.payload.key;
         try{await editStoredDraft(this.key,old=>old?.payload.key===key?null:old);this.pending=null;}catch{}
         if(err.status===409&&this.alive()){

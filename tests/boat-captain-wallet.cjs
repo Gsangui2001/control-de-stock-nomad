@@ -13,7 +13,7 @@ function app(role,admin=false){
  vm.createContext(ctx);vm.runInContext(code,ctx);return {ctx,pending};
 }
 const wallet={captainId:'a',name:'Capitán Uno',balances:[{currency:'EUR',opening:20,incoming:0,spent:4,balance:16},{currency:'USD',opening:null,incoming:99,spent:0,balance:null}],receipts:[],expenses:[]};
-const due={id:'yes',name:'Huésped A',brief:{version:1},details:{captainCollection:'collect'},captainBalance:{status:'known',amountUsd:275,reportedCount:0}};
+const due={id:'yes',name:'Huésped A',start:'2020-11-24',brief:{version:1},details:{captainCollection:'collect'},captainBalance:{status:'known',amountUsd:275,reportedCount:0}};
 test('captain sees own cash, unknown opening and only authorized guest cards; admin can enter a count',async()=>{
  const a=app('capitan');
  a.ctx.opsReservations=[due,...[{cashAssigned:false},{cashLegacyReview:true},{captainPayment:{status:'cleared'}},{brief:{version:1,sourceChanged:true}},{details:{captainCollection:'pending'}}].map((row,i)=>({...due,...row,id:'blocked'+i}))];
@@ -67,4 +67,33 @@ test('refresh distinguishes failed and empty guest lists and rejects a delayed r
  oldBookings.resolve([due]);oldWallet.resolve({wallets:[wallet]});await stale;
  assert.equal(ctx.opsReservations.length,0);assert.match(ctx.captainCashView(),/Cargando/);
  pending.shift().resolve({wallets:[]});await new Promise(r=>setImmediate(r));
+});
+
+test('por cobrar sale primero desde la fecha local y no se agrega al efectivo',async()=>{
+ const a=app('capitan');
+ assert.equal(a.ctx.captainPanamaDay(new Date('2026-11-26T04:59:59Z')),'2026-11-25');
+ assert.equal(a.ctx.captainPanamaDay(new Date('2026-11-26T05:00:00Z')),'2026-11-26');
+ assert.deepEqual(Array.from(a.ctx.captainPendingCollections([due,{...due,id:'future',start:'2026-11-27'},{...due,id:'cancelled',status:'cancelled'}],'2026-11-26'),r=>r.id),['yes']);
+ a.ctx.opsReservations=[due];a.ctx.captainCashView();a.pending[0].resolve({wallets:[wallet]});
+ await new Promise(r=>setImmediate(r));const view=a.ctx.captainCashView();
+ assert.ok(view.indexOf('Por cobrar USD 275,00') < view.indexOf('Efectivo disponible'));
+ assert.match(view,/No es efectivo en caja/);assert.match(view,/Cobrado USD 99,00/);
+});
+
+test('personal cash labels separate company and physical balances without locking legacy UI',async()=>{
+ const a=app('capitan');a.ctx.captainCashView();
+ const en={...wallet,balances:[{currency:'USD',opening:50,incoming:1500,spent:45,handed_over:5,balance:1500}],
+  personal:[{currency:'USD',contributed:55,withdrawn:10,spent:40,reimbursed:15}],
+  personalEntries:[{kind:'personal_spend',currency:'USD',amount:40,concept:'Repuesto <costoso>',at:'2026-11-25'}]};
+ a.pending[0].resolve({wallets:[en],personalCashVersion:1});await new Promise(r=>setImmediate(r));
+ const view=a.ctx.captainCashView();
+ assert.match(view,/Saldo de Nomad en caja · USD<\/h3><strong>USD 1\.500,00/);
+ assert.match(view,/Efectivo físico: USD 1\.545,00/);
+ assert.match(view,/Gastos de bolsillo por recuperar: USD 25,00/);
+ assert.match(view,/Ingreso capitán/);assert.match(view,/Extracción capitán/);
+ assert.match(view,/Ingreso cliente/);assert.match(view,/Extracción Gustavo\/Boris/);
+ assert.match(view,/Repuesto &lt;costoso>/);
+ assert.match(view,/data-operation="captain_personal_movement"/);
+ const admin=app('administrador',true);admin.ctx.captainCashView();admin.pending[0].resolve({wallets:[en],personalCashVersion:1});await new Promise(r=>setImmediate(r));
+ assert.doesNotMatch(admin.ctx.captainCashView(),/data-operation="captain_personal_movement"/);
 });

@@ -48,14 +48,67 @@ async function loadCaptainCash(refreshBookings = false) {
 const captainMoney = (amount, currency) => esc(currency) + " " + Number(amount).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const captainCurrency = () => '<label>Moneda<select name="currency"><option>USD</option><option>EUR</option><option>ARS</option><option>PAB</option></select></label>';
 
+function captainPanamaDay(today = new Date()) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone:"America/Panama", year:"numeric", month:"2-digit", day:"2-digit" }).formatToParts(today);
+  const part = type => parts.find(p => p.type === type).value;
+  return [part("year"),part("month"),part("day")].join("-");
+}
+function captainPendingCollections(rows, today = captainPanamaDay()) {
+  return rows.filter(r => {
+    const start = /^\d{4}-\d{2}-\d{2}/.exec(String(r.start ?? ""))?.[0];
+    const amount = r.captainBalance?.amountUsd;
+    return start && start <= today && (!r.status || ["confirmed","in_progress"].includes(r.status)) &&
+      r.cashAssigned !== false && !r.cashLegacyReview && !r.captainPayment &&
+      r.brief?.version > 0 && !r.brief.sourceChanged && r.details?.captainCollection === "collect" &&
+      r.captainBalance?.status === "known" && !r.captainBalance.reportedCount &&
+      typeof amount === "number" && Number.isFinite(amount) && amount > 0;
+  }).sort((a,b) => String(a.start).localeCompare(String(b.start)));
+}
+function captainPendingCollectionCards() {
+  const heading = '<h2>Por cobrar a huéspedes</h2>';
+  if (captainCashBookingsStatus === "loading") return heading + '<p role="status">Actualizando cobros pendientes…</p>';
+  if (captainCashBookingsStatus === "error" || (captainCashBookingsStatus === "initial" && typeof opsError === "string" && opsError)) return heading + '<p role="alert">No se pudieron verificar los cobros pendientes. Volvé a actualizar la caja.</p>';
+  const due = captainPendingCollections(opsReservations);
+  return heading + (due.length ? '<p class="day-muted">No es efectivo en caja. Confirmá «Sí cobré» en la ficha solo después de recibirlo.</p>' : '') +
+    (due.map(r => '<article class="day-inventory"><h3>Por cobrar ' + captainMoney(r.captainBalance.amountUsd,"USD") +
+      '</h3><p>' + esc(r.name || "Huésped") + ' · ' + esc(date(r.start)) +
+      '</p><button type="button" class="day-primary" data-agenda-open="' + esc(r.id) + '">Abrir ficha del huésped</button></article>').join("") ||
+      empty("No tenés cobros autorizados pendientes."));
+}
+
+const captainPersonalKinds = {
+  personal_contribution:"Aporté efectivo propio",
+  personal_withdrawal:"Retiré efectivo propio aportado",
+  personal_spend:"Pagué un gasto de mi bolsillo",
+  personal_reimburse:"Recuperé un gasto de mi bolsillo desde caja Nomad"
+};
+function captainPersonalMetrics(b, personal) {
+  const inHand = Number(personal.contributed) - Number(personal.withdrawn);
+  const owed = Number(personal.spent) - Number(personal.reimbursed);
+  const metric = (label,value) => '<div><dt>' + label + '</dt><dd><strong>' + value + '</strong></dd></div>';
+  const format = value => captainMoney(value,b.currency);
+  const physical = b.balance == null ? "Pendiente de conciliación" : format(Number(b.balance)+inHand);
+  return '<p><strong>Efectivo físico: ' + physical + '</strong></p><p>Plata propia en caja: ' + format(inHand) +
+    '<br>Gastos de bolsillo por recuperar: ' + format(owed) + '</p>' +
+    '<dl class="guest-facts" aria-label="Totales por tipo de movimiento">' +
+    metric("Ingreso capitán",format(personal.contributed)) +
+    metric("Extracción capitán",format(Number(personal.withdrawn)+Number(personal.reimbursed))) +
+    metric("Ingreso cliente",format(b.incoming)) + metric("Extracción Gustavo/Boris",format(b.handed_over ?? 0)) +
+    '</dl><p class="day-muted">Los movimientos de Nomad y cobros se muestran desde el conteo inicial, cuando existe. Los gastos pagados directamente con caja Nomad quedan en su historial.</p>';
+}
+
 function captainWallet(wallet) {
   const handovers = wallet.handovers || [];
+  const personalEntries = wallet.personalEntries || [];
+  const personalDetails = personalEntries.map(e => '<p><strong>' + captainMoney(e.amount,e.currency) + '</strong> · ' +
+    esc(captainPersonalKinds[e.kind] || "Movimiento propio") + ' · ' + esc(e.concept) + ' · ' + esc(briefTime(e.at)) + '</p>').join("");
   const amounts = wallet.balances.map(b => {
     const balance = b.balance != null ? captainMoney(b.balance, b.currency) : b.opening == null ? "Conteo inicial pendiente" : "Saldo por conciliar en el CRM";
     const description = b.opening == null ? "Movimientos registrados" : "Desde el conteo de " + captainMoney(b.opening, b.currency);
-    return '<article class="day-inventory"><h3>Efectivo disponible · ' + esc(b.currency) + '</h3><strong>' + balance + '</strong><p>' + description +
-      ' · Cobrado ' + captainMoney(b.incoming, b.currency) + ' · Gastado ' + captainMoney(b.spent, b.currency) +
-      ' · Entregado ' + captainMoney(b.handed_over ?? 0, b.currency) + '</p></article>';
+    const personal = wallet.personal?.find(v => v.currency === b.currency);
+    return '<article class="day-inventory"><h3>' + (personal ? 'Saldo de Nomad en caja · ' : 'Efectivo disponible · ') + esc(b.currency) + '</h3><strong>' + balance + '</strong><p>' + description +
+      ' · Cobrado ' + captainMoney(b.incoming, b.currency) + ' · ' + (personal ? 'Gastos y reintegros ' : 'Gastado ') + captainMoney(b.spent, b.currency) +
+      ' · Entregado ' + captainMoney(b.handed_over ?? 0, b.currency) + '</p>' + (personal ? captainPersonalMetrics(b,personal) : '') + '</article>';
   }).join("");
   const receipts = wallet.receipts.map(r => '<p><strong>' + captainMoney(r.amount, r.currency) + '</strong> · ' + esc(r.guest) +
     ' · ' + esc(briefTime(r.at)) + (r.reviewing ? ' · En revisión en el CRM' : ' · Registrado en el CRM') + '</p>').join("");
@@ -65,8 +118,8 @@ function captainWallet(wallet) {
     ' · ' + esc(briefTime(h.at)) + ' · Recibió ' + esc(h.receivedBy) + '</p>').join("");
   return (session.admin ? '<h2>' + esc(wallet.name) + '</h2>' : '<h2>Mi efectivo</h2>') + amounts +
     '<details class="day-disclosure"><summary>Cobros recibidos (' + wallet.receipts.length + ')</summary>' +
-    (receipts || empty("Sin cobros registrados.")) + '</details><details class="day-disclosure"><summary>Gastos propios (' + wallet.expenses.length +
-    ')</summary>' + (expenses || empty("Sin gastos registrados.")) + '</details><details class="day-disclosure"><summary>Entregas (' + handovers.length +
+    (receipts || empty("Sin cobros registrados.")) + '</details><details class="day-disclosure"><summary>Gastos pagados con caja Nomad (' + wallet.expenses.length +
+    ')</summary>' + (expenses || empty("Sin gastos registrados.")) + '</details>' + (wallet.personal ? '<details class="day-disclosure"><summary>Movimientos de plata propia (' + personalEntries.length + ')</summary>' + (personalDetails || empty("Sin movimientos de plata propia.")) + '</details>' : '') + '<details class="day-disclosure"><summary>Entregas (' + handovers.length +
     ')</summary>' + (delivered || empty("Sin entregas registradas.")) + '</details>';
 }
 
@@ -80,7 +133,7 @@ function captainCashView() {
   if (captainCashError) return '<h1>' + heading + '</h1><p role="alert">' + esc(captainCashError) + '</p>' + refresh;
   if (!captainCashData) return '<h1>' + heading + '</h1><p role="status">Cargando caja…</p>';
   const wallets = captainCashData.wallets || [];
-  let content = '<h1>' + heading + '</h1>' + (wallets.map(captainWallet).join("") || empty("Todavía no hay un capitán asignado al barco."));
+  let content = '<h1>' + heading + '</h1>' + (session.admin ? '' : captainPendingCollectionCards()) + (wallets.map(captainWallet).join("") || empty("Todavía no hay un capitán asignado al barco."));
   if (session.admin && wallets.length) {
     const choices = wallets.map(w => '<option value="' + esc(w.captainId) + '">' + esc(w.name) + '</option>').join("");
     content += '<details class="day-disclosure"><summary>Registrar conteo inicial</summary><p>Contá el efectivo que tiene el capitán en esa moneda. Podés registrar cero.</p>' +
@@ -93,19 +146,19 @@ function captainCashView() {
         opsField("Importe entregado","amount","number","","required min=\"0.01\" step=\"0.01\"") +
         opsField("Nota (opcional)","note","text","","maxlength=\"140\"")) + '</details>';
   } else if (!session.admin) {
-    content += '<details class="day-disclosure"><summary>Registrar un gasto propio</summary>' +
-      opsForm("captain_expense", opsField("Qué pagaste con efectivo de tu caja (ej.: cerveza, carne, pescado)","concept","text","","required maxlength=\"140\"") +
+    content += '<details class="day-disclosure"><summary>Registrar un gasto de caja Nomad</summary>' +
+      opsForm("captain_expense", opsField("Qué pagaste con efectivo de Nomad (ej.: cerveza, carne, pescado)","concept","text","","required maxlength=\"140\"") +
         captainCurrency() + opsField("Importe pagado","amount","number","","required min=\"0.01\" step=\"0.01\"")) + '</details>';
-    const due = opsReservations.filter(r => r.cashAssigned !== false && !r.cashLegacyReview && !r.captainPayment &&
-      r.brief?.version > 0 && !r.brief.sourceChanged && r.details?.captainCollection === "collect" &&
-      r.captainBalance?.status === "known" && !r.captainBalance.reportedCount && r.captainBalance.amountUsd > 0);
-    content += '<h2>Cobros pendientes</h2>';
-    if (captainCashBookingsStatus === "loading") content += '<p role="status">Actualizando cobros pendientes…</p>';
-    else if (captainCashBookingsStatus === "error" || (captainCashBookingsStatus === "initial" && typeof opsError === "string" && opsError)) content += '<p role="alert">No se pudieron verificar los cobros pendientes. Volvé a actualizar la caja.</p>';
-    else content += (due.map(r => '<article class="day-inventory"><h3>' + esc(r.name || "Huésped") + '</h3><p>' +
-      esc(date(r.start)) + ' · ' + captainMoney(r.captainBalance.amountUsd,"USD") +
-      '</p><button type="button" class="day-secondary" data-agenda-open="' + esc(r.id) + '">Abrir ficha del huésped</button></article>').join("") ||
-      empty("No tenés cobros autorizados pendientes."));
+    if (captainCashData.personalCashVersion === 1) {
+      const kinds = Object.entries(captainPersonalKinds).map(([key,label])=>'<option value="' + key + '">' + label + '</option>').join("");
+      content += '<details class="day-disclosure"><summary>Registrar un movimiento de plata propia</summary>' +
+      '<p>Si pagaste directamente con tu plata, no cambies el efectivo de Nomad. Si pusiste efectivo en caja, usá «Aporté efectivo propio».</p>' +
+      opsForm("captain_personal_movement", '<label>Tipo de movimiento<select name="kind" required><option value="">Elegí</option>' + kinds + '</select></label>' +
+        captainCurrency() + opsField("Importe","amount","number","","required min=\"0.01\" step=\"0.01\"") +
+        opsField("Detalle","concept","text","","required maxlength=\"140\"")) + '</details>';
+    }
+
+
   }
   return content + refresh;
 }

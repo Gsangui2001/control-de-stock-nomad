@@ -86,3 +86,9 @@ test('isolated Postgres: reject crew, duplicate and stale counts; preserve stock
   assert.deepEqual(result.movements.map(m=>[m.batchId,m.delta]),[[batch.key,-2],[batch.key,0]]);
  }finally{await db.close();}
 });
+
+test('photo pack parsing converts explicit 12/24, preserves the full variant, and blocks missing size',()=>{
+ const rows=parser.readIntakeList('3 packs de Coca-Cola Zero x24\nPepsi original 2 packs x 12\n2 cajas de Fresca de 12 latas\n7 packs de Seven-Up\nSolenoide 12 V: 1 unidad\n2 cajas de Filtro',{simpleCount:true}).data.items;
+ assert.deepEqual(JSON.parse(JSON.stringify(rows.map(x=>[x.name,x.quantity,x.unit]))),
+  [['Coca-Cola Zero',72,'unidad'],['Pepsi original',24,'unidad'],['Fresca',24,'latas'],['Seven-Up',null,''],['Solenoide 12 V',1,'unidad'],['Filtro',2,'cajas']]);
+});

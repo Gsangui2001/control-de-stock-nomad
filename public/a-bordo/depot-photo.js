@@ -9,8 +9,9 @@ const depotUnitKey = value => {
 
 function depotPhotoItems(read, products, group, defaultUnits, selections = []) {
   return read.map((row, index) => {
+    const countUnits=["unidad","lata","botella"];
     const matches = products.filter(p => depotNameKey(p.name)===depotNameKey(row.name)
-      && (!row.unit || depotUnitKey(row.unit)===depotUnitKey(p.unit))
+      && (!row.unit || depotUnitKey(row.unit)===depotUnitKey(p.unit) || (depotUnitKey(row.unit)==="unidad"&&countUnits.includes(depotUnitKey(p.unit))))
       && (!row.location || depotNameKey(row.location)===depotNameKey(p.location)));
     const picked = matches.find(p=>p.id===selections[index]) || (matches.length===1?matches[0]:null);
     const name = picked?.name || row.name;
@@ -34,7 +35,7 @@ class DepotPhotoCount extends HTMLElement {
     this.products=this.closest("boat-admin-stock").data.products;
     this.pendingKey="depot-photo-pending:"+owner;
     this.selections=[];
-    this.mode="count";
+    this.mode="replenish";
     this.draw();
     draftRead(this.pendingKey).then(pending=>{
       if(this.active() && pending){this.pending=pending; this.draw();}
@@ -51,7 +52,7 @@ class DepotPhotoCount extends HTMLElement {
 
   draw(){
     const rows=depotPhotoItems(this.rows||[],this.products,this.group,this.defaultUnits,this.selections).map(r=>this.mode==="replenish"&&r.quantity===0?{...r,reason:"La mercadería ingresada debe ser mayor a cero"}:r);
-    this.innerHTML='<section><h2>Conteo por foto · Stock Tierra</h2><p>Sacá una foto de la lista de productos y cantidades. Se lee sola. El stock cambia solo cuando confirmás.</p>'+
+    this.innerHTML='<section><h2>Cargar stock con una foto</h2><p>Sacá una foto del ticket o de una lista legible. Si la presentación es clara, las fundas se convierten a unidades. Revisá antes de confirmar.</p>'+
       (this.pending?'':'<label>Qué estás cargando<select data-mode><option value="count">Conteo real · reemplaza lo contado</option><option value="replenish">Ingreso de mercadería · suma lo que llegó</option></select></label>')+
       (this.pending?'': '<div class="area-actions"><button type="button" class="day-primary" data-acquire="camera">Sacar foto</button><button type="button" class="day-secondary" data-acquire="gallery">Elegir foto</button></div>'+
       '<input type="file" accept="image/*" capture="environment" data-source="camera" hidden><input type="file" accept="image/*" data-source="gallery" hidden>')+

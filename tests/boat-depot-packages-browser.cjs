@@ -36,12 +36,12 @@ test('mobile dispatch and whole package signature records separate photos withou
     const body=route.request().postDataJSON();events.push(body);
     pkg={id,boat_id:'nomade',sent_at:'2026-11-26T12:00:00Z',sent_photo:sendPhoto,status:'in_transit',
      items:[{id:lineId,name:'Cerveza',unit:'unidad',area:'gastronomia',packs:2,perPack:24,sent:48,received:0}],receipts:[]};
-    return route.fulfill({json:{ok:true}});
+    return route.fulfill({json:{ok:true,id,status:pkg.status}});
    }
    if(p.endsWith('/warehouse_package_receive')){
     const body=route.request().postDataJSON();events.push(body);pkg.status='received';pkg.items[0].received=48;
     pkg.receipts=[{photo:recPhoto,signature:sign,verified:true,signedBy:'Chef QA',at:'2026-11-26T12:10:00Z'}];
-    return route.fulfill({json:{ok:true}});
+    return route.fulfill({json:{ok:true,id,status:pkg.status}});
    }
    return route.abort();
   });

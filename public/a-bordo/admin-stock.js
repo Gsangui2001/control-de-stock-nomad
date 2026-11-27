@@ -7,7 +7,7 @@ class BoatAdminStock extends HTMLElement {
   connectedCallback() {
     if (!session?.admin) return;
     this.owner = session.id + ":" + boatId;
-    if (adminStockSelection?.owner !== this.owner) adminStockSelection = {owner:this.owner,scope:boatId};
+    if (adminStockSelection?.owner !== this.owner) adminStockSelection = {owner:this.owner,scope:'depot'};
     this.read();
   }
 
@@ -18,7 +18,7 @@ class BoatAdminStock extends HTMLElement {
     const request = new AbortController();
     this.request = request;
     const scope = adminStockSelection.scope;
-    this.innerHTML = '<h1>Stock de barcos y depósito</h1><p role="status">Consultando el inventario…</p>';
+    this.innerHTML = '<h1>Stock general</h1><p role="status">Consultando el inventario…</p>';
     try {
       const url = "/api/boat-ops/warehouse_dashboard?" + new URLSearchParams({boat:boatId, scope});
       const response = await fetch(url, {cache:"no-store",signal:request.signal});
@@ -29,7 +29,7 @@ class BoatAdminStock extends HTMLElement {
       this.draw();
     } catch (error) {
       if (request.signal.aborted) return;
-      this.innerHTML = '<h1>Stock de barcos y depósito</h1><p role="alert">'+esc(error.message)+'</p><button type="button" class="day-secondary">Volver a intentar</button>';
+      this.innerHTML = '<h1>Stock general</h1><p role="alert">'+esc(error.message)+'</p><button type="button" class="day-secondary">Volver a intentar</button>';
       this.querySelector("button").onclick = () => this.read();
     }
   }
@@ -42,7 +42,7 @@ class BoatAdminStock extends HTMLElement {
 
   itemList(area) {
     const rows = this.data.products.filter(p => (p.area || "tecnica") === area);
-    const title = area === "gastronomia" ? "Mercadería · bebidas y comestibles" : "Herramientas, materiales y repuestos";
+    const title = area === "gastronomia" ? "Insumos · bebidas y comestibles" : "Repuestos y materiales";
     return '<section><h2>'+title+'</h2>' + (rows.length ? rows.map(p=>
       '<article class="day-inventory" data-admin-product="'+esc(dayNormalize([p.name,p.location,p.code].join(" ")))+'"><div class="day-card-heading"><h3>'+esc(p.name)+'</h3><strong>'+
       (typeof p.current === "number" ? esc(p.current)+" "+esc(p.unit) : "Conteo pendiente")+'</strong></div><p>'+esc(p.location || "Ubicación pendiente")+'</p></article>'
@@ -114,11 +114,11 @@ class BoatAdminStock extends HTMLElement {
   draw() {
     const d=this.data, isDepot=d.scope==="depot";
     const choices=d.boats.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>').join("");
-    this.innerHTML='<h1>Stock de barcos y depósito</h1><label>Inventario<select data-stock-scope>'+choices+
-      '<option value="depot">'+esc(d.depot || "Depósito")+'</option></select></label>'+
+    this.innerHTML='<h1>Stock general</h1><label>Ubicación<select data-stock-scope><option value="depot">Tierra</option>'+choices+
+      '</select></label>'+
         '<div class="area-actions">'+(isDepot ? "" : '<button type="button" class="day-secondary" data-boat-stock>Abrir stock de este barco</button>')+'</div>'+
         (isDepot?'<depot-photo-count data-revision="'+esc(d.depotRevision)+'"></depot-photo-count>':'')+(!isDepot && d.depot ? '<stockroom-packages data-admin-depot></stockroom-packages>'+this.transfer("toDepot") : '')+
-        (isDepot && d.boats.length ? '<p class="day-muted">Para trasladar existencias, elegí el barco en Inventario.</p>' : '')+
+        (isDepot && d.boats.length ? '<p class="day-muted">Para trasladar existencias, elegí el barco en Ubicación.</p>' : '')+
         (d.products.length?'<label>Buscar artículo o ubicación<input type="search" data-stock-filter></label>':'')+
         this.itemList("gastronomia")+this.itemList("tecnica")+this.movements()+(isDepot?"":this.finance());
     const selector=this.querySelector("[data-stock-scope]");

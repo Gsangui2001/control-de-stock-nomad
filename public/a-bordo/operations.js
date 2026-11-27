@@ -41,10 +41,23 @@ function opsProductChoice(area,unit,name){
  const choices=state.products.filter(p=>(p.area||'tecnica')===area&&normalized(p.unit)===normalized(unit)&&normalized(p.name)===normalized(name));
  return `<label>Ficha de destino<select name="productId" data-receive-product><option value="">Buscar en la ubicación o crear una ficha</option>${choices.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.location)}</option>`).join('')}</select></label>`;
 }
+let opsStockTab={owner:'',area:'gastronomia'};
+function currentStockTab(){
+ const owner=[session.id,boatId,role].join(':');
+ if(opsStockTab.owner!==owner)opsStockTab={owner,area:'gastronomia'};
+ return opsStockTab;
+}
+const stockArea=p=>p.area==='gastronomia'?'gastronomia':'tecnica';
+const canMoveFridge=()=>Boolean(session?.admin||['encargado','capitan','chef','marinero'].includes(role));
+const fridgeSource=p=>p.area==='gastronomia'&&/^(?:dep[oó]sito(?:\s|$)|recepci[oó]n a bordo$)/iu.test(String(p.location||'').trim())&&/^(un|unidad|unidades|ud|uds|lata|latas|botella|botellas)$/iu.test(String(p.unit||'').trim())&&/(^|[^\p{L}])(agua|cerveza|gaseosa|refresco|coca|pepsi|sprite|fanta|seven|fresca|soda|lata|7up|7-up)([^\p{L}]|$)/iu.test(p.name);
+const fridgeForm=p=>canMoveFridge()&&fridgeSource(p)&&Number(p.current)>=1?`<details class="day-disclosure"><summary>Pasar bebidas a la heladera</summary><p>Sale de ${esc(p.location)} y entra a Heladera. No se registra como consumo.</p>${opsForm('fridge_move',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsField('Unidades','quantity','number','','required min="1" step="1" max="'+Math.min(1000000,Math.floor(Number(p.current)))+'"'),p.id)}</details>`:'';
 function opsStock(){
- const products=state.products, open=opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status));
- return `<h1>Stock y pedidos</h1><stockroom-packages></stockroom-packages><p class="area-summary">${products.length} insumos · ${open.length} pedidos abiertos</p>
- <div class="area-actions">${session.admin?'<button type="button" class="day-primary" data-intake="ticket">Cargar ticket y sumar stock</button>'+opsButton('intake','Conteos y listas'):''}${opsButton('requests','Ver pedidos y agregar faltantes')}</div>${!products.length?`<div class="day-note"><strong>Conteo inicial pendiente</strong><br>${session.admin?'Abrí Conteos y listas para cargar lo que contaste a bordo.':'Administración debe registrar las cantidades contadas a bordo.'}</div>`:''}${session.admin?`<details class="day-disclosure"><summary>＋ Cargar cantidad contada</summary><p>Usá este formulario para un insumo nuevo. Para insumos existentes, revisá su ficha en Administrar → Inventario; no dupliques un producto para corregir su cantidad.</p>${opsForm('stock_add',opsArea()+opsField('Producto','name','text','','required maxlength="140"')+opsField('Unidad','unit','text','','required maxlength="20"')+opsField('Cantidad contada','quantity','number','','required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note'))}</details><details class="day-disclosure"><summary>Recuperar inventario gastronómico anterior</summary><p>Cargá el respaldo y verificá cada cantidad antes de guardar.</p><input id="legacyInventory" type="file" accept="application/json"><div id="legacyReview"></div></details>`:''}${products.length?`<label>Buscar insumo o ubicación<input id="opsStockSearch" type="search" placeholder="Nombre o lugar donde se guarda"></label><label>Filtrar por área<select id="opsStockArea"><option value="">Todas las áreas</option><option value="gastronomia">Bebidas y mercadería</option><option value="tecnica">Materiales, repuestos y limpieza</option></select></label>`:''}<div id="opsStockList">${products.map(p=>`<article class="day-inventory" data-stock-search="${esc(dayNormalize(p.name+' '+p.location))}" data-stock-area="${esc(p.area||'tecnica')}"><div class="day-card-heading"><h2>${esc(p.name)}</h2><strong>${p.current} ${esc(p.unit)}</strong></div><p>${esc(p.location||'Ubicación pendiente')} · ${p.area==='gastronomia'?'Bebidas y mercadería':'Materiales, repuestos y limpieza'}</p>${Number(p.current)===0?'<p class="ops-critical">Sin existencias registradas</p>':Number(p.min)>0&&Number(p.current)<=Number(p.min)?'<p class="ops-critical">Llegó al mínimo definido</p>':''}<p class="day-muted">${Number(p.min)>0?'Mínimo definido: '+p.min+' '+esc(p.unit):'Sin mínimo definido'}${p.expiryDate?' · Vence '+date(p.expiryDate):''}</p>${writable()?opsAction('request_product',p.id,'Pedir reposición'):''}${writable()&&Number(p.current)>0?`<details class="day-disclosure"><summary>Registrar consumo</summary><p>Registrá solo lo utilizado. Si ya lo descontaste como material de un trabajo, no lo cargues otra vez.</p>${opsForm('stock_consume',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsAmount('quantity',p.current)+opsField('Motivo','note','text','','required minlength="3"'))}</details>`:''}${(dayManager()||['chef','capitan'].includes(role))&&opsData.fleet.length>1&&Number(p.current)>0?`<details class="day-disclosure"><summary>Transferir a otro barco</summary>${opsForm('transfer_send',`<input type="hidden" name="productId" value="${esc(p.id)}"><label>Destino<select name="target">${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`+opsAmount('quantity',p.current))}</details>`:''}</article>`).join('')}</div><p id="opsStockNoMatch" hidden>No hay insumos con ese filtro.</p><details class="day-disclosure"><summary>Más opciones de stock</summary><div class="area-actions">${canViewFleetStock()?opsButton('fleet','Stock de otros barcos'):''}${opsData.fleet.length>1 || opsData.transfers.length?opsButton('transfers','Transferencias'):''}${opsButton('notifications','Avisos de reposición')}</div></details>`;
+ const area=currentStockTab().area,technical=area==='tecnica';
+ const products=state.products.filter(p=>stockArea(p)===area), open=opsData.requests.filter(q=>!['recibido','cancelado'].includes(q.status));
+ return `<h1>Stock · ${esc(state.boat.name)}</h1><stockroom-packages></stockroom-packages><p class="area-summary">${products.length} artículos · ${open.length} pedidos abiertos</p>
+ <div class="area-actions">${session.admin?opsButton('admin-stock','Stock general · Tierra y barcos'):''}${session.admin&&!technical?'<button type="button" class="day-primary" data-intake="ticket">Cargar ticket y sumar stock</button>'+opsButton('intake','Conteos y listas'):''}${opsButton('requests','Ver pedidos y agregar faltantes')}</div>
+ <div class="area-actions" role="group" aria-label="Tipo de inventario">${[['gastronomia','Insumos'],['tecnica','Repuestos y materiales']].map(([key,label])=>`<button type="button" data-op="stock_tab" data-id="${key}" class="${area===key?'day-primary':'day-secondary'}" aria-pressed="${area===key}">${label}</button>`).join('')}</div>
+ <h2>${technical?'Repuestos y materiales':'Insumos'}</h2>${!products.length?`<div class="day-note"><strong>Conteo inicial pendiente</strong><br>${session.admin?'Cargá las cantidades contadas de este inventario.':'Administración debe registrar las cantidades contadas en esta sección.'}</div>`:''}${session.admin?`<details class="day-disclosure"><summary>${technical?'＋ Agregar repuesto':'＋ Agregar insumo manualmente'}</summary><p>Usá este formulario para un insumo nuevo. Para insumos existentes, revisá su ficha en Administrar → Inventario; no dupliques un producto para corregir su cantidad.</p>${opsForm('stock_add',`<input type="hidden" name="area" value="${area}">`+opsField(technical?'Nombre del repuesto':'Producto','name','text','',technical?'required maxlength="140" placeholder="Ej.: Solenoide 12 V"':'required maxlength="140"')+opsField('Unidad','unit','text',technical?'un':'','required maxlength="20"')+opsField('Cantidad contada','quantity','number','','required min="0" step="0.0001"')+opsField('Ubicación','location','text','','required')+opsField('Observación','note','text','','maxlength="500"'))}</details>${technical?'':`<details class="day-disclosure"><summary>Recuperar inventario gastronómico anterior</summary><p>Cargá el respaldo y verificá cada cantidad antes de guardar.</p><input id="legacyInventory" type="file" accept="application/json"><div id="legacyReview"></div></details>`}`:''}${products.length?`<label>Buscar ${technical?'repuesto, referencia o ubicación':'insumo o ubicación'}<input id="opsStockSearch" type="search" placeholder="Nombre o lugar donde se guarda"></label>`:''}<div id="opsStockList">${products.map(p=>`<article class="day-inventory" data-stock-search="${esc(dayNormalize([p.name,p.location,p.code,p.specs].join(' ')))}" data-stock-area="${esc(p.area||'tecnica')}"><div class="day-card-heading"><h2>${esc(p.name)}</h2><strong>${esc(p.current)} ${esc(p.unit)}</strong></div><p>${esc(p.location||'Ubicación pendiente')} · ${p.area==='gastronomia'?'Bebidas y mercadería':'Materiales, repuestos y limpieza'}</p>${Number(p.current)===0?'<p class="ops-critical">Sin existencias registradas</p>':Number(p.min)>0&&Number(p.current)<=Number(p.min)?'<p class="ops-critical">Llegó al mínimo definido</p>':''}<p class="day-muted">${Number(p.min)>0?'Mínimo definido: '+p.min+' '+esc(p.unit):'Sin mínimo definido'}${p.expiryDate?' · Vence '+date(p.expiryDate):''}</p>${writable()?opsAction('request_product',p.id,'Pedir reposición'):''}${technical&&session.admin?action('editProduct','Editar ficha',p.id,'day-secondary'):''}${writable()&&Number(p.current)>0?`<details class="day-disclosure"><summary>${technical?'Registrar uso del repuesto o material':'Registrar consumo'}</summary><p>Registrá solo lo utilizado. Si ya lo descontaste como material de un trabajo, no lo cargues otra vez.</p>${opsForm('stock_consume',`<input type="hidden" name="productId" value="${esc(p.id)}">`+opsAmount('quantity',p.current)+opsField('Motivo','note','text','','required minlength="3"'))}</details>`:''}${fridgeForm(p)}${(dayManager()||['chef','capitan'].includes(role))&&opsData.fleet.length>1&&Number(p.current)>0?`<details class="day-disclosure"><summary>Transferir a otro barco</summary>${opsForm('transfer_send',`<input type="hidden" name="productId" value="${esc(p.id)}"><label>Destino<select name="target">${opsData.fleet.filter(b=>b.id!==boatId).map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`+opsAmount('quantity',p.current))}</details>`:''}</article>`).join('')}</div><p id="opsStockNoMatch" hidden>No hay insumos con ese filtro.</p><details class="day-disclosure"><summary>Más opciones de stock</summary><div class="area-actions">${canViewFleetStock()?opsButton('fleet','Stock de otros barcos'):''}${opsData.fleet.length>1 || opsData.transfers.length?opsButton('transfers','Transferencias'):''}${opsButton('notifications','Avisos de reposición')}</div></details>`;
 }
 function opsCash() {
  if(role==='capitan')return captainCashView();
@@ -91,9 +104,7 @@ renderDay=function(){
  const refresh = name !== 'expenses' && name !== 'cash' ? opsAction('refresh','','Actualizar') : '';
  $('#content').innerHTML=`<div class="day-content"><div class="area-subnav">${dayBack()}${refresh}</div>${opsError?`<p class="form-error" role="alert">${esc(opsError)} ${!refresh ? opsAction('refresh','','Reintentar') : ''}</p>`:''}${content}${opsLoading?'<p class="day-muted" role="status">Actualizando…</p>':''}</div>`;
  if(dayPage==='ops-fleet')fleetStockBind();
- if(dayPage==='ops-stock' && session.admin)$('#content .area-actions')?.insertAdjacentHTML('beforeend',opsButton('admin-stock','Stock de barcos y depósito'));
  if($('#opsStockSearch'))$('#opsStockSearch').oninput=opsFilterStock;
- if($('#opsStockArea'))$('#opsStockArea').onchange=opsFilterStock;
  if(!opsData&&!opsLoading&&!opsError)opsReload();
 };
 document.addEventListener('change',async event=>{
@@ -167,7 +178,7 @@ document.addEventListener('submit',async event=>{
    return;
   }
   if (!form._opsPending) {
-    const data=Object.fromEntries(new FormData(form));if(form.dataset.id)data.id=form.dataset.id;
+    const data=Object.fromEntries(new FormData(form));if(form.dataset.id&&form.dataset.operation!=='fridge_move')data.id=form.dataset.id;
     for(const key of ['quantity','amount'])if(key in data)data[key]=Number(data[key]);
     if(form.dataset.operation==='request_create'){
      data.urgent=form.elements.urgent.checked;
@@ -187,11 +198,17 @@ document.addEventListener('submit',async event=>{
   }
   const operationKey=form._opsPending.key;
   verifyBoatWrite(owner);
-  await opsFetch(form.dataset.operation,form._opsPending,owner.boat);
+  const result=await opsFetch(form.dataset.operation,form._opsPending,owner.boat);
+  if(form.dataset.operation==='fridge_move'&&!(result?.ok===true&&result.quantity===form._opsPending.quantity&&Number.isFinite(result.fromBalance)&&Number.isFinite(result.toBalance)))throw Error('No se pudo verificar el movimiento. Confirmá el guardado pendiente antes de repetirlo.');
+  if(form.dataset.operation==='captain_personal_movement'&&
+     (result?.ok!==true||!Number.isSafeInteger(result.entryId)||result.entryId<=0)){
+    const unknown=new Error('No se pudo confirmar el movimiento. Reintentá con los mismos datos.');
+    unknown.status=503;throw unknown;
+  }
   await editStoredDraft(savedKey,old=>old?.pending?.key===operationKey?null:old);
   if(!sameBoatOwner(owner))return;
   if(form.dataset.operation==='request_create')opsRequestSeed=null;
-  if(['captain_opening','captain_expense','captain_handover'].includes(form.dataset.operation))invalidateCaptainCash();
+  if(['captain_opening','captain_expense','captain_handover','captain_personal_movement'].includes(form.dataset.operation))invalidateCaptainCash();
   toast('Guardado en el servidor');await opsAfterSave();
  }catch(e){
    if(!sameBoatOwner(owner))return;
@@ -214,6 +231,7 @@ document.addEventListener('click',async event=>{
  const button=event.target.closest('[data-op]');if(!button||opsBusy||expenseBusy||(typeof briefBusy!=="undefined"&&briefBusy))return;
  const operation=button.dataset.op;opsBusy=true;button.disabled=true;
  try{
+  if(operation==='stock_tab'){if(dayPage==='ops-stock'&&['gastronomia','tecnica'].includes(button.dataset.id)){currentStockTab().area=button.dataset.id;render();}return;}
   if(operation==='request_product'){const p=state.products.find(p=>p.id===button.dataset.id);if(!p)throw Error('Insumo no disponible');opsRequestSeed={boat:boatId,name:p.name,unit:p.unit,area:p.area||'tecnica'};dayPage='ops-requests';render();return;}
   if(operation==='export_expenses'){expenseDownload();return;}
   if(operation==='backup'){opsDownloadBackup(await opsFetch('backup'),'respaldo');return;}
