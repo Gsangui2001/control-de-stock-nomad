@@ -393,10 +393,18 @@ function authScreen(setup) {
     : "Entrar al barco";
   $("#todayLabel").textContent = "Inventario · mantenimiento · tripulación";
   $("#content").innerHTML =
-    `<section class="access-card"><div class="access-brand">${dayIcon("anchor")} A bordo</div><h1>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h1><p class="subhead">${setup ? "Creá la cuenta para preparar tu barco." : "Entrá con tu usuario del barco."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}${field("Contraseña", "password", "", "password", `required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}"`)}<p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
+    `<section class="access-card"><div class="access-brand">${dayIcon("anchor")} A bordo</div><h1>${setup ? "Creá tu cuenta de administrador" : "Iniciá sesión"}</h1><p class="subhead">${setup ? "Creá la cuenta para preparar tu barco." : "Entrá con tu usuario del barco."}</p><form id="authForm">${setup ? field("Tu nombre", "name", "", "text", 'required autocomplete="name"') + field("Nombre del barco", "boat", "", "text", "required") : ""}${field("Usuario", "username", "", "text", 'required autocomplete="username"')}<div class="access-password"><label for="authPassword">Contraseña</label><div class="access-password-row"><input id="authPassword" name="password" type="password" required minlength="10" autocomplete="${setup ? "new-password" : "current-password"}" autocapitalize="none" spellcheck="false"><button type="button" id="authPasswordToggle" class="access-password-toggle" aria-controls="authPassword">Ver contraseña</button></div></div><p class="form-error" id="authError" role="alert"></p><button class="primary" type="submit">${setup ? "Crear cuenta y empezar" : "Entrar"}</button></form></section>`;
+  const password = $("#authPassword");
+  const passwordToggle = $("#authPasswordToggle");
+  const showPassword = (visible) => {
+    password.type = visible ? "text" : "password";
+    passwordToggle.textContent = visible ? "Ocultar contraseña" : "Ver contraseña";
+  };
+  passwordToggle.onclick = () => showPassword(password.type === "password");
   $("#authForm").onsubmit = async (e) => {
     e.preventDefault();
-    const button = e.target.querySelector("button");
+    showPassword(false);
+    const button = e.target.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
       await api(
