@@ -66,7 +66,7 @@ test('SQL: versiones, edición protegida e independencia del efectivo', {skip:!a
       end $f$;
       grant usage on schema boat_control to anon,authenticated;
     `);
-    await db.exec(source('supabase/migrations/20261128003000_boat_captain_fixed_fund.sql'));
+    await db.exec(source('supabase/migrations/20261128002926_boat_captain_fixed_fund.sql'));
     const call=async(op,payload,secret='fixture')=>(await db.query('select public.boat_captain_fixed_fund_rpc($1,$2,$3::jsonb) as value',[secret,op,payload])).rows[0].value;
     const read=(session,boat='boat-a')=>call('captain_wallet',{session,boat});
     const save=(fields={},secret='fixture')=>call('captain_fixed_fund_set',{session:'admin',boat:'boat-a',id:'captain-a',amount:40.5,currency:'USD',revision:0,key:randomUUID(),...fields},secret);
