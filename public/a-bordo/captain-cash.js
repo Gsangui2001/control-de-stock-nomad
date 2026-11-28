@@ -97,6 +97,25 @@ function captainPersonalMetrics(b, personal) {
     '</dl><p class="day-muted">Los movimientos de Nomad y cobros se muestran desde el conteo inicial, cuando existe. Los gastos pagados directamente con caja Nomad quedan en su historial.</p>';
 }
 
+function captainFixedFund(wallet) {
+  const fund = wallet.fixedFund;
+  const hasFund = fund != null && Number.isFinite(fund.amount);
+  const unit = hasFund ? fund.currency : "USD";
+  const currencies = ["USD","EUR","ARS","PAB"].map(currency =>
+    '<option' + (currency === unit ? ' selected' : '') + '>' + currency + '</option>').join("");
+  const edit = session.admin ? '<details class="day-disclosure"><summary>' +
+    (hasFund ? "Editar monto fijo" : "Definir monto fijo") + '</summary>' +
+    opsForm("captain_fixed_fund_set",
+      '<input type="hidden" name="revision" value="' + esc(fund?.revision ?? 0) + '">' +
+      '<label>Moneda<select name="currency">' + currencies + '</select></label>' +
+      opsField("Monto fijo","amount","number",hasFund ? fund.amount : "","required min=\"0\" max=\"1000000000\" step=\"0.01\""),
+      wallet.captainId) + '</details>' : '';
+  return '<article class="day-inventory"><h3>Fondo fijo de caja</h3><strong>' +
+    (hasFund ? captainMoney(fund.amount,unit) : "Sin definir") + '</strong>' +
+    '<p>No suma al efectivo ni se registra como cobro.</p>' +
+    (hasFund ? '<p class="day-muted">Actualizado: ' + esc(briefTime(fund.updatedAt)) + '</p>' : '') + edit + '</article>';
+}
+
 function captainWallet(wallet) {
   const handovers = wallet.handovers || [];
   const personalEntries = wallet.personalEntries || [];
@@ -116,7 +135,7 @@ function captainWallet(wallet) {
     ' · ' + esc(briefTime(e.at)) + '</p>').join("");
   const delivered = handovers.map(h => '<p><strong>' + captainMoney(h.amount, h.currency) + '</strong> · ' + esc(h.concept) +
     ' · ' + esc(briefTime(h.at)) + ' · Recibió ' + esc(h.receivedBy) + '</p>').join("");
-  return (session.admin ? '<h2>' + esc(wallet.name) + '</h2>' : '<h2>Mi efectivo</h2>') + amounts +
+  return (session.admin ? '<h2>' + esc(wallet.name) + '</h2>' : '<h2>Mi efectivo</h2>') + captainFixedFund(wallet) + amounts +
     '<details class="day-disclosure"><summary>Cobros recibidos (' + wallet.receipts.length + ')</summary>' +
     (receipts || empty("Sin cobros registrados.")) + '</details><details class="day-disclosure"><summary>Gastos pagados con caja Nomad (' + wallet.expenses.length +
     ')</summary>' + (expenses || empty("Sin gastos registrados.")) + '</details>' + (wallet.personal ? '<details class="day-disclosure"><summary>Movimientos de plata propia (' + personalEntries.length + ')</summary>' + (personalDetails || empty("Sin movimientos de plata propia.")) + '</details>' : '') + '<details class="day-disclosure"><summary>Entregas (' + handovers.length +

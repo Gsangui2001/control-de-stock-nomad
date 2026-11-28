@@ -180,6 +180,7 @@ document.addEventListener('submit',async event=>{
   if (!form._opsPending) {
     const data=Object.fromEntries(new FormData(form));if(form.dataset.id&&form.dataset.operation!=='fridge_move')data.id=form.dataset.id;
     for(const key of ['quantity','amount'])if(key in data)data[key]=Number(data[key]);
+    if(form.dataset.operation==='captain_fixed_fund_set')data.revision=Number(data.revision);
     if(form.dataset.operation==='request_create'){
      data.urgent=form.elements.urgent.checked;
      const file=form.elements.photo.files[0];data.photo=file?(await api('photos','POST',{boat:owner.boat,data:await photo(file)})).url:'';
@@ -200,6 +201,12 @@ document.addEventListener('submit',async event=>{
   verifyBoatWrite(owner);
   const result=await opsFetch(form.dataset.operation,form._opsPending,owner.boat);
   if(form.dataset.operation==='fridge_move'&&!(result?.ok===true&&result.quantity===form._opsPending.quantity&&Number.isFinite(result.fromBalance)&&Number.isFinite(result.toBalance)))throw Error('No se pudo verificar el movimiento. Confirmá el guardado pendiente antes de repetirlo.');
+  if(form.dataset.operation==='captain_fixed_fund_set'&&
+     (result?.ok!==true||result.captainId!==form._opsPending.id||result.revision!==form._opsPending.revision+1||
+      result.currency!==form._opsPending.currency||result.amount!==form._opsPending.amount)){
+    const unknown=new Error('No se pudo confirmar el monto fijo. Reintentá con los mismos datos.');
+    unknown.status=503;throw unknown;
+  }
   if(form.dataset.operation==='captain_personal_movement'&&
      (result?.ok!==true||!Number.isSafeInteger(result.entryId)||result.entryId<=0)){
     const unknown=new Error('No se pudo confirmar el movimiento. Reintentá con los mismos datos.');
@@ -208,7 +215,7 @@ document.addEventListener('submit',async event=>{
   await editStoredDraft(savedKey,old=>old?.pending?.key===operationKey?null:old);
   if(!sameBoatOwner(owner))return;
   if(form.dataset.operation==='request_create')opsRequestSeed=null;
-  if(['captain_opening','captain_expense','captain_handover','captain_personal_movement'].includes(form.dataset.operation))invalidateCaptainCash();
+  if(['captain_opening','captain_expense','captain_handover','captain_personal_movement','captain_fixed_fund_set'].includes(form.dataset.operation))invalidateCaptainCash();
   toast('Guardado en el servidor');await opsAfterSave();
  }catch(e){
    if(!sameBoatOwner(owner))return;
